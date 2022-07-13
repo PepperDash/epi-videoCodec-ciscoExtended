@@ -526,8 +526,6 @@ namespace epi_videoCodec_ciscoExtended
 
             public bool BoolValue { get; private set; }
 
-
-
             public string Value
             {
                 get

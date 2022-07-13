@@ -30,6 +30,8 @@ namespace epi_videoCodec_ciscoExtended
     enum eCommandType { SessionStart, SessionEnd, Command, GetStatus, GetConfiguration };
     public enum eExternalSourceType { camera, desktop, document_camera, mediaplayer, PC, whiteboard, other }
     public enum eExternalSourceMode { Ready, NotReady, Hidden, Error }
+    public enum eCodecPresentationStates { LocalOnly, LocalRemote }
+
 
     public class CiscoCodec : VideoCodecBase, IHasCallHistory, IHasCallFavorites, IHasDirectory,
         IHasScheduleAwareness, IOccupancyStatusProvider, IHasCodecLayoutsAvailable, IHasCodecSelfView,
@@ -47,6 +49,8 @@ namespace epi_videoCodec_ciscoExtended
         private bool _validFirmware;
 
         private CiscoCodecConfig _config;
+
+        public eCodecPresentationStates PresentationStates;
 
         private bool _externalSourceChangeRequested;
 
@@ -288,6 +292,8 @@ namespace epi_videoCodec_ciscoExtended
         public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
             : base(config)
         {
+            PresentationStates = eCodecPresentationStates.LocalOnly;
+
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
             _config = props;
@@ -1713,6 +1719,7 @@ ConnectorID: {2}"
         public override void EndCall(CodecActiveCallItem activeCall)
         {
             EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
+            PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void EndAllCalls()
@@ -1721,6 +1728,7 @@ ConnectorID: {2}"
             {
                 EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
             }
+            PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void AcceptCall(CodecActiveCallItem item)
@@ -1844,15 +1852,8 @@ ConnectorID: {2}"
         /// </summary>
         public override void StartSharing()
         {
-            string sendingMode = string.Empty;
-
-            if (IsInCall)
-                sendingMode = "LocalRemote";
-            else
-                sendingMode = "LocalOnly";
-
             if (_desiredPresentationSource > 0)
-                EnqueueCommand(string.Format("xCommand Presentation Start PresentationSource: {0} SendingMode: {1}", _desiredPresentationSource, sendingMode));
+                EnqueueCommand(string.Format("xCommand Presentation Start PresentationSource: {0} SendingMode: {1}", _desiredPresentationSource, PresentationStates.ToString()));
         }
 
         /// <summary>
@@ -2008,8 +2009,36 @@ ConnectorID: {2}"
             trilist.SetUShortSigAction(joinMap.PresentationSource.JoinNumber, (u) => SelectPresentationSource(u));
             PresentationSourceFeedback.LinkInputSig(trilist.UShortInput[joinMap.PresentationSource.JoinNumber]);
 
+            trilist.SetSigTrueAction(joinMap.PresentationLocalOnly.JoinNumber, SetPresentationLocalOnly);
+            trilist.SetSigTrueAction(joinMap.PresentationLocalRemote.JoinNumber, SetPresentationLocalRemote);
+            trilist.SetSigTrueAction(joinMap.PresentationLocalRemoteToggle.JoinNumber, SetPresentationLocalRemoteToggle);
+
+
+
             PresentationSendingLocalOnlyFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationLocalOnly.JoinNumber]);
             PresentationSendingLocalRemoteFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationLocalRemote.JoinNumber]);
+        }
+
+        public void SetPresentationLocalOnly()
+        {
+            PresentationStates = eCodecPresentationStates.LocalOnly;
+            if(CodecStatus.Status.Conference.Presentation.Mode.BoolValue) StartSharing();
+        }
+
+        public void SetPresentationLocalRemote()
+        {
+            PresentationStates = eCodecPresentationStates.LocalRemote;
+            if (CodecStatus.Status.Conference.Presentation.Mode.BoolValue) StartSharing();
+        }
+
+        public void SetPresentationLocalRemoteToggle()
+        {
+            if (PresentationStates == eCodecPresentationStates.LocalRemote)
+            {
+                SetPresentationLocalOnly();
+                return;
+            }
+            SetPresentationLocalRemote();
         }
 
         /// <summary>
@@ -2765,5 +2794,6 @@ ConnectorID: {2}"
             return new CiscoCodec(dc, comm);
         }
     }
+
 
 }

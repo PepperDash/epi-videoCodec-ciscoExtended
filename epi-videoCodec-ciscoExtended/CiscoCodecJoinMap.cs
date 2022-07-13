@@ -19,7 +19,7 @@ namespace epi_videoCodec_ciscoExtended
             new JoinMetadata
             {
                 Description = "Presentation Local Only Feedback",
-                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
 
@@ -33,9 +33,24 @@ namespace epi_videoCodec_ciscoExtended
             new JoinMetadata
             {
                 Description = "Presentation Local and Remote Feedback",
-                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
+
+        [JoinName("PresentationLocalRemoteToggle")]
+        public JoinDataComplete PresentationLocalRemoteToggle = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 207,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presentation Local and Remote Feedback",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
 
         [JoinName("ActivateDoNotDisturbMode")]
         public JoinDataComplete ActivateDoNotDisturbMode = new JoinDataComplete(
