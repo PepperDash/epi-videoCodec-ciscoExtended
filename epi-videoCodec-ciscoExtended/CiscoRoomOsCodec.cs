@@ -90,8 +90,6 @@ namespace epi_videoCodec_ciscoExtended
 
         private CodecCommandWithLabel _currentSelfviewPipPosition;
 
-        private bool _softwareParsed;
-
 
         /// <summary>
         /// List the available positions for the selfview PIP window
@@ -918,12 +916,12 @@ ConnectorID: {2}"
 
                     var system = tempCodecStatus.Status.SystemUnit;
 
-                    if (system != null && !_softwareParsed)
+                    if (system != null && !_syncState.InitialSoftwareVersionMessageWasReceived)
                     {
                         DeviceInfo.FirmwareVersion = system.Software.Version.Value ?? "Unknown";
                         DeviceInfo.SerialNumber = system.Hardware.Module.SerialNumber.Value ?? "Unknown";
 
-                        var parsedSoftware = system.Software.DisplayName.Value ?? null;
+                        var parsedSoftware = system.Software.DisplayName.Value;
 
                         if (parsedSoftware != null)
                         {

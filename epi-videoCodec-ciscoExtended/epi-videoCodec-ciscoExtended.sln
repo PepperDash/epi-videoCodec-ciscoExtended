@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual Studio 2008
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "epi-videoCodec-ciscoExtended", "epi-videoCodec-ciscoExtended\epi-videoCodec-ciscoExtended.csproj", "{0C649994-F573-47D1-A76D-15E05D71A86A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "epi-videoCodec-ciscoExtended", "epi-videoCodec-ciscoExtended.csproj", "{0C649994-F573-47D1-A76D-15E05D71A86A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

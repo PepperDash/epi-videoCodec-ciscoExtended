@@ -1871,7 +1871,7 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
-        new public class Layout
+        public class Layout
         {
             public LayoutFamily LayoutFamily { get; set; }
 
