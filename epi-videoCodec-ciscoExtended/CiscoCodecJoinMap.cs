@@ -7,7 +7,120 @@ namespace epi_videoCodec_ciscoExtended
 {
     public class CiscoCodecJoinMap : VideoCodecControllerJoinMap
     {
+
         #region Digital
+        [JoinName("PhoneBookClearSelected")]
+        public JoinDataComplete PhoneBookClearSelected = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 110,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Clear Selected Entry and String from Search",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
+        [JoinName("PresenterTrackEnabled")]
+        public JoinDataComplete PresenterTrackEnabled = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 130,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Enabled Feedback",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
+        [JoinName("PresenterTrackOff")]
+        public JoinDataComplete PresenterTrackOff = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 134,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Off Get/Set",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("PresenterTrackFollow")]
+        public JoinDataComplete PresenterTrackFollow = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 135,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Follow Get/Set",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("PresenterTrackBackground")]
+        public JoinDataComplete PresenterTrackBackground = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 136,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Background Get/Set",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("PresenterTrackPersistent")]
+        public JoinDataComplete PresenterTrackPersistent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 137,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Persistent Get/Set",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("DialMeeting4")]
+        public JoinDataComplete DialMeeting4 = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 164,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Join fourth meeting",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("DialMeeting5")]
+        public JoinDataComplete DialMeeting5 = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 165,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Join fifth meeting",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
 
         [JoinName("PresentationLocalOnly")]
         public JoinDataComplete PresentationLocalOnly = new JoinDataComplete(
@@ -150,6 +263,93 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("CodecAvailable")]
+        public JoinDataComplete CodecAvailable = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 251,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "High to indicate that the codec does not have any meetings currently active",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("CodecMeetingBannerActive")]
+        public JoinDataComplete CodecMeetingBannerActive = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 252,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "High to indicate that the codec has currently active meetings",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("CodecMeetingBannerWarning")]
+        public JoinDataComplete CodecMeetingBannerWarning = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 253,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "High to indicate that the codec has an impending meeting",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("PresentationViewDefault")]
+        public JoinDataComplete PresentationViewDefault = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 261,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set / Get PresentationView Default mode",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("PresentationViewMaximized")]
+        public JoinDataComplete PresentationViewMaximized = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 262,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set / Get PresentationView Maximized mode",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("PresentationViewMinimized")]
+        public JoinDataComplete PresentationViewMinimized = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 263,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set / Get PresentationView Minimized mode",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
+
+
         #endregion
 
 
@@ -168,6 +368,21 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Analog
             });
+
+        [JoinName("DirectorySelectRowFeedback")]
+        public JoinDataComplete DirectorySelectRowFeedback = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 101,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Directory Select Row Feedback",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Analog
+            });
+
 
         [JoinName("PresentationSource")]
         public JoinDataComplete PresentationSource = new JoinDataComplete(
@@ -202,7 +417,6 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Serial
             });
-
 
 
         #endregion

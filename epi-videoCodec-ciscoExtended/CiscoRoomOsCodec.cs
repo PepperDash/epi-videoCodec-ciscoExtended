@@ -5,8 +5,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
-using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -66,6 +64,10 @@ namespace epi_videoCodec_ciscoExtended
 
         public BoolFeedback PresentationViewMaximizedFeedback { get; private set; }
 
+        public BoolFeedback PresentationViewMinimizedFeedback { get; private set; }
+
+        public BoolFeedback PresentationViewDefaultFeedback { get; private set; }
+
         private string _currentPresentationView;
 
         public BoolFeedback RoomIsOccupiedFeedback { get; private set; }
@@ -80,13 +82,21 @@ namespace epi_videoCodec_ciscoExtended
 
         public StringFeedback LocalLayoutFeedback { get; private set; }
 
-        private string _currentLayout;
+        private string _currentLayout = string.Empty;
 
         public StringFeedback AvailableLocalLayoutsFeedback { get; private set; }
 
         public BoolFeedback LocalLayoutIsProminentFeedback { get; private set; }
 
         public BoolFeedback FarEndIsSharingContentFeedback { get; private set; }
+
+        public StringFeedback PresenterTrackStatusNameFeedback { get; private set; }
+
+        public BoolFeedback PresenterTrackEnabledFeedback { get; private set; }
+        public BoolFeedback PresenterTrackStatusOffFeedback { get; private set; }
+        public BoolFeedback PresenterTrackStatusFollowFeedback { get; private set; }
+        public BoolFeedback PresenterTrackStatusBackgroundFeedback { get; private set; }
+        public BoolFeedback PresenterTrackStatusPersistentFeedback { get; private set; }
 
         public IntFeedback RingtoneVolumeFeedback { get; private set; }
 
@@ -231,6 +241,37 @@ namespace epi_videoCodec_ciscoExtended
             get { return () => _currentLayout.Contains("Prominent") || _currentLayout.Contains("Stack"); }
         }
 
+        protected Func<string> PresenterTrackStatusNameFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Status.Value; }
+        }
+
+        protected Func<bool> PresenterTrackEnabledFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Availability.Value == "Unavailable"; }
+        }
+
+        protected Func<bool> PresenterTrackStatusOffFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Status.Value == "Off" || CodecStatus.Status.Cameras.PresenterTrack.Availability.Value == "Unavailable"; }
+        }
+
+        protected Func<bool> PresenterTrackStatusFollowFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Status.Value == "Follow"; }
+        }
+
+        protected Func<bool> PresenterTrackStatusBackgroundFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Status.Value == "Background"; }
+        }
+        protected Func<bool> PresenterTrackStatusPersistentFeedbackFunc
+        {
+            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Status.Value == "Persistent"; }
+        } 
+
+
+
 
         private string _cliFeedbackRegistrationExpression;
 
@@ -317,6 +358,14 @@ namespace epi_videoCodec_ciscoExtended
             FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
             CameraIsOffFeedback = new BoolFeedback(() => CodecStatus.Status.Video.Input.MainVideoMute.BoolValue);
             AvailableLocalLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
+            PresenterTrackStatusNameFeedback = new StringFeedback(PresenterTrackStatusNameFeedbackFunc);
+
+
+            PresenterTrackEnabledFeedback = new BoolFeedback(PresenterTrackEnabledFeedbackFunc);
+            PresenterTrackStatusOffFeedback = new BoolFeedback(PresenterTrackStatusOffFeedbackFunc);
+            PresenterTrackStatusFollowFeedback = new BoolFeedback(PresenterTrackStatusFollowFeedbackFunc);
+            PresenterTrackStatusBackgroundFeedback = new BoolFeedback(PresenterTrackStatusBackgroundFeedbackFunc);
+            PresenterTrackStatusPersistentFeedback = new BoolFeedback(PresenterTrackStatusPersistentFeedbackFunc);
 
             CameraIsMutedFeedback = CameraIsOffFeedback;
             SupportsCameraOff = true;
@@ -326,6 +375,8 @@ namespace epi_videoCodec_ciscoExtended
             EnteringStandbyModeFeedback = new BoolFeedback(() => CodecStatus.Status.Standby.State.Value.ToLower() == "enteringstandby");
 
             PresentationViewMaximizedFeedback = new BoolFeedback(() => _currentPresentationView == "Maximized");
+            PresentationViewMinimizedFeedback = new BoolFeedback(() => _currentPresentationView == "Minimized");
+            PresentationViewDefaultFeedback = new BoolFeedback(() => _currentPresentationView == "Default");
 
             RingtoneVolumeFeedback = new IntFeedback(() => CodecConfiguration.Configuration.Audio.SoundsAndAlerts.RingVolume.Volume);
 
@@ -422,34 +473,62 @@ namespace epi_videoCodec_ciscoExtended
             _brandingUrl = props.UiBranding.BrandingUrl;
         }
 
+        private int QuickDebugTest(string description, int data)
+        {
+            if (String.IsNullOrEmpty(description)) return 0;
+            Debug.Console(2, this, "{0} completed step {1}", description, data);
+            return ++data;
+        }
+
         private void SetFeedbackActions()
         {
             CodecStatus.Status.Audio.Volume.ValueChangedAction = VolumeLevelFeedback.FireUpdate;
             CodecStatus.Status.Audio.VolumeMute.ValueChangedAction = MuteFeedback.FireUpdate;
+
             CodecStatus.Status.Audio.Microphones.Mute.ValueChangedAction = PrivacyModeIsOnFeedback.FireUpdate;
-            CodecStatus.Status.Standby.State.ValueChangedAction = new Action(() =>
+
+            CodecStatus.Status.Standby.State.ValueChangedAction = () =>
             {
                 StandbyIsOnFeedback.FireUpdate();
                 HalfWakeModeIsOnFeedback.FireUpdate();
                 EnteringStandbyModeFeedback.FireUpdate();
-            });
+            };
+
             CodecStatus.Status.RoomAnalytics.PeoplePresence.ValueChangedAction = RoomIsOccupiedFeedback.FireUpdate;
+
             CodecStatus.Status.RoomAnalytics.PeopleCount.Current.ValueChangedAction = PeopleCountFeedback.FireUpdate;
+
             CodecStatus.Status.Cameras.SpeakerTrack.Status.ValueChangedAction = CameraAutoModeIsOnFeedback.FireUpdate;
+
             CodecStatus.Status.Cameras.SpeakerTrack.Availability.ValueChangedAction = () => { SupportsCameraAutoMode = CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue; };
+
             CodecStatus.Status.Video.Selfview.Mode.ValueChangedAction = SelfviewIsOnFeedback.FireUpdate;
+
             CodecStatus.Status.Video.Selfview.PIPPosition.ValueChangedAction = ComputeSelfviewPipStatus;
+
             CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction =
                 LocalLayoutFeedback.FireUpdate;
+
+            CodecStatus.Status.Cameras.PresenterTrack.Status.ValueChangedAction = () =>
+            {
+                PresenterTrackStatusBackgroundFeedback.FireUpdate();
+                PresenterTrackStatusFollowFeedback.FireUpdate();
+                PresenterTrackStatusOffFeedback.FireUpdate();
+                PresenterTrackStatusPersistentFeedback.FireUpdate();
+            };
+
             //CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction = ComputeLocalLayout;
             CodecStatus.Status.Conference.Presentation.Mode.ValueChangedAction = () =>
             {
                 SharingContentIsOnFeedback.FireUpdate();
                 FarEndIsSharingContentFeedback.FireUpdate();
             };
+
             CodecStatus.Status.Conference.DoNotDisturb.ValueChangedAction = DoNotDisturbModeIsOnFeedback.FireUpdate;
 
+
             CodecConfiguration.Configuration.Audio.SoundsAndAlerts.RingVolume.ValueChangedAction = RingtoneVolumeFeedback.FireUpdate;
+
 
             try
             {
@@ -457,11 +536,11 @@ namespace epi_videoCodec_ciscoExtended
             }
             catch (Exception ex)
             {
-                Debug.Console(0, this, "Error setting MainVideuMute Action: {0}", ex);
+                Debug.Console(0, this, "Error setting MainVideoMute Action: {0}", ex);
 
                 if (ex.InnerException != null)
                 {
-                    Debug.Console(0, this, "Error setting MainVideuMute Action: {0}", ex);
+                    Debug.Console(0, this, "Error setting MainVideoMute Action: {0}", ex);
                 }
             }
         }
@@ -1231,7 +1310,7 @@ ConnectorID: {2}"
                         CodecStatus.Status.RoomPreset = existingRoomPresets;
 
                         // Generecise the list
-                        NearEndPresets = RoomPresets.GetGenericPresets(existingRoomPresets).Select(a => (CodecRoomPreset)a).ToList();
+                        NearEndPresets = existingRoomPresets.GetGenericPresets<CodecRoomPreset>();
 
                         var handler = CodecRoomPresetsListHasChanged;
                         if (handler != null)
@@ -2013,10 +2092,64 @@ ConnectorID: {2}"
             trilist.SetSigTrueAction(joinMap.PresentationLocalRemote.JoinNumber, SetPresentationLocalRemote);
             trilist.SetSigTrueAction(joinMap.PresentationLocalRemoteToggle.JoinNumber, SetPresentationLocalRemoteToggle);
 
+            PresentationViewDefaultFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationViewDefault.JoinNumber]);
+            PresentationViewMinimizedFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationViewMinimized.JoinNumber]);
+            PresentationViewMaximizedFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationViewMinimized.JoinNumber]);
 
+            trilist.SetSigTrueAction(joinMap.PresentationViewDefault.JoinNumber, PresentationViewDefaultSet);
+            trilist.SetSigTrueAction(joinMap.PresentationViewMinimized.JoinNumber, PresentationViewMinimizedzedSet);
+            trilist.SetSigTrueAction(joinMap.PresentationViewMaximized.JoinNumber, PresentationViewMaximizedSet);
 
             PresentationSendingLocalOnlyFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationLocalOnly.JoinNumber]);
             PresentationSendingLocalRemoteFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationLocalRemote.JoinNumber]);
+
+            PresenterTrackEnabledFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackEnabled.JoinNumber]);
+
+            PresenterTrackStatusOffFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackOff.JoinNumber]);
+            PresenterTrackStatusFollowFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackFollow.JoinNumber]);
+            PresenterTrackStatusBackgroundFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackBackground.JoinNumber]);
+            PresenterTrackStatusPersistentFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackPersistent.JoinNumber]);
+
+            trilist.SetSigTrueAction(joinMap.PresenterTrackOff.JoinNumber, PresenterTrackOff);
+            trilist.SetSigTrueAction(joinMap.PresenterTrackFollow.JoinNumber, PresenterTrackFollow);
+            trilist.SetSigTrueAction(joinMap.PresenterTrackBackground.JoinNumber, PresenterTrackBackground);
+            trilist.SetSigTrueAction(joinMap.PresenterTrackPersistent.JoinNumber, PresenterTrackPersistent);
+
+            CodecSchedule.MeetingEventChange += (sender, args) =>
+            {
+                if (args.ChangeType == eMeetingEventChangeType.MeetingStartWarning)
+                {
+                    UpdateMeetingsListEnhanced(this, trilist, joinMap);
+                }
+            };
+        }
+
+        private static void UpdateMeetingsListEnhanced(IHasScheduleAwareness codec, BasicTriList trilist,
+            CiscoCodecJoinMap joinMap)
+        {
+            var currentTime = DateTime.Now;
+
+            List<Meeting> currentMeetings = codec.CodecSchedule.Meetings.Where(m => m.StartTime >= currentTime || m.EndTime >= currentTime).ToList();
+
+            if (currentMeetings.Count == 0)
+            {
+                trilist.SetBool(joinMap.CodecAvailable.JoinNumber, true);
+                trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, false);
+                trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, false);
+                return;
+            }
+
+                var upcomingMeeting =
+                    currentMeetings.FirstOrDefault(x => x.StartTime >= currentTime && x.EndTime >= currentTime);
+                var currentMeeting = 
+                    currentMeetings.FirstOrDefault(x => x.StartTime <= currentTime && x.EndTime >= currentTime);
+
+                var warningBanner = upcomingMeeting != null &&
+                                     upcomingMeeting.StartTime - currentTime <= upcomingMeeting.MeetingWarningMinutes;
+
+                trilist.SetBool(joinMap.CodecAvailable.JoinNumber, currentMeeting == null);
+                trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, currentMeeting != null);
+                trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, warningBanner);
         }
 
         public void SetPresentationLocalOnly()
@@ -2196,12 +2329,37 @@ ConnectorID: {2}"
         public void MinMaxLayoutToggle()
         {
             if (PresentationViewMaximizedFeedback.BoolValue)
-                _currentPresentationView = "Minimized";
-            else
-                _currentPresentationView = "Maximized";
+            {
+                PresentationViewMinimizedzedSet();
+                return;
+            }
+            PresentationViewMaximizedSet();
+        }
 
-            EnqueueCommand(string.Format("xCommand Video PresentationView Set View:  {0}", _currentPresentationView));
+        public void PresentationViewDefaultSet()
+        {
+            _currentPresentationView = "Default";
+
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
             PresentationViewMaximizedFeedback.FireUpdate();
+        }
+
+        public void PresentationViewMinimizedzedSet()
+        {
+            _currentPresentationView = "Minimized";
+
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
+            PresentationViewMaximizedFeedback.FireUpdate();
+
+        }
+
+        public void PresentationViewMaximizedSet()
+        {
+            _currentPresentationView = "Maximized";
+
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
+            PresentationViewMaximizedFeedback.FireUpdate();
+
         }
 
         /// <summary>
@@ -2239,16 +2397,15 @@ ConnectorID: {2}"
         {
             if (!CameraAutoModeIsOnFeedback.BoolValue)
             {
-                EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
+                CameraAutoModeOn();
+                return;
             }
-            else
-            {
-                EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
-            }
+            CameraAutoModeOff();
         }
 
         public void CameraAutoModeOn()
         {
+            if (!CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue) return;
             if (CameraIsOffFeedback.BoolValue)
             {
                 CameraMuteOff();
@@ -2268,6 +2425,54 @@ ConnectorID: {2}"
         }
 
         #endregion
+
+        public void PresenterTrackOff()
+        {
+            if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue) return;
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Off");
+        }
+
+        public void PresenterTrackFollow()
+        {
+            if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue) return;
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Follow");
+        }
+
+        public void PresenterTrackBackground()
+        {
+            if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue) return;
+
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Background");
+        }
+
+        public void PresenterTrackPersistent()
+        {
+            if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue) return;
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Persistent");
+        }
+
+
+
 
         /// <summary>
         /// Builds the cameras List.  Could later be modified to build from config data
@@ -2769,31 +2974,11 @@ ConnectorID: {2}"
                 raiseEvent(this, args);
             }
         }
-
-
-
-
-
     }
 
 
 
 
-    public class CiscoSparkCodecFactory : EssentialsDeviceFactory<CiscoCodec>
-    {
-        public CiscoSparkCodecFactory()
-        {
-            TypeNames = new List<string>() { "ciscoRoomOS"};
-        }
-
-        public override EssentialsDevice BuildDevice(DeviceConfig dc)
-        {
-            Debug.Console(1, "Factory Attempting to create new Cisco RoomOs Device");
-
-            var comm = CommFactory.CreateCommForDevice(dc);
-            return new CiscoCodec(dc, comm);
-        }
-    }
 
 
 }

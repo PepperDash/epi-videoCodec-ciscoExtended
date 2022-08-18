@@ -28,7 +28,6 @@ namespace epi_videoCodec_ciscoExtended
     /// </summary>
     public class CiscoCodecStatus 
     {
-
         public class ConnectionStatus
         {
             public string Value { get; set; }
@@ -374,16 +373,49 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
+        public class PresenterTrack
+        {
+            public Availability Availability { get; set; }
+            public Status11 Status { get; set; }
+
+            public PresenterTrack()
+            {
+                Status = new Status11();
+                Availability = new Availability();
+            }
+
+        }
+
+        public class Status11 : ValueProperty
+        {
+            string _Value;
+            public string Value
+            {
+                get
+                {
+                    return _Value;
+                }
+                set
+                {
+                    // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
+                    _Value = value;
+                    OnValueChanged();
+                }
+            }
+        }
+
         public class Cameras
         {
             //            [JsonConverter(typeof(CameraConverter))]
             public List<Camera> Camera { get; set; }
             public SpeakerTrack SpeakerTrack { get; set; }
+            public PresenterTrack PresenterTrack { get; set; }
 
             public Cameras()
             {
                 Camera = new List<Camera>();
                 SpeakerTrack = new SpeakerTrack();
+                PresenterTrack = new PresenterTrack();
             }
         }
 
@@ -2283,7 +2315,7 @@ namespace epi_videoCodec_ciscoExtended
                 Type = new Type5();
             }
 
-            public PresetBase ReturnConvertedCodecPreset()
+            public PresetBase ConvertCodecPreset()
             {
                 try
                 {
@@ -2323,6 +2355,7 @@ namespace epi_videoCodec_ciscoExtended
         public CurrentLayouts()
         {
             AvailableLayouts = new List<LayoutData>();
+            ActiveLayout = new ActiveLayout();
         }
 
     }

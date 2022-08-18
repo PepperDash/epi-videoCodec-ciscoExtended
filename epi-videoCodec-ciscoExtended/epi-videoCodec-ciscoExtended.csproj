@@ -105,6 +105,7 @@
   <ItemGroup>
     <Compile Include="BookingsDataClasses.cs" />
     <Compile Include="CallHistoryDataClasses.cs" />
+    <Compile Include="CiscoCodecFactory.cs" />
     <Compile Include="CiscoCodecJoinMap.cs" />
     <Compile Include="CiscoCodecPhonebookDataClasses.cs" />
     <Compile Include="CiscoCamera.cs" />
