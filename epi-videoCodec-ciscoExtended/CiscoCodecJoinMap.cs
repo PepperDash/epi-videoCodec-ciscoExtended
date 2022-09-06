@@ -24,21 +24,6 @@ namespace epi_videoCodec_ciscoExtended
             });
 
 
-        [JoinName("PresenterTrackEnabled")]
-        public JoinDataComplete PresenterTrackEnabled = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 130,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "Presenter Track Enabled Feedback",
-                JoinCapabilities = eJoinCapabilities.ToSIMPL,
-                JoinType = eJoinType.Digital
-            });
-
-
         [JoinName("PresenterTrackOff")]
         public JoinDataComplete PresenterTrackOff = new JoinDataComplete(
             new JoinData
@@ -92,6 +77,50 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
+        [JoinName("SpeakerTrackAvailable")]
+        public JoinDataComplete SpeakerTrackAvailable = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 145,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Speaker Track Available",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("PresenterTrackAvailable")]
+        public JoinDataComplete PresenterTrackAvailable = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 146,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Availble",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("DialActiveMeeting")]
+        public JoinDataComplete DialActiveMeeting = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 159,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presenter Track Availble",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
+
 
         [JoinName("DialMeeting4")]
         public JoinDataComplete DialMeeting4 = new JoinDataComplete(
@@ -118,6 +147,21 @@ namespace epi_videoCodec_ciscoExtended
             {
                 Description = "Join fifth meeting",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
+        [JoinName("PresentationActive")]
+        public JoinDataComplete PresentationActive = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 200,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Presentation Active",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
                 JoinType = eJoinType.Digital
             });
 
@@ -150,6 +194,20 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("ResumeAllCalls")]
+        public JoinDataComplete ResumeAllCalls = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 230,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Resume all held calls",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
         [JoinName("PresentationLocalRemoteToggle")]
         public JoinDataComplete PresentationLocalRemoteToggle = new JoinDataComplete(
             new JoinData
@@ -163,6 +221,7 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
+
 
 
         [JoinName("ActivateDoNotDisturbMode")]
@@ -369,19 +428,51 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("DirectorySelectRowFeedback")]
-        public JoinDataComplete DirectorySelectRowFeedback = new JoinDataComplete(
+        [JoinName("TotalMinutesUntilMeeting")]
+        public JoinDataComplete TotalMinutesUntilMeeting = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 101,
+                JoinNumber = 42,
                 JoinSpan = 1
             },
             new JoinMetadata
             {
-                Description = "Directory Select Row Feedback",
+                Description = "Total minutes until next meeting",
                 JoinCapabilities = eJoinCapabilities.ToSIMPL,
                 JoinType = eJoinType.Analog
             });
+
+
+        [JoinName("HoursUntilMeeting")]
+        public JoinDataComplete HoursUntilMeeting = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 43,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Hours until next meeting",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Analog
+            });
+        [JoinName("MinutesUntilMeeting")]
+        public JoinDataComplete MinutesUntilMeeting = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 44,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Minutes until next meeting",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Analog
+            });
+
+
+
+
 
 
         [JoinName("PresentationSource")]
@@ -417,6 +508,50 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Serial
             });
+        [JoinName("ActiveMeetingData")]
+        public JoinDataComplete ActiveMeetingDataXSig = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 104,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "XSig Containing Data for Active Meeting",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("AvailableTimeRemaining")]
+        public JoinDataComplete AvailableTimeRemaining = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 105,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Formatted String Showing Time until room no longer available" +
+                              "",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("TimeToNextMeeting")]
+        public JoinDataComplete TimeToNextMeeting = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 106,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Formatted String Showing Time to next meeting" +
+                              "",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+
+
 
 
         #endregion

@@ -54,12 +54,12 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\ProgramData\Crestron\SDK\SSPDevices\Crestron.SimplSharpPro.GeneralIO.dll</HintPath>
     </Reference>
-    <Reference Include="Essentials Devices Common, Version=1.10.2.32045, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Essentials Devices Common, Version=0.0.0.18674, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\PepperDashEssentials\lib\net35\Essentials Devices Common.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="PepperDashEssentials, Version=1.10.2.32051, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="PepperDashEssentials, Version=0.0.0.24047, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\PepperDashEssentials\lib\net35\PepperDashEssentials.dll</HintPath>
     </Reference>
@@ -113,6 +113,7 @@
     <Compile Include="CiscoCodecConfig.cs" />
     <Compile Include="CodecSyncState.cs" />
     <Compile Include="HttpApiServerExtended.cs" />
+    <Compile Include="IHasCiscoCodecLayouts.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="xConfiguration.cs" />
     <Compile Include="xEvent.cs" />

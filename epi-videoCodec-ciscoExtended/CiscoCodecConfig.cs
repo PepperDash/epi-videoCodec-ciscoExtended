@@ -44,11 +44,34 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("phonebookResultsLimit")]
         public uint PhonebookResultsLimit { get; set; }
 
+        [JsonProperty("overrideMeetingsLimit")]
+        public bool OverrideMeetingsLimit { get; set; }
+
+        [JsonProperty("phonebookDisableAutoPopulate")]
+        public bool PhonebookDisableAutoPopulate { get; set; }
+
+        [JsonProperty("phonebookDisableAutoDial")]
+        public bool PhonebookDisableAutoDial { get; set; }
+
         [JsonProperty("UiBranding")]
         public BrandingLogoProperties UiBranding { get; set; }
 
         [JsonProperty("cameraInfo")]
         public List<CameraInfo> CameraInfo { get; set; }
+
+        [JsonProperty("defaultTrackingMode")]
+        public string DefaultCameraTrackingMode { get; set; }
+        //Valid options "speakerTrack", "presenterTrack", "speaker", or "presenter"
+
+        [JsonProperty("timeFormatSpecifier")]
+        public string TimeFormatSpecifier { get; set; }
+
+        [JsonProperty("dateFormatSpecifier")]
+        public string DateFormatSpecifier { get; set; }
+
+        [JsonProperty("joinableCooldownSeconds")]
+        public int JoinableCooldownSeconds { get; set; }
+
 
 
         public CiscoCodecConfig()

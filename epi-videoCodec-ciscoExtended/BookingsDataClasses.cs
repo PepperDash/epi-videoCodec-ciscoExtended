@@ -228,7 +228,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Call
+        public class CiscoCall
         {
             public string id { get; set; }
             public Number Number { get; set; }
@@ -239,7 +239,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Calls
         {
-            public List<Call> Call { get; set; }
+            public List<CiscoCall> Call { get; set; }
         }
 
         public class ConnectMode
@@ -313,32 +313,34 @@ namespace epi_videoCodec_ciscoExtended
         /// </summary>
         /// <param name="bookings"></param>
         /// <returns></returns>
-        public static List<Meeting> GetGenericMeetingsFromBookingResult(List<Booking> bookings)
+        public static List<Meeting> GetGenericMeetingsFromBookingResult(List<Booking> bookings, int joinableCooldownSeconds)
         {
             var meetings = new List<Meeting>();
 
-            if (Debug.Level > 0)
-            {
-                Debug.Console(1, "Meetings List:\n");
-            }
 
             foreach (Booking b in bookings)
             {
-                var meeting = new Meeting();
+                var meeting = new Meeting(joinableCooldownSeconds);
 
                 if (b.Id != null)
                     meeting.Id = b.Id.Value;
+
                 if (b.Organizer != null)
                     meeting.Organizer = string.Format("{0}, {1}", b.Organizer.LastName.Value, b.Organizer.FirstName.Value);
+
                 if (b.Title != null)
                     meeting.Title = b.Title.Value;
+
                 if (b.Agenda != null)
                     meeting.Agenda = b.Agenda.Value;
+
                 if (b.Time != null)
                 {
                     meeting.StartTime = b.Time.StartTime.Value;
+                    meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
                     meeting.EndTime = b.Time.EndTime.Value;
                 }
+
                 if (b.Privacy != null)
                     meeting.Privacy = CodecCallPrivacy.ConvertToDirectionEnum(b.Privacy.Value);
 
@@ -349,27 +351,26 @@ namespace epi_videoCodec_ciscoExtended
 
                 if (b.DialInfo.Calls.Call != null)
                 {
-                    foreach (Call c in b.DialInfo.Calls.Call)
+
+                    foreach (CiscoCall c in b.DialInfo.Calls.Call)
                     {
-                        meeting.Calls.Add(new PepperDash.Essentials.Devices.Common.Codec.Call()
+                        meeting.Calls.Add(new Call()
                         {
                             Number = c.Number.Value,
                             Protocol = c.Protocol.Value,
                             CallRate = c.CallRate.Value,
                             CallType = c.CallType.Value
                         });
+
                     }
                 }
 
 
                 meetings.Add(meeting);
 
-                if (Debug.Level > 0)
-                {
                     Debug.Console(1, "Title: {0}, ID: {1}, Organizer: {2}, Agenda: {3}", meeting.Title, meeting.Id, meeting.Organizer, meeting.Agenda);
                     Debug.Console(1, "    Start Time: {0}, End Time: {1}, Duration: {2}", meeting.StartTime, meeting.EndTime, meeting.Duration);
                     Debug.Console(1, "    Joinable: {0}\n", meeting.Joinable);
-                }
             }
 
             meetings.OrderBy(m => m.StartTime);
