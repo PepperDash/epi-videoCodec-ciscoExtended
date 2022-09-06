@@ -11,7 +11,7 @@
     <projectUrl>https://github.com/PepperDash/epi-videoCodec-ciscoExtended</projectUrl>
     <copyright>Copyright 2022</copyright>
     <description>This software is a plugin designed to work as a part of PepperDash Essentials for Crestron control processors. This plugin allows for control of a Cisco RoomOs Video Codec using SSH</description>
-    <tags>crestron 3series 4series samsung</tags>
+    <tags>crestron 3series 4series samsung cisco webex webexpro vtc videocodec codec</tags>
     <repository type="git" url="https://github.com/PepperDash/epi-videoCodec-ciscoExtended"/>
   </metadata>
     <files>

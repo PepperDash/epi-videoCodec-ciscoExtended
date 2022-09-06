@@ -10,7 +10,7 @@ namespace epi_videoCodec_ciscoExtended
     {
         public CiscoCodecFactory()
         {
-            MinimumEssentialsFrameworkVersion = "1.10.6";
+            MinimumEssentialsFrameworkVersion = "1.10.9";
 
             TypeNames = new List<string>() { "ciscoRoomOS" };
         }
@@ -28,9 +28,9 @@ namespace epi_videoCodec_ciscoExtended
     {
         public CiscoCodecDevelopmentFactory()
         {
-            MinimumEssentialsFrameworkVersion = "1.10.6";
+            MinimumEssentialsFrameworkVersion = "1.10.9";
 
-            DevelopmentEssentialsFrameworkVersions = new List<string>() {"1.10.6-alpha-1897"};
+            DevelopmentEssentialsFrameworkVersions = new List<string>() {"1.10.9-alpha-1928"};
 
             TypeNames = new List<string>() { "ciscoRoomOS-development" };
         }
