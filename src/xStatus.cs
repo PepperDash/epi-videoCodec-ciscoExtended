@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Core.Presets;
@@ -28,7 +29,6 @@ namespace epi_videoCodec_ciscoExtended
     /// </summary>
     public class CiscoCodecStatus 
     {
-
         public class ConnectionStatus
         {
             public string Value { get; set; }
@@ -312,7 +312,7 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     // If the incoming value is "Available" it sets the BoolValue true, otherwise sets it false
                     _Value = value;
-                    BoolValue = value == "Available";
+                    BoolValue = value != "Unavailable";
                     OnValueChanged();
                 }
             }
@@ -340,10 +340,13 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
-        public class Status2 : ValueProperty
+        public class SpeakerTrackStatus : ValueProperty
         {
             string _Value;
             public bool BoolValue { get; private set; }
+            public string StringValue { get; private set; }
+
+            public List<string> SpeakerTrackStatusValues { get; private set; }  
 
 
             public string Value
@@ -356,21 +359,69 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
                     _Value = value;
-                    BoolValue = value == "Active";
+                    BoolValue = value.ToLower() == "active";
+                    StringValue = value;
                     OnValueChanged();
                 }
+            }
+
+            public SpeakerTrackStatus()
+            {
+                SpeakerTrackStatusValues = new List<string>() { "active", "inactive" };
             }
         }
 
         public class SpeakerTrack
         {
             public Availability Availability { get; set; }
-            public Status2 Status { get; set; }
+            public SpeakerTrackStatus Status { get; set; }
 
             public SpeakerTrack()
             {
-                Status = new Status2();
+                Status = new SpeakerTrackStatus();
                 Availability = new Availability();
+            }
+        }
+
+        public class PresenterTrack
+        {
+            public Availability Availability { get; set; }
+            public PresenterTrackStatus Status { get; set; }
+
+            public PresenterTrack()
+            {
+                Status = new PresenterTrackStatus();
+                Availability = new Availability();
+            }
+
+        }
+
+        public class PresenterTrackStatus : ValueProperty
+        {
+            string _Value;
+            public string StringValue { get; private set; }
+            public bool BoolValue { get; private set; }
+            public List<string> PresenterTrackStatusValues { get; private set; }  
+
+            public string Value
+            {
+                get
+                {
+                    return _Value;
+                }
+                set
+                {
+                    // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
+                    _Value = value;
+                    StringValue = value;
+                    BoolValue = value.ToLower() != "off";
+                    OnValueChanged();
+                }
+            }
+
+            public PresenterTrackStatus()
+            {
+                PresenterTrackStatusValues = new List<string>(){"off", "follow", "diagnostic", "background", "setup", "persistent"};
             }
         }
 
@@ -379,12 +430,59 @@ namespace epi_videoCodec_ciscoExtended
             //            [JsonConverter(typeof(CameraConverter))]
             public List<Camera> Camera { get; set; }
             public SpeakerTrack SpeakerTrack { get; set; }
+            public PresenterTrack PresenterTrack { get; set; }
+            //public CameraTrackingCapability CameraCapability { get; set; }
 
             public Cameras()
             {
                 Camera = new List<Camera>();
                 SpeakerTrack = new SpeakerTrack();
+                PresenterTrack = new PresenterTrack();
+                //CameraCapability = new CameraTrackingCapability(SpeakerTrack, PresenterTrack);
             }
+        }
+
+        public class CameraTrackingCapability : ValueProperty
+        {
+            public eCameraTrackingCapabilities CameraTrackingCapabilities { get; private set; }
+            private readonly SpeakerTrack _speakerTrack;
+            private readonly PresenterTrack _presenterTrack;
+
+
+            public CameraTrackingCapability(SpeakerTrack speakerTrack, PresenterTrack presenterTrack)
+            {
+                _speakerTrack = speakerTrack;
+                _presenterTrack = presenterTrack;
+            }
+
+            protected Func<eCameraTrackingCapabilities> CameraTrackingFeedbackFunc
+            {
+                get
+                {
+                    return () =>
+                    {
+                        var trackingType = eCameraTrackingCapabilities.None;
+
+                        if (_speakerTrack.Availability.BoolValue && _presenterTrack.Availability.BoolValue)
+                        {
+                            trackingType = eCameraTrackingCapabilities.Both;
+                            return trackingType;
+                        }
+                        if (!_speakerTrack.Availability.BoolValue && _presenterTrack.Availability.BoolValue)
+                        {
+                            trackingType = eCameraTrackingCapabilities.PresenterTrack;
+                            return trackingType;
+                        }
+                        if (_speakerTrack.Availability.BoolValue && !_presenterTrack.Availability.BoolValue)
+                        {
+                            trackingType = eCameraTrackingCapabilities.SpeakerTrack;
+                            return trackingType;
+                        }
+                        return trackingType;
+                    };
+                }
+            }
+
         }
 
         //public class CameraConverter : JsonConverter
@@ -526,8 +624,6 @@ namespace epi_videoCodec_ciscoExtended
 
             public bool BoolValue { get; private set; }
 
-
-
             public string Value
             {
                 get
@@ -628,6 +724,7 @@ namespace epi_videoCodec_ciscoExtended
                     if (string.IsNullOrEmpty(_Value))
                         return false;
 
+
                     return _Value.ToLower() == "localonly";
                 }
             }
@@ -640,6 +737,17 @@ namespace epi_videoCodec_ciscoExtended
                         return false;
 
                     return _Value.ToLower() == "localremote";
+                }
+            }
+
+            public bool Off
+            {
+                get
+                {
+                    if (string.IsNullOrEmpty(_Value))
+                        return false;
+
+                    return _Value.ToLower() == "off";
                 }
             }
         }
@@ -2245,7 +2353,7 @@ namespace epi_videoCodec_ciscoExtended
             public Proximity Proximity { get; set; }
             public RoomAnalytics RoomAnalytics { get; set; }
 
-            public List<IConvertiblePreset> RoomPreset { get; set; }
+            public List<RoomPreset> RoomPreset { get; set; }
 
             public SIP SIP { get; set; }
             public Security Security { get; set; }
@@ -2262,7 +2370,7 @@ namespace epi_videoCodec_ciscoExtended
                 Standby = new Standby();
                 Cameras = new Cameras();
                 RoomAnalytics = new RoomAnalytics();
-                RoomPreset = new List<IConvertiblePreset>();
+                RoomPreset = new List<RoomPreset>();
                 Conference = new Conference2();
                 SystemUnit = new SystemUnit();
                 Video = new Video();
@@ -2271,7 +2379,7 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
-        public class RoomPreset : IConvertiblePreset
+        public class RoomPreset : ConvertiblePreset
         {
             public string id { get; set; }
             public Defined Defined { get; set; }
@@ -2285,13 +2393,13 @@ namespace epi_videoCodec_ciscoExtended
                 Type = new Type5();
             }
 
-            public PresetBase ReturnConvertedCodecPreset()
+            public override PresetBase ConvertCodecPreset()
             {
                 try
                 {
                     var preset = new CodecRoomPreset(UInt16.Parse(id), Description.Value, Defined.BoolValue, true);
 
-                    Debug.Console(2, "Preset ID {0} Converted from Cisco Codec Preset to Essentials Preset");
+                    Debug.Console(2, "Preset ID {0} Converted from Cisco Codec Preset to Essentials Preset", id);
 
                     return preset;
                 }
@@ -2325,6 +2433,7 @@ namespace epi_videoCodec_ciscoExtended
         public CurrentLayouts()
         {
             AvailableLayouts = new List<LayoutData>();
+            ActiveLayout = new ActiveLayout();
         }
 
     }

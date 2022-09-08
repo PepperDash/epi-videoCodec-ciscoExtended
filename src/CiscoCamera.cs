@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Crestron.SimplSharp;
-using Crestron.SimplSharpPro.DeviceSupport;
+﻿using Crestron.SimplSharpPro.DeviceSupport;
 using PepperDash.Essentials.Core.Bridges;
 using PepperDash.Essentials.Devices.Common.Cameras;
 
@@ -42,12 +37,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void PanLeft()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Left CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: Left CallId: {0}", CallId));
         }
 
         public void PanRight()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Right CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: Right CallId: {0}", CallId));
         }
 
         public void PanStop()
@@ -61,12 +56,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void TiltDown()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Down CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: Down CallId: {0}", CallId));
         }
 
         public void TiltUp()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Up CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: Up CallId: {0}", CallId));
         }
 
         public void TiltStop()
@@ -80,12 +75,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void ZoomIn()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomIn CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: ZoomIn CallId: {0}", CallId));
         }
 
         public void ZoomOut()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomOut CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Move Value: ZoomOut CallId: {0}", CallId));
         }
 
         public void ZoomStop()
@@ -98,7 +93,7 @@ namespace epi_videoCodec_ciscoExtended
 
         void Stop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand CiscoCall FarEndControl Camera Stop CallId: {0}", CallId));
         }
 
         public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
