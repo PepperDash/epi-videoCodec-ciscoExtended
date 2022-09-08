@@ -72,7 +72,7 @@ namespace epi_videoCodec_ciscoExtended
     }
 
 
-    public class CiscoCodec : VideoCodecBase, IHasCallHistory, IHasCallFavorites, IHasDirectoryClearSelection,
+    public class CiscoCodec : VideoCodecBase, IHasCallHistory, IHasCallFavorites, IHasDirectory,
         IHasScheduleAwareness, IOccupancyStatusProvider, IHasCodecLayoutsAvailable, IHasCodecSelfView,
         ICommunicationMonitor, IRouting, IHasCodecCameras, IHasCameraAutoMode, IHasCodecRoomPresets,
         IHasExternalSourceSwitching, IHasBranding, IHasCameraOff, IHasCameraMute, IHasDoNotDisturbMode,
@@ -97,6 +97,8 @@ namespace epi_videoCodec_ciscoExtended
         public Meeting ActiveMeeting { get; private set; }
 
         private const int XSigEncoding = 28591;
+
+        private List<Meeting> _currentMeetings; 
 
         private const string TestedCodecFirmware = "10.11.5.2";
 
@@ -143,8 +145,6 @@ namespace epi_videoCodec_ciscoExtended
         public BoolFeedback RoomIsOccupiedFeedback { get; private set; }
 
         public IntFeedback PeopleCountFeedback { get; private set; }
-
-        private List<Meeting> _currentMeetings = new List<Meeting>();
 
         public BoolFeedback SelfviewIsOnFeedback { get; private set; }
 
@@ -735,11 +735,6 @@ namespace epi_videoCodec_ciscoExtended
             if (callPresent) return;
             OnAvailableLayoutsChanged(new List<CodecCommandWithLabel>());
             OnCurrentLayoutChanged(String.Empty);
-        }
-
-        public void DirectoryClearSelection()
-        {
-            DirectoryClearSelectionBase();
         }
 
         private string UpdateActiveMeetingXSig(Meeting currentMeeting)
@@ -2347,7 +2342,6 @@ ConnectorID: {2}"
         public override void Dial(string number)
         {
             EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\"", number));
-            DirectoryClearSelection();
         }
 
         /// <summary>
@@ -2360,7 +2354,6 @@ ConnectorID: {2}"
             {
                 Dial(c.Number, c.Protocol, c.CallRate, c.CallType, meeting.Id);
             }
-            DirectoryClearSelection();
         }
 
         /// <summary>
@@ -2376,7 +2369,6 @@ ConnectorID: {2}"
             EnqueueCommand(
                 string.Format("xCommand Dial Number: \"{0}\" Protocol: {1} CallRate: {2} CallType: {3} BookingId: {4}",
                     number, protocol, callRate, callType, meetingId));
-            DirectoryClearSelection();
         }
 
 
@@ -2651,8 +2643,7 @@ ConnectorID: {2}"
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
             // Custom commands to codec
-            trilist.SetStringSigAction(joinMap.CommandToDevice.JoinNumber, (s) => this.EnqueueCommand(s));
-
+            trilist.SetStringSigAction(joinMap.CommandToDevice.JoinNumber, EnqueueCommand);
 
             var dndCodec = this as IHasDoNotDisturbMode;
             if (dndCodec != null)
@@ -2673,10 +2664,43 @@ ConnectorID: {2}"
             var scheduleCodec = this as IHasScheduleAwareness;
             if (scheduleCodec != null)
             {
+                trilist.SetSigFalseAction(joinMap.DialMeeting1.JoinNumber, () =>
+                {
+                    const int mtg = 1;
+                    const int index = mtg - 1;
+                    Debug.Console(1, this,
+                        "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].Id: {3}, Title: {4}",
+                        mtg, joinMap.DialMeeting1.JoinNumber, index, _currentMeetings[index].Id,
+                        _currentMeetings[index].Title);
+                    if (_currentMeetings[index] != null)
+                        Dial(_currentMeetings[index]);
+                });
+                trilist.SetSigFalseAction(joinMap.DialMeeting2.JoinNumber, () =>
+                {
+                    const int mtg = 2;
+                    const int index = mtg - 1;
+                    Debug.Console(1, this,
+                        "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].Id: {3}, Title: {4}",
+                        mtg, joinMap.DialMeeting2.JoinNumber, index, _currentMeetings[index].Id,
+                        _currentMeetings[index].Title);
+                    if (_currentMeetings[index] != null)
+                        Dial(_currentMeetings[index]);
+                });
+                trilist.SetSigFalseAction(joinMap.DialMeeting3.JoinNumber, () =>
+                {
+                    const int mtg = 3;
+                    const int index = mtg - 1;
+                    Debug.Console(1, this,
+                        "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].Id: {3}, Title: {4}",
+                        mtg, joinMap.DialMeeting3.JoinNumber, index, _currentMeetings[index].Id,
+                        _currentMeetings[index].Title);
+                    if (_currentMeetings[index] != null)
+                        Dial(_currentMeetings[index]);
+                });
                 trilist.SetSigFalseAction(joinMap.DialMeeting4.JoinNumber, () =>
                 {
-                    var mtg = 4;
-                    var index = mtg - 1;
+                    const int mtg = 4;
+                    const int index = mtg - 1;
                     Debug.Console(1, this,
                         "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].Id: {3}, Title: {4}",
                         mtg, joinMap.DialMeeting4.JoinNumber, index, _currentMeetings[index].Id,
@@ -2687,8 +2711,8 @@ ConnectorID: {2}"
 
                 trilist.SetSigFalseAction(joinMap.DialMeeting5.JoinNumber, () =>
                 {
-                    var mtg = 5;
-                    var index = mtg - 1;
+                    const int mtg = 5;
+                    const int index = mtg - 1;
                     Debug.Console(1, this,
                         "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].Id: {3}, Title: {4}",
                         mtg, joinMap.DialMeeting5.JoinNumber, index, _currentMeetings[index].Id,

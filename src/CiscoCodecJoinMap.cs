@@ -7,21 +7,7 @@ namespace epi_videoCodec_ciscoExtended
 {
     public class CiscoCodecJoinMap : VideoCodecControllerJoinMap
     {
-
         #region Digital
-        [JoinName("PhoneBookClearSelected")]
-        public JoinDataComplete PhoneBookClearSelected = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 110,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "Clear Selected Entry and String from Search",
-                JoinCapabilities = eJoinCapabilities.FromSIMPL,
-                JoinType = eJoinType.Digital
-            });
 
 
         [JoinName("PresenterTrackOff")]
