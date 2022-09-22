@@ -2428,14 +2428,62 @@ namespace epi_videoCodec_ciscoExtended
     {
         public ActiveLayout ActiveLayout { get; set; }
 
-        public List<LayoutData> AvailableLayouts { get; set; }
+        public AvailableLayoutsCount AvailableLayoutsCount { get; set; }
+
+        private List<LayoutData> _availableLayouts;
+
+        public List<CodecCommandWithLabel> LayoutCommnds
+        {
+            get
+            {
+                var layoutData = new List<CodecCommandWithLabel>();
+                foreach (var i in AvailableLayouts)
+                    
+                {
+                    var r = i;
+                    Debug.Console(2, "Adding New layout {0}", r.LayoutName.Value);
+                    layoutData.Add(new CodecCommandWithLabel(r.LayoutName.Value,
+                        r.LayoutName.Value));
+                }
+                return layoutData;
+            }
+        }
+
+        public List<LayoutData> AvailableLayouts
+        {
+            get
+            {
+                return _availableLayouts;
+            }
+            set
+            {
+                _availableLayouts = value;
+                AvailableLayoutsCount.Value = value.Count;
+            }
+        }
 
         public CurrentLayouts()
         {
             AvailableLayouts = new List<LayoutData>();
             ActiveLayout = new ActiveLayout();
+            AvailableLayoutsCount = new AvailableLayoutsCount();
         }
 
+    }
+
+    public class AvailableLayoutsCount : ValueProperty
+    {
+        private int _value;
+
+        public int Value
+        {
+            get { return _value; }
+            set
+            {
+                _value = value;
+                OnValueChanged();
+            }
+        }
     }
 
     public class ActiveLayout : ValueProperty
