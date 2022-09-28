@@ -106,37 +106,6 @@ namespace epi_videoCodec_ciscoExtended
             });
 
 
-
-
-        [JoinName("DialMeeting4")]
-        public JoinDataComplete DialMeeting4 = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 164,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "Join fourth meeting",
-                JoinCapabilities = eJoinCapabilities.FromSIMPL,
-                JoinType = eJoinType.Digital
-            });
-
-        [JoinName("DialMeeting5")]
-        public JoinDataComplete DialMeeting5 = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 165,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "Join fifth meeting",
-                JoinCapabilities = eJoinCapabilities.FromSIMPL,
-                JoinType = eJoinType.Digital
-            });
-
-
         [JoinName("PresentationActive")]
         public JoinDataComplete PresentationActive = new JoinDataComplete(
             new JoinData

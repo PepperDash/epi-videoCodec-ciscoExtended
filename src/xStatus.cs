@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Crestron.SimplSharp.Ssh;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Core.Presets;
@@ -312,7 +313,8 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     // If the incoming value is "Available" it sets the BoolValue true, otherwise sets it false
                     _Value = value;
-                    BoolValue = value != "Unavailable";
+
+                    BoolValue = value.ToLower() == "available";
                     OnValueChanged();
                 }
             }
@@ -414,7 +416,7 @@ namespace epi_videoCodec_ciscoExtended
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
                     _Value = value;
                     StringValue = value;
-                    BoolValue = value.ToLower() != "off";
+                    BoolValue = value.ToLower() == "off";
                     OnValueChanged();
                 }
             }
@@ -1006,9 +1008,19 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Version
+        public class Version : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public string Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
         public class VoIPApplianceVlanID
@@ -1459,9 +1471,22 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class DisplayName
+        public class DisplayName : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public string Value
+            {
+                get
+                {
+                    return _value;
+                }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
         public class Mode6
@@ -1654,20 +1679,36 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class SerialNumber
+        public class SerialNumber : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public string Value
+            {
+                get { return _value; }
+                set { _value = value; OnValueChanged(); }
+            }
         }
 
         public class Module
         {
             public CompatibilityLevel CompatibilityLevel { get; set; }
             public SerialNumber SerialNumber { get; set; }
+
+            public Module()
+            {
+                SerialNumber = new SerialNumber();
+            }
         }
 
         public class Hardware
         {
             public Module Module { get; set; }
+
+            public Hardware()
+            {
+                Module = new Module();
+            }
         }
 
         public class ProductId
@@ -1700,9 +1741,16 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class MultiSite
+        public class MultiSite : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public bool BoolValue
+            {
+                get { return _value.ToLower() == "true"; }
+            }
+
+            public string Value { get { return _value; } set { _value = value; } }
         }
 
         public class RemoteMonitoring
@@ -1727,22 +1775,20 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Version2
-        {
-            public string Value { get; set; }
-        }
 
         public class Software2
         {
-            public DisplayName2 DisplayName { get; set; }
+            public DisplayName DisplayName { get; set; }
             public Name3 Name { get; set; }
             public OptionKeys OptionKeys { get; set; }
             public ReleaseDate ReleaseDate { get; set; }
-            public Version2 Version { get; set; }
+            public Version Version { get; set; }
 
             public Software2()
             {
                 OptionKeys = new OptionKeys();
+                Version = new Version();
+                DisplayName = new DisplayName();
             }
         }
 
@@ -1786,6 +1832,7 @@ namespace epi_videoCodec_ciscoExtended
             public SystemUnit()
             {
                 Software = new Software2();
+                Hardware = new Hardware();
             }
         }
 
@@ -2376,6 +2423,7 @@ namespace epi_videoCodec_ciscoExtended
                 Video = new Video();
                 Conference = new Conference2();
                 Network = new List<Network>();
+                SIP = new SIP();
             }
         }
 
@@ -2430,57 +2478,31 @@ namespace epi_videoCodec_ciscoExtended
 
         public AvailableLayoutsCount AvailableLayoutsCount { get; set; }
 
-        private List<LayoutData> _availableLayouts;
+        public List<LayoutData> AvailableLayouts { get; set; }
 
-        public List<CodecCommandWithLabel> LayoutCommnds
-        {
-            get
-            {
-                var layoutData = new List<CodecCommandWithLabel>();
-                foreach (var i in AvailableLayouts)
-                    
-                {
-                    var r = i;
-                    Debug.Console(2, "Adding New layout {0}", r.LayoutName.Value);
-                    layoutData.Add(new CodecCommandWithLabel(r.LayoutName.Value,
-                        r.LayoutName.Value));
-                }
-                return layoutData;
-            }
-        }
 
-        public List<LayoutData> AvailableLayouts
-        {
-            get
-            {
-                return _availableLayouts;
-            }
-            set
-            {
-                _availableLayouts = value;
-                AvailableLayoutsCount.Value = value.Count;
-            }
-        }
+
 
         public CurrentLayouts()
         {
+            AvailableLayoutsCount = new AvailableLayoutsCount();
             AvailableLayouts = new List<LayoutData>();
             ActiveLayout = new ActiveLayout();
-            AvailableLayoutsCount = new AvailableLayoutsCount();
         }
 
     }
 
     public class AvailableLayoutsCount : ValueProperty
     {
-        private int _value;
+        private int _Value;
 
         public int Value
         {
-            get { return _value; }
+            get { return _Value; }
             set
             {
-                _value = value;
+                //Debug.Console(0, "**************VALPROPERTY SET**********");
+                _Value = value;
                 OnValueChanged();
             }
         }

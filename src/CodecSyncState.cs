@@ -23,7 +23,7 @@ namespace epi_videoCodec_ciscoExtended
             get { return _initialSyncComplete; }
             private set
             {
-                if (value)
+                if (value && !_initialSyncComplete)
                 {
                     var handler = InitialSyncCompleted;
                     if (handler != null)
