@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-
+using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
@@ -27,11 +28,9 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    DateTime _valueDateTime;
                     try
                     {
-                        _valueDateTime = DateTime.Parse(_value);
-                        return _valueDateTime;
+                        return DateTime.Parse(_value);
                     }
                     catch
                     {
@@ -40,7 +39,7 @@ namespace epi_videoCodec_ciscoExtended
                 }
                 set
                 {
-                    _value = value.ToString();
+                    _value = value.ToString(CultureInfo.InvariantCulture);
                 }
             }
         }
@@ -80,17 +79,14 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Id2
-        {
-            public string Value { get; set; }
-        }
 
         public class Organizer
         {
             public FirstName FirstName { get; set; }
             public LastName LastName { get; set; }
             public Email Email { get; set; }
-            public Id2 Id { get; set; }
+            [JsonProperty("CiscoCallId")]
+            public Id OrganizerId { get; set; }
 
             public Organizer()
             {
@@ -230,7 +226,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public class CiscoCall
         {
-            public string id { get; set; }
+            [JsonProperty("CiscoCallId")]
+            public string CiscoCallId { get; set; }
             public Number Number { get; set; }
             public Protocol Protocol { get; set; }
             public CallRate CallRate { get; set; }
@@ -261,7 +258,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Booking
         {
-            public string id { get; set; }
+            [JsonProperty("LocalInstanceId")]
+            public string StringId { get; set; }
             public Id Id { get; set; }
             public Title Title { get; set; }
             public Agenda Agenda { get; set; }
@@ -292,10 +290,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public class BookingsListResult
         {
-            public string status { get; set; }
+
+            public string Status { get; set; }
             public ResultInfo ResultInfo { get; set; }
             //public LastUpdated LastUpdated { get; set; }
-            public List<Booking> Booking { get; set; }
+            [JsonProperty("booking")]
+            public List<Booking> BookingsListResultBooking { get; set; }
         }
 
         public class CommandResponse
@@ -309,18 +309,28 @@ namespace epi_videoCodec_ciscoExtended
         }
 
         /// <summary>
-        /// Extracts the necessary meeting values from the Cisco bookings response ans converts them to the generic class
+        /// Extracts the necessary meeting values from the Cisco bookings response and converts them to the generic class
         /// </summary>
         /// <param name="bookings"></param>
+        /// <param name="joinableCooldownSeconds">How many seconds must be between now and booked time to allow the meeting to be joined</param>
         /// <returns></returns>
         public static List<Meeting> GetGenericMeetingsFromBookingResult(List<Booking> bookings, int joinableCooldownSeconds)
         {
             var meetings = new List<Meeting>();
 
 
-            foreach (Booking b in bookings)
+            foreach (var b in bookings)
             {
                 var meeting = new Meeting(joinableCooldownSeconds);
+
+                if (b.Time == null) continue;
+                
+                meeting.StartTime = b.Time.StartTime.Value;
+                meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
+                meeting.EndTime = b.Time.EndTime.Value;
+                
+                if (meeting.EndTime <= DateTime.Now) continue;
+
 
                 if (b.Id != null)
                     meeting.Id = b.Id.Value;
@@ -334,13 +344,6 @@ namespace epi_videoCodec_ciscoExtended
                 if (b.Agenda != null)
                     meeting.Agenda = b.Agenda.Value;
 
-                if (b.Time != null)
-                {
-                    meeting.StartTime = b.Time.StartTime.Value;
-                    meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
-                    meeting.EndTime = b.Time.EndTime.Value;
-                }
-
                 if (b.Privacy != null)
                     meeting.Privacy = CodecCallPrivacy.ConvertToDirectionEnum(b.Privacy.Value);
 
@@ -352,9 +355,9 @@ namespace epi_videoCodec_ciscoExtended
                 if (b.DialInfo.Calls.Call != null)
                 {
 
-                    foreach (CiscoCall c in b.DialInfo.Calls.Call)
+                    foreach (var c in b.DialInfo.Calls.Call)
                     {
-                        meeting.Calls.Add(new Call()
+                        meeting.Calls.Add(new Call
                         {
                             Number = c.Number.Value,
                             Protocol = c.Protocol.Value,

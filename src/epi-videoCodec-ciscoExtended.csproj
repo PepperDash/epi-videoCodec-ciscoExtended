@@ -118,7 +118,6 @@
     <Compile Include="xConfiguration.cs" />
     <Compile Include="xEvent.cs" />
     <Compile Include="xStatus.cs" />
-    <Compile Include="xStatusSparkPlus.cs" />
     <None Include="Properties\ControlSystem.cfg" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CompactFramework.CSharp.targets" />

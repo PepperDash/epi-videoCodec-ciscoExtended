@@ -188,7 +188,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Activates Do Not Disturb Mode.  FB High if active.",
+                Description = "Activates Do Not Disturb H323Mode.  FB High if active.",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -202,7 +202,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Deactivates Do Not Disturb Mode.  FB High if deactivated.",
+                Description = "Deactivates Do Not Disturb H323Mode.  FB High if deactivated.",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -216,7 +216,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Toggles Do Not Disturb Mode.",
+                Description = "Toggles Do Not Disturb H323Mode.",
                 JoinCapabilities = eJoinCapabilities.ToSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -230,7 +230,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Activates Standby Mode.  FB High if active.",
+                Description = "Activates Standby H323Mode.  FB High if active.",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -244,7 +244,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Deactivates Standby Mode.  FB High if deactivated.",
+                Description = "Deactivates Standby H323Mode.  FB High if deactivated.",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -258,7 +258,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Activates Half Wake Mode.  FB High if active.",
+                Description = "Activates Half Wake H323Mode.  FB High if active.",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });

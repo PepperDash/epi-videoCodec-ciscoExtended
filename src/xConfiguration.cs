@@ -14,25 +14,42 @@ namespace epi_videoCodec_ciscoExtended
     {
         public class DefaultVolume
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Dereverberation
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode
+        public class Mode : ValueProperty
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
+            
+            string _value;
+
+            /// <summary>
+            /// Sets Value and triggers the action when set
+            /// </summary>
+            public string Value
+            {
+                get
+                {
+                    return _value;
+                }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+
         }
 
         public class NoiseReduction
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -45,32 +62,29 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Level
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Microphone
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string MicrophoneId { get; set; }
             public EchoControl EchoControl { get; set; }
             public Level Level { get; set; }
-            public Mode2 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Input
         {
-            public List<Microphone> Microphone { get; set; }
+            [JsonProperty("microphone")]
+            public List<Microphone> InputMicrophones { get; set; }
         }
 
         public class Enabled
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -84,15 +98,10 @@ namespace epi_videoCodec_ciscoExtended
             public Mute Mute { get; set; }
         }
 
-        public class Mode3
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class InternalSpeaker
         {
-            public Mode3 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Output
@@ -102,15 +111,15 @@ namespace epi_videoCodec_ciscoExtended
 
         public class RingTone
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class RingVolume : ValueProperty
         {
-            public string valueSpaceRef { get; set; }
+            
 
-            string _Value;
+            string _value;
 
             /// <summary>
             /// Sets Value and triggers the action when set
@@ -119,11 +128,11 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -132,7 +141,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return Int32.Parse(_Value);
+                    return Int32.Parse(_value);
                 }
             }
         }
@@ -165,7 +174,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class DefaultMode
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -176,84 +185,55 @@ namespace epi_videoCodec_ciscoExtended
 
         public class DefaultLevel
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode4
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Brightness
         {
             public DefaultLevel DefaultLevel { get; set; }
-            public Mode4 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class Mode5
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Focus
         {
-            public Mode5 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class Level2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mode6
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Gamma
         {
-            public Level2 Level { get; set; }
-            public Mode6 Mode { get; set; }
+            public Level Level { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Mirror
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Level3
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mode7
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Whitebalance
         {
-            public Level3 Level { get; set; }
-            public Mode7 Mode { get; set; }
+            public Level Level { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Framerate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Camera
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string CameraIdString { get; set; }
             public Framerate Framerate { get; set; }
             public Backlight Backlight { get; set; }
             public Brightness Brightness { get; set; }
@@ -265,32 +245,27 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Closeup
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode8
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class SpeakerTrack
         {
             public Closeup Closeup { get; set; }
-            public Mode8 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Cameras
         {
-            //[JsonConverter(typeof(CameraConverter)), JsonProperty("Camera")]
-            //public List<Camera> Camera { get; set; }
+            //[JsonConverter(typeof(CameraConverter)), JsonProperty("CameraList")]
+            //public List<CameraList> CameraList { get; set; }
             //[JsonProperty("SpeakerTrack")]
             public SpeakerTrack SpeakerTrack { get; set; }
 
             public Cameras()
             {
-                //Camera = new List<Camera>();
+                //CameraList = new List<CameraList>();
                 SpeakerTrack = new SpeakerTrack();
             }
         }
@@ -319,11 +294,8 @@ namespace epi_videoCodec_ciscoExtended
                         Debug.Console(1, "[xConfiguration]: Cameras converted as list");
                         return l;
                     }
-                    else
-                    {
-                        Debug.Console(1, "[xConfiguration]: Camera converted as single object and added to list");
-                        return new List<Camera> { reader.Value as Camera };
-                    }
+                    Debug.Console(1, "[xConfiguration]: CameraList converted as single object and added to list");
+                    return new List<Camera> { reader.Value as Camera };
                 }
                 catch (Exception e)
                 {
@@ -349,45 +321,41 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Delay
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode9
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mute2
+        public class MuteString
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class AutoAnswer
         {
             public Delay Delay { get; set; }
-            public Mode9 Mode { get; set; }
-            public Mute2 Mute { get; set; }
+            public Mode Mode { get; set; }
+            [JsonProperty("mute")]
+            public MuteString MuteString { get; set; }
 
             public AutoAnswer()
             {
-                Mode = new Mode9();
+                Mode = new Mode();
                 Delay = new Delay();
-                Mute = new Mute2();
+                MuteString = new MuteString();
             }
         }
 
         public class Protocol
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Rate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -399,7 +367,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class DefaultTimeout
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -408,61 +376,46 @@ namespace epi_videoCodec_ciscoExtended
             public DefaultTimeout DefaultTimeout { get; set; }
         }
 
-        public class Mode10
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Encryption
         {
-            public Mode10 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class Mode11
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class FarEndControl
         {
-            public Mode11 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class MaxReceiveCallRate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class MaxTotalReceiveCallRate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class MaxTotalTransmitCallRate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class MaxTransmitCallRate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode12
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class MultiStream
         {
-            public Mode12 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Conference
@@ -486,54 +439,43 @@ namespace epi_videoCodec_ciscoExtended
 
         public class LoginName
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode13
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Password
-        {
-            public string valueSpaceRef { get; set; }
+        {         
             public string Value { get; set; }
         }
 
         public class Authentication
         {
             public LoginName LoginName { get; set; }
-            public Mode13 Mode { get; set; }
+            public Mode Mode { get; set; }
             public Password Password { get; set; }
         }
 
-        public class Mode14
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class CallSetup
         {
-            public Mode14 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class KeySize
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Encryption2
+        public class H323Encryption
         {
             public KeySize KeySize { get; set; }
         }
 
         public class Address
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -544,106 +486,99 @@ namespace epi_videoCodec_ciscoExtended
 
         public class E164
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class ID
+        public class Id
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class H323Alias
         {
             public E164 E164 { get; set; }
-            public ID ID { get; set; }
+            [JsonProperty("id")]
+            public Id H323AliasId { get; set; }
         }
 
-        public class Address2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mode15
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class NAT
+        public class Nat
         {
-            public Address2 Address { get; set; }
-            public Mode15 Mode { get; set; }
+            public Address Address { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class H323
         {
             public Authentication Authentication { get; set; }
             public CallSetup CallSetup { get; set; }
-            public Encryption2 Encryption { get; set; }
+            [JsonProperty("encryption")]
+            public H323Encryption H323Encryption { get; set; }
             public Gatekeeper Gatekeeper { get; set; }
             public H323Alias H323Alias { get; set; }
-            public NAT NAT { get; set; }
+            public Nat Nat { get; set; }
         }
 
         public class Name
-        {
-            public string valueSpaceRef { get; set; }
+        {    
             public string Value { get; set; }
         }
 
         public class Domain
         {
             public Name Name { get; set; }
-        }
-
-        public class Address3
-        {
-            public string valueSpaceRef { get; set; }
             public string Value { get; set; }
+
+            public Domain()
+            {
+                Name = new Name();
+            }
         }
 
-        public class Server
+
+        public class ServerBase
         {
-            public string id { get; set; }
-            public Address3 Address { get; set; }
+            [JsonProperty("id")]
+            public string ServerId { get; set; }
+            public Address Address { get; set; }
         }
 
-        public class DNS
+        public class Dns
         {
             public Domain Domain { get; set; }
-            public List<Server> Server { get; set; }
+            public List<ServerBase> Server { get; set; }
         }
 
         public class AnonymousIdentity
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Md5
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Peap
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Tls
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Ttls
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -657,187 +592,160 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Identity
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode16
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Password2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class TlsVerify
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class UseClientCertificate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class IEEE8021X
+        public class Ieee8021X
         {
             public AnonymousIdentity AnonymousIdentity { get; set; }
             public Eap Eap { get; set; }
             public Identity Identity { get; set; }
-            public Mode16 Mode { get; set; }
-            public Password2 Password { get; set; }
+            public Mode Mode { get; set; }
+            public Password Password { get; set; }
             public TlsVerify TlsVerify { get; set; }
             public UseClientCertificate UseClientCertificate { get; set; }
         }
 
-        public class IPStack
+        public class IpStack
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Address4
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Assignment
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Gateway
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class SubnetMask
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
+// ReSharper disable once InconsistentNaming
         public class IPv4
         {
-            public Address4 Address { get; set; }
+            public Address Address { get; set; }
             public Assignment Assignment { get; set; }
             public Gateway Gateway { get; set; }
             public SubnetMask SubnetMask { get; set; }
 
             public IPv4()
             {
-                Address = new Address4();
+                Address = new Address();
             }
         }
 
-        public class Address5
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Assignment2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class DHCPOptions
+        public class DhcpOptions
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Gateway2
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
+// ReSharper disable once InconsistentNaming
         public class IPv6
         {
-            public Address5 Address { get; set; }
-            public Assignment2 Assignment { get; set; }
-            public DHCPOptions DHCPOptions { get; set; }
-            public Gateway2 Gateway { get; set; }
+            public Address Address { get; set; }
+            public Assignment Assignment { get; set; }
+            public DhcpOptions DhcpOptions { get; set; }
+            public Gateway Gateway { get; set; }
         }
 
-        public class MTU
+        public class Mtu
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Audio2
+        public class AudioString
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Data
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class ICMPv6
+        public class IcmPv6
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class NTP
+        public class Ntp
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Signalling
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Video
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Diffserv
         {
-            public Audio2 Audio { get; set; }
+            [JsonProperty("audio")]
+            public AudioString AudioString { get; set; }
             public Data Data { get; set; }
-            public ICMPv6 ICMPv6 { get; set; }
-            public NTP NTP { get; set; }
+            public IcmPv6 IcmPv6 { get; set; }
+            public Ntp Ntp { get; set; }
             public Signalling Signalling { get; set; }
             public Video Video { get; set; }
         }
 
-        public class Mode17
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class QoS
         {
             public Diffserv Diffserv { get; set; }
-            public Mode17 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Allow
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -848,46 +756,45 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Speed
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode18
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
+
 
         public class VlanId
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Voice
         {
-            public Mode18 Mode { get; set; }
+            public Mode Mode { get; set; }
             public VlanId VlanId { get; set; }
         }
 
-        public class VLAN
+        public class Vlan
         {
             public Voice Voice { get; set; }
         }
 
         public class Network
         {
-            public string id { get; set; }
-            public DNS DNS { get; set; }
-            public IEEE8021X IEEE8021X { get; set; }
-            public IPStack IPStack { get; set; }
+            [JsonProperty("id")]
+            public string NetworkIdString { get; set; }
+            public Dns Dns { get; set; }
+            public Ieee8021X Ieee8021X { get; set; }
+            public IpStack IpStack { get; set; }
+// ReSharper disable once InconsistentNaming
             public IPv4 IPv4 { get; set; }
+// ReSharper disable once InconsistentNaming
             public IPv6 IPv6 { get; set; }
-            public MTU MTU { get; set; }
+            public Mtu Mtu { get; set; }
             public QoS QoS { get; set; }
             public RemoteAccess RemoteAccess { get; set; }
             public Speed Speed { get; set; }
-            public VLAN VLAN { get; set; }
+            public Vlan Vlan { get; set; }
 
             public Network()
             {
@@ -895,219 +802,172 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
-        public class Mode19
+
+
+        public class Cdp
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class CDP
-        {
-            public Mode19 Mode { get; set; }
-        }
 
-        public class Mode20
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class H3232
         {
-            public Mode20 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class Mode21
+
+
+        public class Http
         {
-            public string valueSpaceRef { get; set; }
+            public Mode Mode { get; set; }
+        }
+
+        public class MinimumTlsVersion
+        {
+            
             public string Value { get; set; }
         }
 
-        public class HTTP
+        public class TlsServer
         {
-            public Mode21 Mode { get; set; }
-        }
-
-        public class MinimumTLSVersion
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
-
-        public class Server2
-        {
-            public MinimumTLSVersion MinimumTLSVersion { get; set; }
+            public MinimumTlsVersion MinimumTlsVersion { get; set; }
         }
 
         public class StrictTransportSecurity
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class VerifyClientCertificate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class VerifyServerCertificate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class HTTPS
+        public class Https
         {
-            public Server2 Server { get; set; }
+            public TlsServer Server { get; set; }
             public StrictTransportSecurity StrictTransportSecurity { get; set; }
             public VerifyClientCertificate VerifyClientCertificate { get; set; }
             public VerifyServerCertificate VerifyServerCertificate { get; set; }
         }
 
-        public class Mode22
+
+
+
+        public class NtpService
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
+            public Mode Mode { get; set; }
+            public List<ServerBase> Server { get; set; }
         }
 
-        public class Address6
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Server3
+        public class Sip
         {
-            public string id { get; set; }
-            public Address6 Address { get; set; }
-        }
-
-        public class NTP2
-        {
-            public Mode22 Mode { get; set; }
-            public List<Server3> Server { get; set; }
-        }
-
-        public class Mode23
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
-
-        public class SIP
-        {
-            public Mode23 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class CommunityName
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Address7
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Host
         {
-            public string id { get; set; }
-            public Address7 Address { get; set; }
+            [JsonProperty("id")]
+            public string HostIdString { get; set; }
+            public Address Address { get; set; }
         }
 
-        public class Mode24
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class SystemContact
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class SystemLocation
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class SNMP
+        public class Snmp
         {
             public CommunityName CommunityName { get; set; }
-            public List<Host> Host { get; set; }
-            public Mode24 Mode { get; set; }
+            [JsonProperty("host")]
+            public List<Host> Hosts { get; set; }
+            public Mode Mode { get; set; }
             public SystemContact SystemContact { get; set; }
             public SystemLocation SystemLocation { get; set; }
         }
 
-        public class Mode25
+
+        public class Ssh
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class SSH
-        {
-            public Mode25 Mode { get; set; }
-        }
 
-        public class Mode26
+        public class UpnP
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
-
-        public class UPnP
-        {
-            public Mode26 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class WelcomeText
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class NetworkServices
         {
-            public CDP CDP { get; set; }
-            public H3232 H323 { get; set; }
-            public HTTP HTTP { get; set; }
-            public HTTPS HTTPS { get; set; }
-            public NTP2 NTP { get; set; }
-            public SIP SIP { get; set; }
-            public SNMP SNMP { get; set; }
-            public SSH SSH { get; set; }
-            public UPnP UPnP { get; set; }
+            public Cdp Cdp { get; set; }
+            [JsonProperty("h323")]
+            public H3232 H323Service { get; set; }
+            public Http Http { get; set; }
+            public Https Https { get; set; }
+            [JsonProperty("ntp")]
+            public NtpService NtpService { get; set; }
+            public Sip Sip { get; set; }
+            public Snmp Snmp { get; set; }
+            public Ssh Ssh { get; set; }
+            public UpnP UpnP { get; set; }
             public WelcomeText WelcomeText { get; set; }
         }
 
-        public class Cameras2
+        public class ProfileCameras
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class ControlSystems
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class TouchPanels
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Profile
         {
-            public Cameras2 Cameras { get; set; }
+            [JsonProperty("cameras")]
+            public ProfileCameras ProfileCameras { get; set; }
             public ControlSystems ControlSystems { get; set; }
             public TouchPanels TouchPanels { get; set; }
         }
@@ -1117,137 +977,109 @@ namespace epi_videoCodec_ciscoExtended
             public Profile Profile { get; set; }
         }
 
-        public class ID2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Type
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class URL
+        public class Url
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Server4
+        public class PhonebookServer
         {
-            public string id { get; set; }
-            public ID2 ID { get; set; }
+            [JsonProperty("id")]
+            public string PhonebookServerId { get; set; }
+            [JsonProperty("id")]
+            public Id IdObject { get; set; }
             public Type Type { get; set; }
-            public URL URL { get; set; }
+            public Url Url { get; set; }
         }
 
         public class Phonebook
         {
-            public List<Server4> Server { get; set; }
+            public List<PhonebookServer> Server { get; set; }
         }
 
         public class Connectivity
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Address8
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class AlternateAddress
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Domain2
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Path
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Protocol2
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class ExternalManager
         {
-            public Address8 Address { get; set; }
+            public Address Address { get; set; }
             public AlternateAddress AlternateAddress { get; set; }
-            public Domain2 Domain { get; set; }
+            public Domain Domain { get; set; }
             public Path Path { get; set; }
-            public Protocol2 Protocol { get; set; }
+            public Protocol Protocol { get; set; }
         }
 
         public class HttpMethod
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class LoginName2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mode27
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Password3
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Provisioning
         {
             public Connectivity Connectivity { get; set; }
             public ExternalManager ExternalManager { get; set; }
             public HttpMethod HttpMethod { get; set; }
-            public LoginName2 LoginName { get; set; }
-            public Mode27 Mode { get; set; }
-            public Password3 Password { get; set; }
+            public LoginName LoginName { get; set; }
+            public Mode Mode { get; set; }
+            public Password Password { get; set; }
         }
 
-        public class Mode28
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class CallControl
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class FromClients
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class ToClients
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1265,19 +1097,19 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Proximity
         {
-            public Mode28 Mode { get; set; }
+            public Mode Mode { get; set; }
             public Services Services { get; set; }
         }
 
         public class PeopleCountOutOfCall
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class PeoplePresenceDetector
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1287,167 +1119,134 @@ namespace epi_videoCodec_ciscoExtended
             public PeoplePresenceDetector PeoplePresenceDetector { get; set; }
         }
 
-        public class Password4
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class UserName
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Authentication2
+        public class SipAuthentication
         {
-            public Password4 Password { get; set; }
+            public Password Password { get; set; }
             public UserName UserName { get; set; }
         }
 
         public class DefaultTransport
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class DisplayName
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class DefaultCandidate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode29
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Ice
         {
             public DefaultCandidate DefaultCandidate { get; set; }
-            public Mode29 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class ListenPort
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Address9
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Proxy
         {
-            public string id { get; set; }
-            public Address9 Address { get; set; }
+            [JsonProperty("id")]
+            public string ProxyId { get; set; }
+            public Address Address { get; set; }
         }
 
-        public class Password5
+
+        public class TurnServer
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Server5
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
-
-        public class UserName2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Turn
         {
-            public Password5 Password { get; set; }
-            public Server5 Server { get; set; }
-            public UserName2 UserName { get; set; }
+            public Password Password { get; set; }
+            public TurnServer Server { get; set; }
+            public UserName UserName { get; set; }
         }
 
-        public class URI
+        public class CiscoCodecUri
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class SIP2
+        public class SipConfiguration
         {
-            public Authentication2 Authentication { get; set; }
+            [JsonProperty("authentication")]
+            public SipAuthentication SipAuthentication { get; set; }
             public DefaultTransport DefaultTransport { get; set; }
             public DisplayName DisplayName { get; set; }
             public Ice Ice { get; set; }
             public ListenPort ListenPort { get; set; }
-            public List<Proxy> Proxy { get; set; }
+            [JsonProperty("Proxy")]
+            public List<Proxy> Proxies { get; set; }
             public Turn Turn { get; set; }
-            public URI URI { get; set; }
+            public CiscoCodecUri Uri { get; set; }
         }
 
         public class BaudRate
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class LoginRequired
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode30
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class SerialPort
         {
             public BaudRate BaudRate { get; set; }
             public LoginRequired LoginRequired { get; set; }
-            public Mode30 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class BootAction
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Control
         {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
-
-        public class Delay2
-        {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class StandbyAction
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class WakeupAction
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1455,37 +1254,32 @@ namespace epi_videoCodec_ciscoExtended
         {
             public BootAction BootAction { get; set; }
             public Control Control { get; set; }
-            public Delay2 Delay { get; set; }
+            public Delay Delay { get; set; }
             public StandbyAction StandbyAction { get; set; }
             public WakeupAction WakeupAction { get; set; }
         }
 
-        public class Name2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class SystemUnit
         {
-            public Name2 Name { get; set; }
+            public Name Name { get; set; }
         }
 
         public class DateFormat
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class TimeFormat
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Zone
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1496,43 +1290,33 @@ namespace epi_videoCodec_ciscoExtended
             public Zone Zone { get; set; }
         }
 
-        public class Type2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class ContactInfo
         {
-            public Type2 Type { get; set; }
+            public Type Type { get; set; }
         }
 
-        public class Mode31
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class KeyTones
         {
-            public Mode31 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Language
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Output2
-        {
-            public string valueSpaceRef { get; set; }
+        public class OsdOutput
+        {         
             public string Value { get; set; }
         }
 
-        public class OSD
+        public class Osd
         {
-            public Output2 Output { get; set; }
+            [JsonProperty("output")]
+            public OsdOutput OsdOutput { get; set; }
         }
 
         public class UserInterface
@@ -1540,18 +1324,18 @@ namespace epi_videoCodec_ciscoExtended
             public ContactInfo ContactInfo { get; set; }
             public KeyTones KeyTones { get; set; }
             public Language Language { get; set; }
-            public OSD OSD { get; set; }
+            public Osd Osd { get; set; }
         }
 
         public class Filter
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Group
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1563,197 +1347,169 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Attribute
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class BaseDN
+        public class BaseDn
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Encryption3
+        public class LdapEncryption
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
+
         }
 
-        public class MinimumTLSVersion2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Mode32
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class Address10
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class Port
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Server6
+        public class LdapServer
         {
-            public Address10 Address { get; set; }
+            public Address Address { get; set; }
             public Port Port { get; set; }
         }
 
-        public class VerifyServerCertificate2
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class LDAP
+        public class Ldap
         {
             public Admin Admin { get; set; }
             public Attribute Attribute { get; set; }
-            public BaseDN BaseDN { get; set; }
-            public Encryption3 Encryption { get; set; }
-            public MinimumTLSVersion2 MinimumTLSVersion { get; set; }
-            public Mode32 Mode { get; set; }
-            public Server6 Server { get; set; }
-            public VerifyServerCertificate2 VerifyServerCertificate { get; set; }
+            public BaseDn BaseDn { get; set; }
+            [JsonProperty("encryption")]
+            public LdapEncryption LdapEncryption { get; set; }
+            [JsonProperty("minimumTlsVersion")]
+            public MinimumTlsVersion LdapMinimumTlsVersion { get; set; }
+            public Mode Mode { get; set; }
+            public LdapServer Server { get; set; }
+            public VerifyServerCertificate VerifyServerCertificate { get; set; }
         }
 
         public class UserManagement
         {
-            public LDAP LDAP { get; set; }
+            public Ldap Ldap { get; set; }
         }
 
         public class DefaultMainSource
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class CameraId
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode33
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class CameraControl
         {
             public CameraId CameraId { get; set; }
-            public Mode33 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class InputSourceType
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Name3
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class PreferredResolution
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class PresentationSelection
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Quality
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Visibility
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Connector
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string ConnectorIdString { get; set; }
             public CameraControl CameraControl { get; set; }
             public InputSourceType InputSourceType { get; set; }
-            public Name3 Name { get; set; }
+            public Name Name { get; set; }
             public PreferredResolution PreferredResolution { get; set; }
             public PresentationSelection PresentationSelection { get; set; }
             public Quality Quality { get; set; }
             public Visibility Visibility { get; set; }
         }
 
-        public class Input2
+        public class ConfigurationVideoInput
         {
-            public List<Connector> Connector { get; set; }
+            [JsonProperty("connector")]
+            public List<Connector> Connectors { get; set; }
         }
 
         public class Monitors
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode34
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
-        public class CEC
+        public class Cec
         {
-            public Mode34 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class MonitorRole
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Resolution
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Connector2
+        public class ConfigurationVideoOutputConnector
         {
-            public string id { get; set; }
-            public CEC CEC { get; set; }
+            [JsonProperty("id")]
+            public string IdString { get; set; }
+            public Cec Cec { get; set; }
             public MonitorRole MonitorRole { get; set; }
             public Resolution Resolution { get; set; }
         }
 
-        public class Output3
+        public class ConfigurationVideoOutput
         {
-            public List<Connector2> Connector { get; set; }
+            [JsonProperty("connector")]
+            public List<ConfigurationVideoOutputConnector> Connectors { get; set; }
         }
 
         public class DefaultSource
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
@@ -1764,52 +1520,42 @@ namespace epi_videoCodec_ciscoExtended
 
         public class FullscreenMode
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode35
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class OnMonitorRole
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class PIPPosition
+        public class PipPosition
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
         public class Default
         {
             public FullscreenMode FullscreenMode { get; set; }
-            public Mode35 Mode { get; set; }
+            public Mode Mode { get; set; }
             public OnMonitorRole OnMonitorRole { get; set; }
-            public PIPPosition PIPPosition { get; set; }
+            public PipPosition PipPosition { get; set; }
         }
 
         public class Duration
         {
-            public string valueSpaceRef { get; set; }
+            
             public string Value { get; set; }
         }
 
-        public class Mode36
-        {
-            public string valueSpaceRef { get; set; }
-            public string Value { get; set; }
-        }
 
         public class OnCall
         {
             public Duration Duration { get; set; }
-            public Mode36 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class Selfview
@@ -1818,12 +1564,14 @@ namespace epi_videoCodec_ciscoExtended
             public OnCall OnCall { get; set; }
         }
 
-        public class Video2
+        public class ConfigurationVideo
         {
             public DefaultMainSource DefaultMainSource { get; set; }
-            public Input2 Input { get; set; }
+            [JsonProperty("input")]
+            public ConfigurationVideoInput ConfigurationVideoInput { get; set; }
             public Monitors Monitors { get; set; }
-            public Output3 Output { get; set; }
+            [JsonProperty("output")]
+            public ConfigurationVideoOutput ConfigurationVideoOutput { get; set; }
             public Presentation Presentation { get; set; }
             public Selfview Selfview { get; set; }
         }
@@ -1834,27 +1582,30 @@ namespace epi_videoCodec_ciscoExtended
             public Cameras Cameras { get; set; }
             public Conference Conference { get; set; }
             public H323 H323 { get; set; }
-            public List<Network> Network { get; set; }
+            [JsonProperty("network")]
+            public List<Network> Networks { get; set; }
             public NetworkServices NetworkServices { get; set; }
             public Peripherals Peripherals { get; set; }
             public Phonebook Phonebook { get; set; }
             public Provisioning Provisioning { get; set; }
             public Proximity Proximity { get; set; }
             public RoomAnalytics RoomAnalytics { get; set; }
-            public SIP2 SIP { get; set; }
+            [JsonProperty("sip")]
+            public SipConfiguration SipConfiguration { get; set; }
             public SerialPort SerialPort { get; set; }
             public Standby Standby { get; set; }
             public SystemUnit SystemUnit { get; set; }
             public Time Time { get; set; }
             public UserInterface UserInterface { get; set; }
             public UserManagement UserManagement { get; set; }
-            public Video2 Video { get; set; }
+            [JsonProperty("video")]
+            public ConfigurationVideo ConfigurationVideo { get; set; }
 
             public Configuration()
             {
                 Audio = new Audio();
                 Conference = new Conference();
-                Network = new List<Network>();
+                Networks = new List<Network>();
             }
         }
 

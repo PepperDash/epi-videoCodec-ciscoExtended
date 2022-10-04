@@ -71,28 +71,28 @@ namespace epi_videoCodec_ciscoExtended
         public void LoginMessageReceived()
         {
             LoginMessageWasReceived = true;
-            Debug.Console(1, this, "Login Message Received.");
+            Debug.Console(1, this, "Login DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void JsonResponseModeMessageReceived()
         {
             JsonResponseModeSet = true;
-            Debug.Console(1, this, "Json Response Mode Message Received.");
+            Debug.Console(1, this, "Json Response H323Mode DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void InitialStatusMessageReceived()
         {
             InitialStatusMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec Status Message Received.");
+            Debug.Console(1, this, "Initial Codec PresenterTrackStatus DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void InitialConfigurationMessageReceived()
         {
             InitialConfigurationMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec Configuration Message Received.");
+            Debug.Console(1, this, "Initial Codec Configuration DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
