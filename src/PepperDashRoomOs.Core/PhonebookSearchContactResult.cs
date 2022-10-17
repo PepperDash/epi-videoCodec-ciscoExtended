@@ -2,7 +2,7 @@
 
 namespace PepperDashRoomOs.Core
 {
-    public class PhonebookSearchResult
+    public class PhonebookSearchContactResult
     {
         public int Index { get; set; }
         public string ContactId { get; set; }
@@ -11,7 +11,7 @@ namespace PepperDashRoomOs.Core
         public string LastName { get; set; }
         public List<PhonebookSearchResultContactMethod> ContactMethods { get; set; }
 
-        public PhonebookSearchResult()
+        public PhonebookSearchContactResult()
         {
             ContactMethods = new List<PhonebookSearchResultContactMethod>();
         }

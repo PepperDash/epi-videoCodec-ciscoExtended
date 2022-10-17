@@ -6,7 +6,7 @@ namespace PepperDashRoomOs.Core
 {
     public static class Extensions
     {
-        public static int ParseContactMethodIndex(this PhonebookSearchResult contact, string response)
+        public static int ParseContactMethodIndex(this PhonebookSearchContactResult contact, string response)
         {
             try
             {
@@ -20,35 +20,35 @@ namespace PepperDashRoomOs.Core
             }
         }
 
-        public static PhonebookSearchResult ParseContactName(this PhonebookSearchResult contact, string response)
+        public static PhonebookSearchContactResult ParseContactName(this PhonebookSearchContactResult contact, string response)
         {
             var stringToRemove = string.Format("{0}{1} Name: ", RoomOsAddressBook.PhonebookContactResultStart, contact.Index);
             contact.Name = response.Remove(0, stringToRemove.Length).TrimStart(new[] { '"' }).TrimEnd(new[] { '"' });
             return contact;
         }
 
-        public static PhonebookSearchResult ParseContactId(this PhonebookSearchResult contact, string response)
+        public static PhonebookSearchContactResult ParseContactId(this PhonebookSearchContactResult contact, string response)
         {
             var stringToRemove = string.Format("{0}{1} ContactId: ", RoomOsAddressBook.PhonebookContactResultStart, contact.Index);
             contact.ContactId = response.Remove(0, stringToRemove.Length).TrimStart(new[] { '"' }).TrimEnd(new[] { '"' });
             return contact;
         }
 
-        public static PhonebookSearchResultContactMethod ParseContactMethodId(this PhonebookSearchResultContactMethod method, string response, PhonebookSearchResult contact)
+        public static PhonebookSearchResultContactMethod ParseContactMethodId(this PhonebookSearchResultContactMethod method, string response, PhonebookSearchContactResult contact)
         {
             var stringToRemove = string.Format("{0}{1} ContactMethod {2} ContactMethodId: ", RoomOsAddressBook.PhonebookContactResultStart, contact.Index, method.Index);
             method.ContactMethodId = response.Remove(0, stringToRemove.Length).TrimStart(new[] { '"' }).TrimEnd(new[] { '"' });
             return method;
         }
 
-        public static PhonebookSearchResultContactMethod ParseContactMethodNumber(this PhonebookSearchResultContactMethod method, string response, PhonebookSearchResult contact)
+        public static PhonebookSearchResultContactMethod ParseContactMethodNumber(this PhonebookSearchResultContactMethod method, string response, PhonebookSearchContactResult contact)
         {
             var stringToRemove = string.Format("{0}{1} ContactMethod {2} Number: ", RoomOsAddressBook.PhonebookContactResultStart, contact.Index, method.Index);
             method.Number = response.Remove(0, stringToRemove.Length).TrimStart(new[] { '"' }).TrimEnd(new[] { '"' });
             return method;
         }
 
-        public static PhonebookSearchResult ParseContactMethod(this PhonebookSearchResult contact, string response, uint debugLevel)
+        public static PhonebookSearchContactResult ParseContactMethod(this PhonebookSearchContactResult contact, string response, uint debugLevel)
         {
             var index = contact.ParseContactMethodIndex(response);
             if (index == 0)

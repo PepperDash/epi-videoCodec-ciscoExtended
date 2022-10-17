@@ -66,7 +66,8 @@
   <ItemGroup>
     <Compile Include="Events\SearchProgressUpdatedArgs.cs" />
     <Compile Include="Events\SearchResultReceivedArgs.cs" />
-    <Compile Include="PhonebookSearchResult.cs" />
+    <Compile Include="PhonebokSearchResult.cs" />
+    <Compile Include="PhonebookSearchContactResult.cs" />
     <Compile Include="PhonebookSearchResultContactMethod.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="PhonebookType.cs" />

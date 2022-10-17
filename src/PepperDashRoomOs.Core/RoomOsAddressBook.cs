@@ -9,8 +9,7 @@ namespace PepperDashRoomOs.Core
 {
     public class RoomOsAddressBook
     {
-        private readonly CTimer _requestDebounce;
-        private readonly List<PhonebookSearchResult> _searchResults = new List<PhonebookSearchResult>();
+        private PhonebokSearchResult _phonebokSearchResult = new PhonebokSearchResult();
 
         private bool _searchResponseActive;
         private bool _searchRequested;
@@ -29,21 +28,12 @@ namespace PepperDashRoomOs.Core
 
         public uint DebugLevel { get; set; }
 
-        public IEnumerable<PhonebookSearchResult> CurrentSearchResults { get { return _searchResults.ToList(); }}
+        public IEnumerable<PhonebookSearchContactResult> CurrentSearchResults { get { return _phonebokSearchResult.Contacts.ToList(); } }
 
         public RoomOsAddressBook()
         {
             PhonebookType = PhonebookType.Corporate;
             MaxNumberOfSearchResults = 20;
-            _requestDebounce = new CTimer(_ =>
-            {
-                var progressHandler = SearchStopped;
-                if (progressHandler != null)
-                    progressHandler(this, EventArgs.Empty);
-
-                _searchResponseActive = false;
-                _searchRequested = false;
-            }, Timeout.Infinite);
         }
 
         public PhonebookType PhonebookType { get; set; }
@@ -81,23 +71,21 @@ namespace PepperDashRoomOs.Core
 
                 if (ResponseIsSearchResultStart(response))
                 {
-                    _searchResults.Clear();
+                    _phonebokSearchResult = new PhonebokSearchResult();
                     _searchResponseActive = true;
                     return;
                 }
 
                 if (ResponseIsSearchResultError(response))
                 {
-                    _searchResults.Clear();
+                    _phonebokSearchResult = new PhonebokSearchResult();
                     _searchResponseActive = true;
                     return;
                 }
 
                 if (ResponseIsSearchResultComplete(response) && _searchResponseActive)
                 {
-                    _searchResponseActive = false;
-                    OnPhonebookSearchComplete();
-                    _requestDebounce.Reset();
+                    _waithHandle.Set();
                     return;
                 }
  
@@ -108,11 +96,11 @@ namespace PepperDashRoomOs.Core
                 if (index == 0)
                     throw new ArgumentOutOfRangeException("index", "Index is 0 so something is incorrect");
 
-                var contact = _searchResults.FirstOrDefault(s => s.Index == index);
+                var contact = _phonebokSearchResult.Contacts.FirstOrDefault(s => s.Index == index);
                 if (contact == null)
                 {
-                    contact = new PhonebookSearchResult { Index = index };
-                    _searchResults.Add(contact);
+                    contact = new PhonebookSearchContactResult { Index = index };
+                    _phonebokSearchResult.Contacts.Add(contact);
                 }
                               
                 if (response.Contains(" Name:"))
@@ -132,6 +120,10 @@ namespace PepperDashRoomOs.Core
                 else if (response.Contains(" ContactMethod"))
                 {
                     contact.ParseContactMethod(response, DebugLevel);
+                }
+                else if (response.Contains("** resultId:"))
+                {
+                    _phonebokSearchResult.Id = ParseRequestId(response);
                 }
                 else
                 {
@@ -153,13 +145,11 @@ namespace PepperDashRoomOs.Core
                 {
                     var index = i;
                     var result = CurrentSearchResults.FirstOrDefault(x => x.Index == index) ??
-                                 new PhonebookSearchResult {Index = index};
+                                 new PhonebookSearchContactResult {Index = index};
 
                     handler(this, new SearchResultReceivedArgs { Index = result.Index, Name = result.Name });
                 }
             }
-
-            _requestDebounce.Reset();
         }
 
         public static bool ResponseIsSearchResultStart(string response)
@@ -195,16 +185,33 @@ namespace PepperDashRoomOs.Core
             }
         }
 
-        
-        
+        public static string ParseRequestId(string response)
+        {
+            try
+            {
+                var result = response.Split(new[] {' '})[1].TrimStart(new[] {'"'}).TrimEnd(new[] {'"'});
+                return result;
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+
+        private readonly CrestronQueue<string> _searchTags = new CrestronQueue<string>();
+        private readonly CEvent _waithHandle = new CEvent();
+
         public void Search(string searchString)
         {
+            const string command = "xCommand Phonebook Search PhonebookType: {0} SearchString: \"{1}\" Limit: {2} Tag: {3}\r\n";
+
             if (searchString.Length < 3 || _searchRequested)
                 return;
 
-            const string command = "xCommand Phonebook Search PhonebookType: {0} SearchString: \"{1}\" Limit: {2}\r\n";
-            _searchRequested = true;
+            var searchTag = Guid.NewGuid().ToString();
 
+            _searchTags.Enqueue(searchTag);
+            _searchRequested = true;
             var progressHandler = SearchInProgress;
             if (progressHandler != null)
                 progressHandler(this, EventArgs.Empty);
@@ -216,19 +223,38 @@ namespace PepperDashRoomOs.Core
                     command,
                     PhonebookType.ToString(),
                     searchString,
-                    MaxNumberOfSearchResults);
+                    MaxNumberOfSearchResults,
+                    searchTag);
 
                 handler(this, new StringTransmitRequestedArgs { TxString = txString });
             }
 
-            _requestDebounce.Reset(30000);
-        }
+            CrestronInvoke.BeginInvoke(_ =>
+            {
+                var success = false;
+                _waithHandle.Wait(5000);
+                while (!_searchTags.IsEmpty)
+                {
+                    var tag = _searchTags.Dequeue();
+                    if (_phonebokSearchResult.Id != tag)
+                        continue;
 
-        public void ClearSearch()
-        {
-            _requestDebounce.Reset();
-            _searchResults.Clear();
-            OnPhonebookSearchComplete();
+                    OnPhonebookSearchComplete();
+                    success = true;
+                }
+
+                var searchStopped = SearchStopped;
+                if (searchStopped != null)
+                    searchStopped(this, EventArgs.Empty);
+
+                if (!success)
+                {
+                    // TODO fire off a failed result
+                }
+
+                _searchResponseActive = false;
+                _searchRequested = false;
+            });
         }
     }
 }
