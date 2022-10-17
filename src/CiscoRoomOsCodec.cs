@@ -239,7 +239,9 @@ namespace epi_videoCodec_ciscoExtended
 
         private CiscoCodecConfiguration.RootObject CodecConfiguration = new CiscoCodecConfiguration.RootObject();
 
-        private CiscoCodecStatus.RootObject CodecStatus = new CiscoCodecStatus.RootObject();
+        private CiscoCodecStatus.RootObject CodecStatus;
+
+        private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
 
         public CodecCallHistory CallHistory { get; private set; }
 
@@ -306,12 +308,12 @@ namespace epi_videoCodec_ciscoExtended
 
         protected override Func<bool> SharingContentIsOnFeedbackFunc
         {
-            get { return () => CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.BoolValue; }
+            get { return () => CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.SendingBoolValue; }
         }
 
         protected Func<bool> FarEndIsSharingContentFeedbackFunc
         {
-            get { return () => CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.Value == "Receiving"; }
+            get { return () => CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.ReceivingBoolValue; }
         }
 
         protected override Func<bool> MuteFeedbackFunc
@@ -326,7 +328,7 @@ namespace epi_videoCodec_ciscoExtended
 
         protected Func<bool> PresentationActiveFeedbackFunc
         {
-            get { return () => CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.Value != "Off"; }
+            get { return () => /*CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.ActiveBoolValue*/_presentationActive; }
         }
 
         protected Func<int> PeopleCountFeedbackFunc
@@ -358,6 +360,37 @@ namespace epi_videoCodec_ciscoExtended
         protected Func<bool> LocalLayoutIsProminentFeedbackFunc
         {
             get { return () => CurrentLayout.Contains("Prominent") || CurrentLayout.Contains("Stack"); }
+        }
+
+        private Func<JObject, string, JToken> JTokenValidInObject = CheckJTokenInObject;
+
+        private Func<JToken, string, JToken> JTokenValidInToken = CheckJTokenInToken;
+
+        private static JToken CheckJTokenInToken(JToken jToken, string tokenSelector)
+        {
+            try
+            {
+                return jToken.SelectToken(tokenSelector, true);
+            }
+            catch (Exception e)
+            {
+                Debug.Console(2, "Exception in CheckJTokenInToken - This may be normal : {0}", e.Message);
+                return null;
+            }
+        }
+
+        private static JToken CheckJTokenInObject(JObject jObject, string tokenSelector)
+        {
+            try
+            {
+                return jObject.SelectToken(tokenSelector, true);
+            }
+            catch (Exception e)
+            {
+                Debug.Console(2, "Exception in CheckJTokenInObject - This may be normal : {0}", e.Message);
+                return null;
+            }
+
         }
 
         #region CameraAutoTrackingFeedbackFunc
@@ -437,9 +470,6 @@ namespace epi_videoCodec_ciscoExtended
         #endregion
 
 
-
-
-
         private CodecSyncState _syncState;
 
         public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
@@ -498,6 +528,7 @@ namespace epi_videoCodec_ciscoExtended
         public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
             : base(config)
         {
+            CodecStatus = new CiscoCodecStatus.RootObject();
             DeviceInfo = new DeviceInfo();
             CodecInfo = new CiscoCodecInfo(this);
             _lastSearched = string.Empty;
@@ -547,7 +578,7 @@ namespace epi_videoCodec_ciscoExtended
             CameraIsOffFeedback = new BoolFeedback(() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue);
             AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
 
-            PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
+            //PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
 
 
             #region CameraAutoFeedbackRegistration
@@ -606,6 +637,7 @@ namespace epi_videoCodec_ciscoExtended
             PresentationSourceFeedback = new IntFeedback(() => _presentationSource);
             PresentationSendingLocalOnlyFeedback = new BoolFeedback(() => _presentationLocalOnly);
             PresentationSendingLocalRemoteFeedback = new BoolFeedback(() => _presentationLocalRemote);
+            PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 
             Communication = comm;
 
@@ -616,7 +648,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                var command = string.Format("xStatus SystemUnit Software DisplayName\r");
+                var command = string.Format("xStatus SystemUnit\r");
                 CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 30000, 120000, 300000,
                     command);
             }
@@ -638,7 +670,7 @@ namespace epi_videoCodec_ciscoExtended
             _syncState.InitialSyncCompleted += SyncState_InitialSyncCompleted;
 
             PortGather = new CommunicationGather(Communication, Delimiter) {IncludeDelimiter = true};
-            PortGather.LineReceived += this.Port_LineReceived;
+            PortGather.LineReceived += Port_LineReceived;
 
 
             CallHistory = new CodecCallHistory();
@@ -686,8 +718,6 @@ namespace epi_videoCodec_ciscoExtended
 
             ExternalSourceListEnabled = props.ExternalSourceListEnabled;
             ExternalSourceInputPort = props.ExternalSourceInputPort;
-            RegisterSystemUnitEvents();
-            RegisterVideoEvents();
 
             if (props.UiBranding == null)
             {
@@ -714,7 +744,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 Debug.Console(0, this, "Got Firmware Event!!!!!!");
                 if (String.IsNullOrEmpty(args.Firmware)) return;
-                CodecFirmware = GetVersion(args.Firmware);
+                CodecFirmware = new Version(args.Firmware);
                 if (_testedCodecFirmware > CodecFirmware)
                 {
                     Debug.Console(0, this,
@@ -812,19 +842,21 @@ namespace epi_videoCodec_ciscoExtended
         private string UpdateActiveMeetingXSig(Meeting currentMeeting)
         {
             //const int _meetingsToDisplay = 3;            
-            const int maxDigitals = 3;
-            const int maxStrings = 8;
+            const int maxDigitals = 4;
+            const int maxStrings = 14;
             const int offset = maxDigitals + maxStrings;
             const int digitalIndex = maxStrings; //15
             const int stringIndex = 0;
             const int meetingIndex = 0;
             var meeting = currentMeeting;
+            var nextMeeting = _currentMeetings.Count >= 2 ? _currentMeetings[1] : null;
             var tokenArray = new XSigToken[offset];
             /* 
              * Digitals
              * IsJoinable - 1
              * IsDialable - 2
              * IsAvailable - 3
+             * Following Meeting Present - 4
              * 
              * Serials
              * Organizer - 1
@@ -838,57 +870,94 @@ namespace epi_videoCodec_ciscoExtended
              * TimeRemaining Text - 9
              * TimeRemaining MinutesRemaining Text - 10
              * TimeRemaining MinutesRemaining Analog - 11
-             * 
+             * TimeToFollowingMeeting Text - 12
+             * TimeToFollowingMeeting Minutes Analog - 13
+             * TimeOfFollowingMeeting - 14
             */
-            if (meeting != null)
+            try
             {
+                if (meeting != null)
+                {
+                    var timeRemaining = meeting.StartTime - DateTime.Now;
+                    var timeRemaingToNext = nextMeeting != null
+                        ? (nextMeeting.StartTime - DateTime.Now).ToString()
+                        : "None Scheduled";
+                    //digitals
+                    tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, meeting.Joinable);
+                    tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Id != "0");
+                    tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, true);
+                    tokenArray[digitalIndex + 3] = new XSigDigitalToken(digitalIndex + 4, nextMeeting != null);
 
-                //digitals
-                tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, meeting.Joinable);
-                tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Id != "0");
-                tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, true);
+                    //serials
+                    tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, meeting.Organizer);
+                    tokenArray[stringIndex + 1] = new XSigSerialToken(stringIndex + 2, meeting.Title);
+                    tokenArray[stringIndex + 2] = new XSigSerialToken(stringIndex + 3,
+                        meeting.StartTime.ToString(_dateFormatSpecifier, Global.Culture));
+                    tokenArray[stringIndex + 3] = new XSigSerialToken(stringIndex + 4,
+                        meeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture));
+                    tokenArray[stringIndex + 4] = new XSigSerialToken(stringIndex + 5,
+                        meeting.EndTime.ToString(_dateFormatSpecifier, Global.Culture));
+                    tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6,
+                        meeting.EndTime.ToString(_timeFormatSpecifier, Global.Culture));
+                    tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, meeting.Id);
+                    tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Format("{0} - {1}",
+                        meeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture),
+                        meeting.EndTime.ToString(_timeFormatSpecifier, Global.Culture)));
+                    tokenArray[stringIndex + 8] = new XSigSerialToken(stringIndex + 9, String.Format("{0}",
+                        timeRemaining.ToString()));
+                    tokenArray[stringIndex + 9] = new XSigSerialToken(stringIndex + 10, String.Format("{0}",
+                        timeRemaining.Minutes.ToString(CultureInfo.InvariantCulture)));
+                    tokenArray[stringIndex + 10] = new XSigAnalogToken(stringIndex + 11,
+                        (ushort)timeRemaining.Minutes);
+                    tokenArray[stringIndex + 11] = new XSigSerialToken(stringIndex + 12,
+                        timeRemaingToNext);
+                    tokenArray[stringIndex + 12] = new XSigAnalogToken(stringIndex + 13,
+                        nextMeeting != null ? (ushort)(nextMeeting.StartTime - DateTime.Now).Minutes : (ushort)0);
+                    tokenArray[stringIndex + 13] = new XSigSerialToken(stringIndex + 14,
+                        nextMeeting != null
+                            ? nextMeeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture)
+                            : "None Scheduled");
 
-                //serials
-                tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, meeting.Organizer);
-                tokenArray[stringIndex + 1] = new XSigSerialToken(stringIndex + 2, meeting.Title);
-                tokenArray[stringIndex + 2] = new XSigSerialToken(stringIndex + 3,
-                    meeting.StartTime.ToString(_dateFormatSpecifier, Global.Culture));
-                tokenArray[stringIndex + 3] = new XSigSerialToken(stringIndex + 4,
-                    meeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture));
-                tokenArray[stringIndex + 4] = new XSigSerialToken(stringIndex + 5,
-                    meeting.EndTime.ToString(_dateFormatSpecifier, Global.Culture));
-                tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6,
-                    meeting.EndTime.ToString(_timeFormatSpecifier, Global.Culture));
-                tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, meeting.Id);
-                tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Format("{0} - {1}",
-                    meeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture),
-                    meeting.EndTime.ToString(_timeFormatSpecifier, Global.Culture)));
 
+
+                }
+
+                else
+                {
+                    Debug.Console(2, this, "Clearing unused data. Meeting Index: {0} MaxMeetings * Offset: {1}",
+                        meetingIndex, offset);
+
+                    //digitals
+                    tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, false);
+                    tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, false);
+                    tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, false);
+
+
+                    //serials
+                    tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, String.Empty);
+                    tokenArray[stringIndex + 1] = new XSigSerialToken(stringIndex + 2, String.Empty);
+                    tokenArray[stringIndex + 2] = new XSigSerialToken(stringIndex + 3, String.Empty);
+                    tokenArray[stringIndex + 3] = new XSigSerialToken(stringIndex + 4, String.Empty);
+                    tokenArray[stringIndex + 4] = new XSigSerialToken(stringIndex + 5, String.Empty);
+                    tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6, String.Empty);
+                    tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, String.Empty);
+                    tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Empty);
+                    tokenArray[stringIndex + 8] = new XSigSerialToken(stringIndex + 9, String.Empty);
+                    tokenArray[stringIndex + 9] = new XSigSerialToken(stringIndex + 10, String.Empty);
+                    tokenArray[stringIndex + 10] = new XSigAnalogToken(stringIndex + 11, 0);
+                    tokenArray[stringIndex + 11] = new XSigSerialToken(stringIndex + 12, String.Empty);
+                    tokenArray[stringIndex + 12] = new XSigAnalogToken(stringIndex + 13, 0);
+                    tokenArray[stringIndex + 13] = new XSigSerialToken(stringIndex + 14, String.Empty);
+
+                }
+
+                return GetXSigString(tokenArray);
             }
-
-            else
+            catch (Exception e)
             {
-                Debug.Console(2, this, "Clearing unused data. Meeting Index: {0} MaxMeetings * Offset: {1}",
-                    meetingIndex, offset);
-
-                //digitals
-                tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, false);
-                tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, false);
-                tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, false);
-
-
-                //serials
-                tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, String.Empty);
-                tokenArray[stringIndex + 1] = new XSigSerialToken(stringIndex + 2, String.Empty);
-                tokenArray[stringIndex + 2] = new XSigSerialToken(stringIndex + 3, String.Empty);
-                tokenArray[stringIndex + 3] = new XSigSerialToken(stringIndex + 4, String.Empty);
-                tokenArray[stringIndex + 4] = new XSigSerialToken(stringIndex + 5, String.Empty);
-                tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6, String.Empty);
-                tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, String.Empty);
-                tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Empty);
+                Debug.Console(0, this, "Exception in UpdateActiveMeetingXsig : {0}", e.Message);
+                return String.Empty;
             }
-
-            return GetXSigString(tokenArray);
         }
 
 
@@ -925,15 +994,6 @@ namespace epi_videoCodec_ciscoExtended
 
             CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction = ComputeLegacyLayout;
 
-
-            //CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.LayoutFamily.Local.ValueChangedAction = ComputeLocalLayout;
-            CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.ValueChangedAction = () =>
-            {
-                SharingContentIsOnFeedback.FireUpdate();
-                FarEndIsSharingContentFeedback.FireUpdate();
-                PresentationActiveFeedback.FireUpdate();
-            };
-
             CodecStatus.Status.StatusConference.DoNotDisturb.ValueChangedAction = DoNotDisturbModeIsOnFeedback.FireUpdate;
 
 
@@ -968,6 +1028,8 @@ namespace epi_videoCodec_ciscoExtended
                     CameraAutoModeAvailableFeedback.FireUpdate();
                     OnCameraTrackingCapabilitiesChanged();
                 };
+
+
 
             #endregion
 
@@ -1156,6 +1218,16 @@ namespace epi_videoCodec_ciscoExtended
 
         public override void Initialize()
         {
+            RegisterSystemUnitEvents();
+            RegisterSipEvents();
+            RegisterNetworkEvents();
+            RegisterVideoEvents();
+            //RegisterConferenceEvents();
+            RegisterRoomPresetEvents();
+            RegisterH323Configuration();
+            RegisterAutoAnswer();
+            RegisterDisconnectEvents();
+            RegisterUserInterfaceEvents();
 
             var socket = Communication as ISocketStatus;
             if (socket != null)
@@ -1178,27 +1250,23 @@ namespace epi_videoCodec_ciscoExtended
 
             var feedbackRegistrationExpression =
                 prefix + "/Configuration" + Delimiter +
-                prefix + "/PresenterTrackStatus/Audio" + Delimiter +
-                prefix + "/PresenterTrackStatus/MediaChannelCalls" + Delimiter +
-                prefix + "/PresenterTrackStatus/ExperimentalConference/Presentation" + Delimiter +
-                prefix + "/PresenterTrackStatus/ExperimentalConference/DoNotDisturb" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/SpeakerTrack" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/SpeakerTrack/PresenterTrackStatus" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/SpeakerTrack/Availability" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/PresenterTrack" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/PresenterTrack/PresenterTrackStatus" + Delimiter +
-                prefix + "/PresenterTrackStatus/Cameras/PresenterTrack/Availability" + Delimiter +
-                prefix + "/PresenterTrackStatus/RoomAnalytics" + Delimiter +
-                prefix + "/PresenterTrackStatus/RoomPreset" + Delimiter +
-                prefix + "/PresenterTrackStatus/Standby" + Delimiter +
-                prefix + "/PresenterTrackStatus/ChannelVideo/Selfview" + Delimiter +
-                prefix + "/PresenterTrackStatus/MediaChannels/MediaChannelCalls" + Delimiter +
-                prefix + "/PresenterTrackStatus/ChannelVideo/Layout" + Delimiter +
-                //prefix + "/PresenterTrackStatus/ChannelVideo/Layout/LayoutFamily" + Delimiter +
-                //prefix + "/PresenterTrackStatus/ChannelVideo/Layout/LayoutFamily/Local" + Delimiter +
-                //prefix + "/PresenterTrackStatus/ChannelVideo/Layout/CurrentLayouts" + Delimiter +
-                //prefix + "/PresenterTrackStatus/ChannelVideo/Layout/CurrentLayouts/AvailableLayouts" + Delimiter +
-                prefix + "/PresenterTrackStatus/ChannelVideo/Input/MainVideoMute" + Delimiter +
+                prefix + "/Status/Audio" + Delimiter +
+                prefix + "/Status/Call" + Delimiter +
+                prefix + "/Status/Conference/Presentation" + Delimiter +
+                prefix + "/Status/Conference/DoNotDisturb" + Delimiter +
+                prefix + "/Status/Cameras/SpeakerTrack" + Delimiter +
+                prefix + "/Status/Cameras/SpeakerTrack/Status" + Delimiter +
+                prefix + "/Status/Cameras/SpeakerTrack/Availability" + Delimiter +
+                prefix + "/Status/Cameras/PresenterTrack" + Delimiter +
+                prefix + "/Status/Cameras/PresenterTrack/Status" + Delimiter +
+                prefix + "/Status/Cameras/PresenterTrack/Availability" + Delimiter +
+                prefix + "/Status/RoomAnalytics" + Delimiter +
+                prefix + "/Status/RoomPreset" + Delimiter +
+                prefix + "/Status/Standby" + Delimiter +
+                prefix + "/Status/Video/Selfview" + Delimiter +
+                prefix + "/Status/MediaChannels/Call" + Delimiter +
+                prefix + "/Status/Video/Layout/CurrentLayouts" + Delimiter +
+                prefix + "/Status/Video/Input/MainVideoMute" + Delimiter +
                 prefix + "/Bookings" + Delimiter +
                 prefix + "/Event/Bookings" + Delimiter +
                 prefix + "/Event/CameraPresetListUpdated" + Delimiter +
@@ -1248,7 +1316,7 @@ namespace epi_videoCodec_ciscoExtended
                     foreach (var camera in CodecStatus.Status.Cameras.CameraList)
                     {
                         Debug.Console(0, this,
-                            @"CameraList CiscoCallId: {0}
+                            @"Camera CiscoCallId: {0}
 Name: {1}
 ConnectorID: {2}"
                             , camera.CameraId
@@ -1456,18 +1524,6 @@ ConnectorID: {2}"
             Communication.SendText(command + Delimiter);
         }
 
-        private Version GetVersion(string actual)
-        {
-            Debug.Console(2, this, "Codec Firmware Version String == {0}", actual);
-            var semanticActual = actual.Split('.').ToList();
-            var actualInt = semanticActual.ConvertAll(s => Int16.Parse(Regex.Replace(s, "[^0-9.]", "")));
-
-            var actualVer = new Version(actualInt[0], actualInt[1], actualInt[2], actualInt[3]);
-
-            Debug.Console(2, this, "Codec Decoded Firmware Version String == {0}", actualVer.ToString());
-
-            return actualVer;
-        }
 
         private void UpdateLayoutList()
         {
@@ -1477,7 +1533,7 @@ ConnectorID: {2}"
                 foreach (var i in CodecStatus.Status.Video.Layout.CurrentLayouts.AvailableLayouts)
                 {
                     var r = i;
-                    Debug.Console(2, "Adding New layout {0}", r.LayoutName.Value);
+                    //Debug.Console(2, "Adding New layout {0}", r.LayoutName.Value);
                     layoutData.Add(new CodecCommandWithLabel(r.LayoutName.Value,
                         r.LayoutName.Value));
                 }
@@ -1492,17 +1548,22 @@ ConnectorID: {2}"
             //Debug.Console(0, this, "Active Layouts Received Change");
 
             CurrentLayout = CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value;
+            if (CurrentLayout == String.Empty)
+            {
+                ClearLayouts();
+                return;
+            }
             LocalLayoutFeedback.FireUpdate();
 
         }
 
         private void ClearLayouts()
         {
-            var nullLayout = new CurrentLayouts()
+            var nullLayout = new CiscoCodecStatus.CurrentLayouts()
             {
-                AvailableLayouts = new List<LayoutData>(),
-                AvailableLayoutsCount = new AvailableLayoutsCount() { Value = 0 },
-                ActiveLayout = new ActiveLayout() { Value = "" }
+                AvailableLayouts = new List<CiscoCodecStatus.LayoutData>(),
+                AvailableLayoutsCount = new CiscoCodecStatus.AvailableLayoutsCount() { Value = 0 },
+                ActiveLayout = new CiscoCodecStatus.ActiveLayout() { Value = "" }
             };
 
             CodecStatus.Status.Video.Layout.CurrentLayouts = nullLayout;
@@ -1519,94 +1580,926 @@ ConnectorID: {2}"
 
         private void RegisterSystemUnitEvents()
         {
-            CodecStatus.Status.SystemUnit.SystemUnitSoftware.DisplayName.ValueChangedAction +=
-                () =>
-                {   
-                    var splitSoftware = CodecStatus.Status.SystemUnit.SystemUnitSoftware.DisplayName.Value.Split(' ');
-                    Debug.Console(2, this, "Splitsoftware = {0}", splitSoftware[1]);
-                    CodecFirmware = GetVersion(splitSoftware[1]);
-
-                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Firmware)
-                    {
-                        Firmware = splitSoftware[1]
-                    });
-                    if (DeviceInfo == null) return;
-                    DeviceInfo.FirmwareVersion = splitSoftware[1];
-                    UpdateDeviceInfo();
-                    _syncState.InitialSoftwareVersionMessageReceived();
-
-                };
+            CodecStatus.Status.SystemUnit.SystemUnitSoftware.Firmware.ValueChangedAction +=
+                () => ParseFirmwareObject(CodecStatus.Status.SystemUnit.SystemUnitSoftware.Firmware.FirmwareValue);
 
             CodecStatus.Status.SystemUnit.SystemUnitSoftware.OptionKeys.MultiSite.ValueChangedAction +=
-                () =>
-                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Multisite)
-                    {
-                        MultiSiteOptionIsEnabled = CodecStatus.Status.SystemUnit.SystemUnitSoftware.OptionKeys.MultiSite.BoolValue
-                    });
+                () => OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Multisite)
+                {
+                    MultiSiteOptionIsEnabled =
+                        CodecStatus.Status.SystemUnit.SystemUnitSoftware.OptionKeys.MultiSite.BoolValue
+                });
 
             CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber.ValueChangedAction +=
+                () => ParseSerialNumberObject(CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber);
+        }
+
+        private void RegisterH323Configuration()
+        {
+            try
+            {
+                CodecConfiguration.Configuration.H323.H323Alias.E164.ValueChangedAction += () =>
+                    {
+                        var e164 = CodecConfiguration.Configuration.H323.H323Alias.E164.Value.NullIfEmpty() ?? "unknown";
+                        OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323)
+                        {
+                            E164Alias = e164,
+                        });
+
+                    };
+
+                CodecConfiguration.Configuration.H323.H323Alias.H323AliasId.ValueChangedAction += () =>
+                {
+                    var h323Id = CodecConfiguration.Configuration.H323.H323Alias.H323AliasId.Value.NullIfEmpty() ?? "unknown";
+                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323)
+                    {
+                        H323Id = h323Id
+                    });
+
+                };
+            }
+            catch (Exception e)
+            {
+
+                Debug.Console(0, this, "Exception in RegisterH323Configuration", e.Message);
+            }
+        }
+
+        private void RegisterDisconnectEvents()
+        {
+            CodecEvents.Event.CallDisconnect.ValueChangedAction += () =>
+            {
+                //For Future Use
+            };
+        }
+
+        private void RegisterUserInterfaceEvents()
+        {
+            CodecEvents.Event.UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier.ValueChangedAction +=
                 () =>
                 {
-                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.SerialNumber)
-                    {
-                        SerialNumber = CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber.Value
-                    });
-                    if (DeviceInfo == null) return;
-                    DeviceInfo.SerialNumber = CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber.Value;
-                    UpdateDeviceInfo();
+                    //For Future Use
+                };
+        }
+
+        private void RegisterAutoAnswer()
+        {
+            CodecConfiguration.Configuration.Conference.AutoAnswer.AutoAnswerMode.ValueChangedAction +=
+                () => OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.AutoAnswer)
+                {
+                    AutoAnswerEnabled =
+                        CodecConfiguration.Configuration.Conference.AutoAnswer.AutoAnswerMode.BoolValue
+                });
+        }
+
+        /*private void RegisterConferenceEvents()
+        {
+
+            CodecStatus.Status.StatusConference.Presentation.ModeValueProperty.ValueChangedAction = () =>
+            {
+                Debug.Console(0, this, "PRESENTATION MODE CHANGE!");
+                if (CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances == null) return;
+                if (CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.Count <= 0) return;
+                var presentationInstances = CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances;
+
+                Debug.Console(0, this, "Presentation instance is not null");
+
+                var presentationInstance =presentationInstances.First();
+
+                Debug.Console(0, this, "SourceValue = {0}", presentationInstance.SourceValueProperty.Value);
+                Debug.Console(0, this, "SendingMode = {0}", presentationInstance.SendingMode.Value);
+                SetPresentationSource(
+                    presentationInstance
+                        .SourceValueProperty.Value);
+                SetPresentationLocalOnly(
+                    presentationInstances.Any(
+                        i => i.SendingMode.LocalOnly));
+                SetPresentationLocalRemote(
+                    presentationInstances.Any(
+                        i => i.SendingMode.LocalRemote));
+                SetPresentationActiveState(
+                    !presentationInstance
+                        .SendingMode.Off);
+
+            };
+
+            CodecStatus.Status.StatusConference.Presentation.ValueChangedAction =
+                () => Debug.Console(0, this, "PRESENTATION BASE CHANGE!");
+
+
+            /*
+            CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First()
+                .SourceValueProperty.ValueChangedAction =
+                () => Debug.Console(0, this, "Source Value Property Changed!");
+            */
+            //CodecStatus.Status.StatusConference.Presentation.ValueChangedAction += () => Debug.Console(0, this, "Presentation Value CHANGED!");
+
+            /*CodecStatus.Status.StatusConference.ValueChangedAction =
+                () =>
+                {
+                    Debug.Console(0, this, "StatusConference Value Property CHANGED!");
+                    var presentationInstance =
+                        CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First();
+                    if (presentationInstance == null) return;
+                    SetPresentationSource(CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First().SourceValueProperty.IntValue);
+                    SetPresentationLocalOnly(
+                        CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.Any(
+                            i => i.SendingMode.LocalOnly));
+                    SetPresentationLocalRemote(
+                        CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.Any(
+                            i => i.SendingMode.LocalRemote));
+                    SetPresentationActiveState(!CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First().SendingMode.Off);
+                };
+            /*
+            CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First().ValueChangedAction =
+                () =>
+                {
+                    Debug.Console(0, this, "LocalInstancesValueChanged");
+                    if (
+                        string.IsNullOrEmpty(
+                            CodecStatus.Status.StatusConference.Presentation.PresentationLocalInstances.First().Ghost))
+                        return;
+                    SetPresentationSource(0);
+                    SetPresentationLocalOnly(false);
+                    SetPresentationLocalRemote(false);
+                    SetPresentationActiveState(false);
+                };
+        }*/
+
+        private void SetPresentationActiveState(bool state)
+        {
+            _presentationActive = state;
+            Debug.Console(1, this, "PresentationActive = {0}", _presentationActive ? "true" : "false");
+            PresentationActiveFeedback.FireUpdate();
+            if (!state)
+            {
+                SetPresentationSource(0);
+            }
+            CodecPollLayouts();
+        }
+
+        private void SetPresentationSource(int source)
+        {
+            _presentationSource = (ushort)source;
+            Debug.Console(1, this, "PresentationSource = {0}", _presentationSource);
+            PresentationSourceFeedback.FireUpdate();
+        }
+        private void SetPresentationSource(string source)
+        {
+            _presentationSource = ushort.Parse(source);
+            Debug.Console(1, this, "PresentationSource = {0}", _presentationSource);
+            PresentationSourceFeedback.FireUpdate();
+        }
+
+        private void SetPresentationLocalOnly(bool state)
+        {
+            _presentationLocalOnly = state;
+            Debug.Console(1, this, "PresentationLocalOnly = {0}", _presentationLocalOnly ? "true" : "false");
+
+            PresentationSendingLocalOnlyFeedback.FireUpdate();
+        }
+
+        private void SetPresentationLocalRemote(bool state)
+        {
+            _presentationLocalRemote = state;
+            Debug.Console(1, this, "PresentationLocalRemote = {0}", _presentationLocalRemote ? "true" : "false");
+            PresentationSendingLocalRemoteFeedback.FireUpdate();
+
+        }
+
+        private void SetPresentationMode(string value)
+        {
+            var localOnly = value.ToLower() == "localonly";
+            var localRemote = value.ToLower() == "localremote";
+            var activeState = localOnly || localRemote;
+
+            SetPresentationLocalOnly(localOnly);
+            SetPresentationLocalRemote(localRemote);
+            SetPresentationActiveState(activeState);
+
+        }
+
+        private void ParseSerialNumberObject(CiscoCodecStatus.SerialNumber serialNumber)
+        {
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.SerialNumber)
+            {
+                SerialNumber = serialNumber.Value
+            });
+            if (DeviceInfo == null) return;
+            DeviceInfo.SerialNumber = serialNumber.Value;
+            UpdateDeviceInfo();
+
+        }
+
+        private void ParseFirmwareObject(Version firmware)
+        {
+            CodecFirmware = firmware;
+            var codecFirmwareString = CodecFirmware.ToString();
+
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Firmware)
+            {
+                Firmware = codecFirmwareString
+            });
+            if (DeviceInfo == null) return;
+            DeviceInfo.FirmwareVersion = codecFirmwareString;
+            UpdateDeviceInfo();
+            _syncState.InitialSoftwareVersionMessageReceived();
+
+        }
+
+        private void RegisterSipEvents()
+        {
+            CodecStatus.Status.Sip.RegistrationCount.ValueChangedAction +=
+                () =>
+                {
+                    if (CodecStatus.Status.Sip.Registrations.Count <= 0) return;
+                    ParseSipObject(CodecStatus.Status.Sip);
                 };
 
+        }
 
-
+        private void RegisterNetworkEvents()
+        {
+            CodecStatus.Status.NetworkCount.ValueChangedAction += () =>
+            {
+                if (CodecStatus.Status.NetworkCount.Value <= 0) return;
+                ParseNetworkList(CodecStatus.Status.Networks);
+            };
         }
 
         private void RegisterVideoEvents()
         {
-            /*
-            CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.CurrentLayouts.AvailableLayoutsCount.ValueChangedAction += () =>
+
+            CodecStatus.Status.Video.Layout.CurrentLayouts.AvailableLayoutsCount.ValueChangedAction +=
+                () => ParseLayoutObject(CodecStatus.Status.Video.Layout);
+
+            CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction += () =>
+                ParseLayoutObject(CodecStatus.Status.Video.Layout);
+
+        }
+
+        private void RegisterRoomPresetEvents()
+        {
+            CodecStatus.Status.RoomPresetsChange.ValueChangedAction += () =>
             {
-                Debug.Console(0, this, "Layouts Received Change");
-                var layoutData = new List<CodecCommandWithLabel>();
-                if (CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.CurrentLayouts.AvailableLayouts != null)
+                if (CodecStatus.Status.RoomPresets == null)
                 {
-                    foreach (var i in CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.CurrentLayouts.AvailableLayouts)
-                    {
-                        var r = i;
-                        Debug.Console(2, "Adding New layout {0}", r.LayoutName.Value);
-                        layoutData.Add(new CodecCommandWithLabel(r.LayoutName.Value,
-                            r.LayoutName.Value));
-                    }
+                    NearEndPresets =
+                        (new List<CiscoCodecStatus.RoomPreset>()
+                            .GetGenericPresets<CiscoCodecStatus.RoomPreset, CodecRoomPreset>());
                 }
-                AvailableLayouts = layoutData;
-                AvailableLayoutsFeedback.FireUpdate();
+                else
+                {
+                    NearEndPresets =
+                        CodecStatus.Status.RoomPresets.GetGenericPresets<CiscoCodecStatus.RoomPreset, CodecRoomPreset>();
+                }
+
+                var handler = CodecRoomPresetsListHasChanged;
+                if (handler != null)
+                {
+                    handler(this, new EventArgs());
+                }
 
             };
+        }
+
+        private void ParseNetworkList(IEnumerable<CiscoCodecStatus.Network> networks)
+        {
+            var myNetwork = networks.FirstOrDefault(i => i.NetworkId == "1");
+            if (myNetwork == null) return;
+            var hostname = myNetwork.Cdp.DeviceId.Value.NullIfEmpty() ?? "Unknown";
+            var ipAddress = myNetwork.IPv4.Address.Value.NullIfEmpty() ?? "Unknown";
+            var macAddress = myNetwork.Ethernet.MacAddress.Value.NullIfEmpty()
+                             ?? "Unknown";
+
+
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
+            {
+                IpAddress = ipAddress
+            });
+
+            if (DeviceInfo == null) return;
+            DeviceInfo.HostName = hostname;
+            DeviceInfo.IpAddress = ipAddress;
+            DeviceInfo.MacAddress = macAddress;
+            UpdateDeviceInfo();
+        }
+
+        
+        private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
+        {
+            if (sipObject.Registrations.Count <= 0) return;
+            var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
+            var match = Regex.Match(sipUri, @"(\d+)");
+            var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
+            {
+                SipPhoneNumber = sipPhoneNumber,
+                SipUri = sipUri
+            });
+        }
         
 
-
-            CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction += () =>
+        private void ParseLayoutObject(CiscoCodecStatus.Layout layoutObject)
+        {
+            if (layoutObject.CurrentLayouts != null)
             {
-                Debug.Console(0, this, "Active Layouts Received Change");
+                if (layoutObject.CurrentLayouts.AvailableLayouts != null)
+                {
+                    UpdateLayoutList();
+                }
+                if (layoutObject.CurrentLayouts.ActiveLayout == null) return;
+            }
+            UpdateCurrentLayout();
 
-                CurrentLayout = CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.CurrentLayouts.ActiveLayout.Value;
-                LocalLayoutFeedback.FireUpdate();
-            };
-             */
         }
+
+
+        private void ParseCallObjectList(ICollection<CiscoCodecStatus.Call> calls, ICollection<CiscoCodecStatus.MediaChannelCall> mediaChannelsCalls )
+        {
+            //[]TODO Major Refactor Required
+            if (calls.Count <= 0) return;
+            if (calls.Count == 1 && !_presentationActive)
+            {
+                ClearLayouts();
+            }
+            /*
+            var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
+            if (currentCall == null) return null;
+            var videoChannels = currentCall.Channels.Where(x => x.Type.Value.ToLower() == "video").ToList();
+
+            return videoChannels.All(v => v.ChannelVideo.Protocol.Value.ToLower() == "off") ? "Audio" : "Aideo";
+*/
+            var newCalls = calls.ToList();
+            var tempMediaChannelsCalls = new List<CiscoCodecStatus.MediaChannelCall>();
+            if (mediaChannelsCalls != null)
+            {
+                if (mediaChannelsCalls != null)
+                {
+                    foreach (var t in newCalls)
+                    {
+                        t.CallType.Value = CheckCallType(t.CallIdString, mediaChannelsCalls);
+                    }
+                }
+            }
+
+
+            // Iterate through the call objects in the response
+            foreach (var c in newCalls)
+            {
+                var call = c;
+
+                var currentCallType = String.Empty;
+
+                if (mediaChannelsCalls != null)
+                {
+                    CheckCallType(c.CallIdString, mediaChannelsCalls);
+                }
+
+                var tempActiveCall = ActiveCalls.FirstOrDefault(x => x.Id.Equals(call.CallIdString));
+
+                if (tempActiveCall != null)
+                {
+
+                    var changeDetected = false;
+
+                    //var newStatus = eCodecCallStatus.Unknown;
+
+                    // Update properties of ActiveCallItem
+                    if (call.CallStatus != null)
+                        if (!string.IsNullOrEmpty(call.CallStatus.Value))
+                        {
+                            tempActiveCall.Status =
+                                CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value);
+                            tempActiveCall.IsOnHold = tempActiveCall.Status == eCodecCallStatus.OnHold;
+
+                            if (tempActiveCall.Status == eCodecCallStatus.Connected)
+                            {
+
+                                GetCallHistory();
+                            }
+
+                            changeDetected = true;
+                        }
+
+                    if (call.CallType != null || currentCallType != null)
+                    {
+
+                        tempActiveCall.Type =
+                            CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value);
+                        changeDetected = true;
+                    }
+
+
+
+                    if (call.DisplayName != null)
+                        if (!string.IsNullOrEmpty(call.DisplayName.Value))
+                        {
+                            tempActiveCall.Name = call.DisplayName.Value;
+                            changeDetected = true;
+                        }
+
+
+                    if (call.Direction != null)
+                    {
+                        if (!string.IsNullOrEmpty(call.Direction.Value))
+                        {
+                            tempActiveCall.Direction =
+                                CodecCallDirection.ConvertToDirectionEnum(call.Direction.Value);
+                            changeDetected = true;
+                        }
+                    }
+                    if (call.Duration != null)
+                    {
+                        if (!string.IsNullOrEmpty(call.Duration.Value))
+                        {
+                            tempActiveCall.Duration = call.Duration.DurationValue;
+                            changeDetected = true;
+                        }
+                    }
+                    if (call.PlacedOnHold != null)
+                    {
+
+
+                        tempActiveCall.IsOnHold = call.PlacedOnHold.BoolValue;
+                        changeDetected = true;
+                    }
+
+                    if (!changeDetected) continue;
+
+                    SetSelfViewMode();
+                    OnCallStatusChange(tempActiveCall);
+                    ListCalls();
+                    CodecPollLayouts();
+
+                }
+                else if (call.GhostString == null || call.GhostString.ToLower() == "false")
+                    // if the ghost value is present the call has ended already
+                {
+
+                    // Create a new call item
+                    var newCallItem = new CodecActiveCallItem()
+                    {
+
+                        Id = call.CallIdString,
+                        Status = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value),
+                        Name = call.DisplayName.Value,
+                        Number = call.RemoteNumber.Value,
+                        Type = CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value),
+                        Direction = CodecCallDirection.ConvertToDirectionEnum(call.Direction.Value),
+                        Duration = call.Duration.DurationValue,
+                        IsOnHold = call.PlacedOnHold.BoolValue,
+                    };
+
+
+                    // Add it to the ActiveCalls List
+                    ActiveCalls.Add(newCallItem);
+
+                    ListCalls();
+
+                    SetSelfViewMode();
+
+                    OnCallStatusChange(newCallItem);
+
+                    CodecPollLayouts();
+
+                    //ClearLayouts();
+
+                }
+
+            }
+        }
+
+        private void ParseRoomPresetList(List<CiscoCodecStatus.RoomPreset> presetList)
+        {
+            if (presetList.Count == 0 ) return;
+            var extantPresets = CodecStatus.Status.RoomPresets;
+            if (extantPresets == null || extantPresets.Count == 0)
+            {
+                CodecStatus.Status.RoomPresets = presetList;
+                return;
+            }
+
+            var newItems = presetList.Except(CodecStatus.Status.RoomPresets).ToList();
+            var updatedItems = CodecStatus.Status.RoomPresets.Where(c => presetList.Any(d => c.RoomPresetId == d.RoomPresetId)).ToList();
+            CodecStatus.Status.RoomPresets = newItems.Concat(updatedItems).ToList();
+        }
+
+        private void ParseUserInterfaceEvent(CiscoCodecEvents.UserInterface userInterfaceObject)
+        {
+            if (userInterfaceObject == null) return;
+            Debug.Console(2, this, "*** Got an External SourceValueProperty Selection {0} {1}",
+                userInterfaceObject,
+                userInterfaceObject,
+                userInterfaceObject.Presentation.ExternalSource.Selected
+                    .SourceIdentifier.Value);
+
+            if (RunRouteAction != null && !_externalSourceChangeRequested)
+            {
+                RunRouteAction(
+                    userInterfaceObject.Presentation.ExternalSource.Selected
+                        .SourceIdentifier.Value, null);
+            }
+
+            _externalSourceChangeRequested = false;
+
+        }
+
+        private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
+        {
+            try
+            {
+                var token = JTokenValidInToken(jToken, tokenSelector);
+                if (token == null) return;
+
+                JsonConvert.PopulateObject(token.ToString(), target);
+            }
+            catch (Exception e)
+            {
+                Debug.Console(2, this, "Exception: PopulateObjectWithToken - {0}", e.Message);
+                Debug.Console(2, this, "Token = {0}", jToken.ToString());
+                Debug.Console(2, this, "Selector = {0}", tokenSelector);
+            }
+        }
+
+        private void ParseStatusObject(JToken statusToken)
+        {
+            if (statusToken == null) return;
+            var status = new CiscoCodecStatus.Status();
+            var layoutsToken = statusToken.SelectToken("Video.Layout");
+            var selfviewToken = statusToken.SelectToken("Video.Selfview");
+            var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
+            var systemUnitToken = statusToken.SelectToken("SystemUnit");
+            var cameraToken = statusToken.SelectToken("Camera");
+            var networkToken = statusToken.SelectToken("Network");
+            var sipToken = statusToken.SelectToken("Sip");
+            var conferenceToken = statusToken.SelectToken("Conference");
+            var callToken = statusToken.SelectToken("Call");
+            var errorToken = JTokenValidInToken(statusToken, "Reason");
+
+            var serializedToken = statusToken.ToString();
+            if (errorToken != null)
+            {
+                //This is an Error - Deal with it somehow?
+                Debug.Console(2, this, "Error In Status Response :");
+                Debug.Console(2, this, "{0}", errorToken.ToString());
+                return;
+            }
+            JsonConvert.PopulateObject(statusToken.ToString(), status);
+
+            if (systemUnitToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
+            }
+            if (cameraToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
+            }
+            if (networkToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "Network", CodecStatus.Status.Networks);
+            }
+            if (sipToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "Sip", CodecStatus.Status.Sip);
+                //ParseSipObject(status.Sip);
+            }
+            if (layoutsToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "Video.Layout", CodecStatus.Status.Video.Layout);
+                //ParseLayoutObject(status.Video.Layout);
+            }
+            if (selfviewToken != null)
+            {
+                PopulateObjectWithToken(statusToken, "Video.Selfview", CodecStatus.Status.Video.Selfview);
+            }
+            if (conferenceToken != null)
+            {
+                Debug.Console(0, this, "conferenceToken =");
+                Debug.Console(0, this, "{0}", conferenceToken.ToString());
+                var ghostToken = JTokenValidInToken(conferenceToken, "Presentation.LocalInstance[0].ghost");
+                if(!ProcessConferencePresentationGhost(ghostToken));
+                {
+                    var sourceToken = JTokenValidInToken(conferenceToken, "Presentation.LocalInstance[0].Source.Value");
+                    var sendingModeToken = JTokenValidInToken(conferenceToken,
+                        "Presentation.LocalInstance[0].SendingMode.Value");
+                    if (sourceToken != null)
+                    {
+                        Debug.Console(0, this, "sourceToken = {0}", sourceToken.ToString());
+                        SetPresentationSource(sourceToken.ToString());
+                    }
+                    if (sendingModeToken != null)
+                    {
+                        Debug.Console(0, this, "sendingModeToken = {0}", sendingModeToken.ToString());
+                        SetPresentationMode(sendingModeToken.ToString());
+                    }
+
+                }
+            }
+            if (callToken != null)
+            {
+                //if(mediaChannelsToken)
+                var mediaChannelCalls = mediaChannelsToken == null ? null : status.MediaChannels.MediaChannelCalls;
+                ParseCallObjectList(status.Calls, mediaChannelCalls);
+            }
+            if (status.Audio != null)
+            {
+                PopulateObjectWithToken(statusToken, "Audio", CodecStatus.Status.Audio);
+            }
+            if (status.RoomPresets != null)
+            {
+                ParseRoomPresetList(status.RoomPresets);       
+            }
+            else
+            {
+                Debug.Console(0, this, "");
+                JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
+            }
+            if (_syncState.InitialStatusMessageWasReceived) return;
+            _syncState.InitialStatusMessageReceived();
+
+            if (!_syncState.InitialConfigurationMessageWasReceived)
+            {
+                Debug.Console(0, this, "Sending Configuration");
+                SendText("xConfiguration");
+            }
+            if (_syncState.FeedbackWasRegistered) return;
+            Debug.Console(0, this, "Sending Feedback");
+
+            SendText(BuildFeedbackRegistrationExpression());
+        }
+
+        private bool ProcessConferencePresentationGhost(JToken ghostToken)
+        {
+            if (ghostToken != null && ghostToken.ToString().ToLower() == "true")
+            {
+                SetPresentationSource(0);
+                SetPresentationLocalOnly(false);
+                SetPresentationLocalRemote(false);
+                SetPresentationActiveState(false);
+                return true;
+            }
+            return false;
+        }
+
+        private void ParseConfigurationObject(JToken configurationToken)
+        {
+            try
+            {
+                if (configurationToken == null) return;
+                var configuration = new CiscoCodecConfiguration.Configuration();
+                try
+                {
+                    if (configuration.H323.H323Alias != null)
+                    {
+                        PopulateObjectWithToken(configurationToken, "H323.H323Alias", CodecConfiguration.Configuration.H323.H323Alias);
+                    }
+
+                }
+                catch (Exception e)
+                {
+                    Debug.Console(0, this, "Exception in ParseConfigurationObject.Populate H323 : {0}", e.Message);
+
+                }
+
+                try
+                {
+                    if (configuration.Conference.AutoAnswer != null)
+                    {
+                        PopulateObjectWithToken(configurationToken, "Conference.AutoAnswer",
+                            CodecConfiguration.Configuration.Conference.AutoAnswer);
+                    }
+
+                }
+                catch (Exception e)
+                {
+                    Debug.Console(0, this, "Exception in ParseConfigurationObject.Populate Autoanswer : {0}", e.Message);
+                    throw;
+                } 
+                if (_syncState.InitialConfigurationMessageWasReceived) return;
+                Debug.Console(2, this, "InitialConfig Received");
+                _syncState.InitialConfigurationMessageReceived();
+                if (!_syncState.InitialSoftwareVersionMessageWasReceived)
+                {
+                    SendText("xStatus SystemUnit");
+                }
+
+            }
+            catch (Exception e)
+            {
+                
+                Debug.Console(0, this, "Exception in ParseConfigurationObject : {0}", e.Message);
+            }
+        }
+
+        private void ParsePhonebookDirectoryResponseTypical(
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+        {
+            var directoryResults = new CodecDirectory();
+
+            if (
+                phonebookSearchResultResponseObject.ResultInfo
+                    .TotalRows.Value != "0")
+                directoryResults =
+                    CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+                        phonebookSearchResultResponseObject);
+
+            PrintDirectory(directoryResults);
+
+            DirectoryBrowseHistory.Add(directoryResults);
+
+            OnDirectoryResultReturned(directoryResults);
+
+        }
+
+        private void ParsePhonebookDirectoryFolders(
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+        {
+            PhonebookSyncState.InitialPhonebookFoldersReceived();
+
+            PhonebookSyncState.SetPhonebookHasFolders(
+                phonebookSearchResultResponseObject.Folder.Count >
+                0);
+
+            if (PhonebookSyncState.PhonebookHasFolders)
+            {
+                DirectoryRoot.AddFoldersToDirectory(
+                    CiscoCodecExtendedPhonebook.GetRootFoldersFromSearchResult(
+                        phonebookSearchResultResponseObject));
+            }
+
+            // Get the number of contacts in the phonebook
+            GetPhonebookContacts();
+
+        }
+
+        private void ParsePhonebookNumberOfContacts(
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+        {
+            PhonebookSyncState.SetNumberOfContacts(
+    Int32.Parse(
+        phonebookSearchResultResponseObject.ResultInfo
+            .TotalRows.Value));
+
+            DirectoryRoot.AddContactsToDirectory(
+                CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult(
+                    phonebookSearchResultResponseObject));
+
+            PhonebookSyncState.PhonebookRootEntriesReceived();
+
+            PrintDirectory(DirectoryRoot);
+
+        }
+        private void ParseEventObject(JToken eventToken)
+        {
+            if (eventToken == null) return;
+            var codecEvent = new CiscoCodecEvents.Event();
+            var bookingsEvent = eventToken.SelectToken("Bookings");
+            var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
+            if (codecEvent.CallDisconnect != null)
+            {
+                PopulateObjectWithToken(eventToken, "CallDisconnect", codecEvent.CallDisconnect);
+                EvalutateDisconnectEvent(codecEvent);
+            }
+            if (bookingsEvent != null)
+            {
+                Debug.Console(2, this, "Parse Bookings");
+                GetBookings(null);
+            }
+            if (userInterfaceEvent != null)
+            {
+                Debug.Console(2, this, "Parse UserInterface");
+
+                PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
+
+                ParseUserInterfaceEvent(codecEvent.UserInterface);
+            }
+        }
+
+        private void ParseCallHistoryResponseToken(JToken callHistoryResponseToken)
+        {
+            if (callHistoryResponseToken == null) return;
+            var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
+            PopulateObjectWithToken(callHistoryResponseToken, "CallHistoryRecentsResult", codecCallHistory);
+            CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
+        }
+
+        private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken)
+        {
+            Debug.Console(2, this, "Parse Phonebook Search Result Response");
+            var phonebookSearchResultResponseObject = new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
+
+            PopulateObjectWithToken(phonebookSearchResultResponseToken, "PhonebookSearchResult",
+                phonebookSearchResultResponseObject);
+            
+
+            if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
+            {
+                ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
+                // Check if the phonebook has any folders
+                return;
+            }
+            if (!PhonebookSyncState.NumberOfContactsWasReceived)
+            {
+                ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
+            }
+            if (PhonebookSyncState.InitialSyncComplete)
+                ParsePhonebookDirectoryResponseTypical(phonebookSearchResultResponseObject);
+        }
+
+        private void ParseCommandResponseObject(JToken commandResponseToken)
+        {
+            if (commandResponseToken == null) return;
+            var callHistoryRecentsResultResponse = commandResponseToken.SelectToken("CallHistoryRecentsResult");
+            var callHistoryDeleteEntryResultResponse = commandResponseToken.SelectToken("CallHistoryDeleteEntryResult");
+            var phonebookSearchResultResponse = commandResponseToken.SelectToken("PhonebookSearchResult");
+            var bookingsListResultResponse = commandResponseToken.SelectToken("BookingsListResult");
+
+            if (callHistoryRecentsResultResponse != null)
+            {
+                ParseCallHistoryResponseToken(commandResponseToken);
+            }
+            if (callHistoryDeleteEntryResultResponse != null)
+            {
+                GetCallHistory();
+            }
+            if (bookingsListResultResponse != null)
+            {
+                ParseBookingsListResultToken(commandResponseToken);
+            }
+            if (phonebookSearchResultResponse != null)
+            {
+                ParsePhonebookSearchResultResponse(commandResponseToken);
+            }
+        }
+
+        private void ParseBookingsListResultToken(JToken bookingsResponseToken)
+        {
+            if (bookingsResponseToken == null) return;
+            Debug.Console(2, this, "Parse BookingsListResult");
+            var codecBookings = new CiscoExtendedCodecBookings.BookingsListResult();
+
+            PopulateObjectWithToken(bookingsResponseToken, "BookingsListResult", codecBookings);
+
+            if (codecBookings.ResultInfo.TotalRows.Value !=
+                "0")
+            {
+                Debug.Console(2, this, "There are {0} meetings",
+                    codecBookings.ResultInfo.TotalRows.Value);
+                CodecSchedule.Meetings =
+                    CiscoExtendedCodecBookings.GetGenericMeetingsFromBookingResult(
+                        codecBookings.BookingsListResultBooking,
+                        _joinableCooldownSeconds);
+            }
+            else
+            {
+                Debug.Console(2, this, "There are No Meetings");
+                CodecSchedule.Meetings = new List<Meeting>();
+            }
+            if (BookingsRefreshTimer == null)
+            {
+                BookingsRefreshTimer = new CTimer(GetBookings, 90000, 90000);
+                Debug.Console(2, this, "BookingsRefresh Was null");
+            }
+            BookingsRefreshTimer.Reset(90000, 90000);
+        }
+
+
+
+
+
 
         private void DeserializeResponse(string response)
         {
             try
             {
-                //// Serializer settings.  We want to ignore null values and missing members
-                //JsonSerializerSettings settings = new JsonSerializerSettings();
-                //settings.NullValueHandling = NullValueHandling.Ignore;
-                //settings.MissingMemberHandling = MissingMemberHandling.Ignore;
-                //settings.ObjectCreationHandling = ObjectCreationHandling.Auto;
-
-                if (response.IndexOf("\"PresenterTrackStatus\":{") > -1 || response.IndexOf("\"PresenterTrackStatus\": {") > -1)
+                using (var sReader = new StringReader(response))
                 {
-                    // PresenterTrackStatus DiagnosticsMessage
+                    using (var jReader = new JsonTextReader(sReader))
+                    {
+                        while (jReader.Read())
+                        {
+                            if (jReader.TokenType != JsonToken.StartObject) continue;
+                            var obj = JObject.Load(jReader);
+
+                            ParseStatusObject(JTokenValidInObject(obj, "Status"));
+                            ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
+                            ParseEventObject(JTokenValidInObject(obj, "Event"));
+                            ParseCommandResponseObject(JTokenValidInObject(obj, "CommandResponse"));
+                        }
+                    }
+                }
+
+
+
+
+
+                #region status
+                /*
+                if (response.IndexOf("\"Status\":{") > -1 || response.IndexOf("\"Status\": {") > -1)
+                {
+                    return;
+                    // Status DiagnosticsMessage
 
                     // Temp object so we can inpsect for call data before simply deserializing
                     var tempCodecStatus = new CiscoCodecStatus.RootObject();
@@ -1616,14 +2509,12 @@ ConnectorID: {2}"
                     var status = tempCodecStatus.Status;
 
 
-
                     if (status.SystemUnit != null)
                     {
                         JsonConvert.PopulateObject(response, CodecStatus.Status.SystemUnit);
                     }
                     if (status.Cameras != null)
                     {
-                        Debug.Console(0, this, "Deserialize Cameras");
                         JsonConvert.PopulateObject(response, CodecStatus.Status.Cameras);
                     }
 
@@ -1641,7 +2532,10 @@ ConnectorID: {2}"
                                              ?? "Unknown";
 
 
-                            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network) {IpAddress = ipAddress});
+                            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
+                            {
+                                IpAddress = ipAddress
+                            });
 
                             if (DeviceInfo != null)
                             {
@@ -1682,14 +2576,10 @@ ConnectorID: {2}"
                             {
                                 UpdateLayoutList();
                             }
-                            if (status.Video.Layout.CurrentLayouts.ActiveLayout != null)
-                            {
-                                UpdateCurrentLayout();
-                                if (status.Video.Layout.CurrentLayouts.ActiveLayout.Value == String.Empty)
-                                {
-                                    ClearLayouts();
-                                }
-                            }
+                            if (status.Video.Layout.CurrentLayouts.ActiveLayout == null) return;
+
+                            UpdateCurrentLayout();
+
                         }
                         else
                         {
@@ -1698,7 +2588,7 @@ ConnectorID: {2}"
                     }
 
 
-                    // Check to see if the message contains /PresenterTrackStatus/ExperimentalConference/Presentation/PresentationLocalInstances and extract source value 
+                    // Check to see if the message contains /Status/ExperimentalConference/Presentation/PresentationLocalInstances and extract source value 
 
                     var conference = status.StatusConference;
 
@@ -1734,7 +2624,8 @@ ConnectorID: {2}"
                             }
                             else if (conference.Presentation.PresentationLocalInstances[0].SourceValueProperty != null)
                             {
-                                _presentationSource = conference.Presentation.PresentationLocalInstances[0].SourceValueProperty.IntValue;
+                                _presentationSource =
+                                    conference.Presentation.PresentationLocalInstances[0].SourceValueProperty.IntValue;
 
                                 // Check for any values in the SendingMode property
                                 if (
@@ -1742,9 +2633,11 @@ ConnectorID: {2}"
                                         (i) => !string.IsNullOrEmpty(i.SendingMode.Value)))
                                 {
                                     _presentationLocalOnly =
-                                        conference.Presentation.PresentationLocalInstances.Any((i) => i.SendingMode.LocalOnly);
+                                        conference.Presentation.PresentationLocalInstances.Any(
+                                            (i) => i.SendingMode.LocalOnly);
                                     _presentationLocalRemote =
-                                        conference.Presentation.PresentationLocalInstances.Any((i) => i.SendingMode.LocalRemote);
+                                        conference.Presentation.PresentationLocalInstances.Any(
+                                            (i) => i.SendingMode.LocalRemote);
                                 }
                             }
 
@@ -1764,7 +2657,7 @@ ConnectorID: {2}"
                             Debug.Console(0, this, "CALL WITH NO PRESENTATION!!!");
                             ClearLayouts();
                         }
-                                                 
+
 
                         // Iterate through the call objects in the response
                         foreach (var c in calls)
@@ -1784,7 +2677,7 @@ ConnectorID: {2}"
 
 
 
-                            Debug.Console(0, this, "Current MediaChannelCalls Type = {0}", currentCallType);
+                            Debug.Console(0, this, "Current Call Type = {0}", currentCallType);
                             var tempActiveCall = ActiveCalls.FirstOrDefault(x => x.Id.Equals(call.CallIdString));
 
                             if (tempActiveCall != null)
@@ -1798,7 +2691,8 @@ ConnectorID: {2}"
                                 if (call.CallStatus != null)
                                     if (!string.IsNullOrEmpty(call.CallStatus.Value))
                                     {
-                                        tempActiveCall.Status = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value);
+                                        tempActiveCall.Status =
+                                            CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value);
                                         tempActiveCall.IsOnHold = tempActiveCall.Status == eCodecCallStatus.OnHold;
 
                                         if (tempActiveCall.Status == eCodecCallStatus.Connected)
@@ -1861,7 +2755,8 @@ ConnectorID: {2}"
                                 CodecPollLayouts();
 
                             }
-                            else if (call.GhostString == null || call.GhostString.ToLower() == "false") // if the ghost value is present the call has ended already
+                            else if (call.GhostString == null || call.GhostString.ToLower() == "false")
+                                // if the ghost value is present the call has ended already
                             {
 
                                 // Create a new call item
@@ -1918,14 +2813,15 @@ ConnectorID: {2}"
                         var jResponse = JObject.Parse(response);
 
 
-                        IList<JToken> roomPresets = jResponse["PresenterTrackStatus"]["RoomPreset"].Children().ToList();
+                        IList<JToken> roomPresets = jResponse["Status"]["RoomPreset"].Children().ToList();
                         // Iterate the new items in this response agains the temporary list.  Overwrite any existing items and add new ones.
                         foreach (var camPreset in tempPresets)
                         {
                             var preset = camPreset;
                             if (preset == null) continue;
                             // First fine the existing preset that matches the CiscoCallId
-                            var existingPreset = existingRoomPresets.FirstOrDefault(p => p.RoomPresetId.Equals(preset.RoomPresetId));
+                            var existingPreset =
+                                existingRoomPresets.FirstOrDefault(p => p.RoomPresetId.Equals(preset.RoomPresetId));
                             if (existingPreset != null)
                             {
                                 Debug.Console(1, this, "Existing Room Preset with ID: {0} found. Updating.",
@@ -1936,7 +2832,9 @@ ConnectorID: {2}"
                                 // Find the JToken from the response with the matching CiscoCallId
                                 foreach (
                                     var jPreset in
-                                        roomPresets.Where(jPreset => jPreset["CiscoCallId"].Value<string>() == existingPreset.RoomPresetId)
+                                        roomPresets.Where(
+                                            jPreset =>
+                                                jPreset["id"].Value<string>() == existingPreset.RoomPresetId)
                                     )
                                 {
                                     updatedPreset = jPreset;
@@ -1969,19 +2867,19 @@ ConnectorID: {2}"
                             handler(this, new EventArgs());
                         }
                     }
-                        
+
                     else
                     {
                         JsonConvert.PopulateObject(response, CodecStatus);
                     }
-                        
+
 
                     if (_syncState.InitialStatusMessageWasReceived) return;
                     _syncState.InitialStatusMessageReceived();
 
                     if (!_syncState.InitialConfigurationMessageWasReceived)
                     {
-                        Debug.Console(0, this, "Sending COnfiguration");
+                        Debug.Console(0, this, "Sending Configuration");
                         SendText("xConfiguration");
                     }
                     if (!_syncState.FeedbackWasRegistered)
@@ -1991,7 +2889,14 @@ ConnectorID: {2}"
                         SendText(BuildFeedbackRegistrationExpression());
                     }
                 }
-                else if (response.IndexOf("\"Configuration\":{") > -1 || response.IndexOf("\"Configuration\": {") > -1)
+
+                #endregion
+
+                #region Configuration
+
+                /*
+        if (response.IndexOf("\"Configuration\":{") > -1 || response.IndexOf("\"Configuration\": {") > -1)
+
                 {
                     // Configuration DiagnosticsMessage
                     Debug.Console(2, this, "Parse Configuration : {0}", response);
@@ -2007,18 +2912,25 @@ ConnectorID: {2}"
                             {
                                 var e164 = h323.H323Alias.E164.Value.NullIfEmpty() ?? "unknown";
                                 var h323Id = h323.H323Alias.H323AliasId.Value.NullIfEmpty() ?? "unknown";
-                                OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323) {E164Alias = e164, H323Id = h323Id});
+                                OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323)
+                                {
+                                    E164Alias = e164,
+                                    H323Id = h323Id
+                                });
                             }
                         }
                         bool autoAnswer;
-                        if (CodecConfiguration.Configuration.Conference.AutoAnswer.Mode.Value == null)
+                        if (CodecConfiguration.Configuration.Conference.AutoAnswer.AutoAnswerMode.Value == null)
                             autoAnswer = false;
                         else
                         {
                             autoAnswer =
-                                CodecConfiguration.Configuration.Conference.AutoAnswer.Mode.Value.ToLower() == "on";
+                                CodecConfiguration.Configuration.Conference.AutoAnswer.AutoAnswerMode.Value.ToLower() == "on";
                         }
-                        OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.AutoAnswer) {AutoAnswerEnabled = autoAnswer});
+                        OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.AutoAnswer)
+                        {
+                            AutoAnswerEnabled = autoAnswer
+                        });
                     }
 
                     if (!_syncState.InitialConfigurationMessageWasReceived)
@@ -2027,18 +2939,25 @@ ConnectorID: {2}"
                         _syncState.InitialConfigurationMessageReceived();
                         if (!_syncState.InitialSoftwareVersionMessageWasReceived)
                         {
-                            SendText("xStatus SystemUnit Software DisplayName");
+                            SendText("xStatus SystemUnit");
                         }
                     }
 
                 }
-                else if (response.IndexOf("\"Event\":{") > -1 || response.IndexOf("\"Event\": {") > -1)
+         */
+
+                #endregion
+
+                #region event
+
+                /*
+        if (response.IndexOf("\"Event\":{") > -1 || response.IndexOf("\"Event\": {") > -1)
                 {
                     Debug.Console(2, this, "Parse Event : {0}", response);
                     if (response.IndexOf("\"CallDisconnect\":{") > -1 || response.IndexOf("\"CallDisconnect\": {") > -1)
                     {
                         Debug.Console(2, this, "Parse CallDisconnect");
-                        var eventReceived = new CiscoCodecEvents.RootObject();
+                        var eventReceived = new CiscoCodecEvents.Event();
 
                         JsonConvert.PopulateObject(response, eventReceived);
 
@@ -2057,9 +2976,10 @@ ConnectorID: {2}"
                     {
                         Debug.Console(2, this, "Parse UserInterface");
 
-                        CiscoCodecEvents.RootObject eventReceived = new CiscoCodecEvents.RootObject();
+                        var eventReceived = new CiscoCodecEvents.RootObject();
                         JsonConvert.PopulateObject(response, eventReceived);
-                        Debug.Console(2, this, "*** Got an External SourceValueProperty Selection {0} {1}", eventReceived,
+                        Debug.Console(2, this, "*** Got an External SourceValueProperty Selection {0} {1}",
+                            eventReceived,
                             eventReceived.Event.UserInterface,
                             eventReceived.Event.UserInterface.Presentation.ExternalSource.Selected
                                 .SourceIdentifier.Value);
@@ -2074,7 +2994,14 @@ ConnectorID: {2}"
                         _externalSourceChangeRequested = false;
                     }
                 }
-                else if (response.IndexOf("\"CommandResponse\":{") > -1 ||
+         */
+
+                #endregion
+
+                #region commandResponse
+
+                /*
+        else if (response.IndexOf("\"CommandResponse\":{") > -1 ||
                          response.IndexOf("\"CommandResponse\": {") > -1)
                 {
                     // CommandResponse DiagnosticsMessage
@@ -2174,18 +3101,32 @@ ConnectorID: {2}"
 
                         if (codecBookings.CommandResponse.BookingsListResult.ResultInfo.TotalRows.Value !=
                             "0")
+                        {
+                            Debug.Console(2, this, "THere are {0} meetings",
+                                codecBookings.CommandResponse.BookingsListResult.ResultInfo.TotalRows.Value);
                             CodecSchedule.Meetings =
                                 CiscoExtendedCodecBookings.GetGenericMeetingsFromBookingResult(
-                                    codecBookings.CommandResponse.BookingsListResult.BookingsListResultBooking, _joinableCooldownSeconds);
+                                    codecBookings.CommandResponse.BookingsListResult.BookingsListResultBooking,
+                                    _joinableCooldownSeconds);
+                        }
                         else
                         {
+                            Debug.Console(2, this, "There are No Meetings");
                             CodecSchedule.Meetings = new List<Meeting>();
                         }
+                        if (BookingsRefreshTimer == null)
+                        {
+                            BookingsRefreshTimer = new CTimer(GetBookings, 90000, 90000);
+                            Debug.Console(2, this, "BookingsRefresh Was null");
+                        }
+                        BookingsRefreshTimer.Reset(90000, 90000);
 
-                        BookingsRefreshTimer.Reset(900000, 900000);
                     }
 
                 }
+             */
+
+                #endregion
 
             }
             catch (Exception ex)
@@ -2207,19 +3148,15 @@ ConnectorID: {2}"
         private static string CheckCallType(string id, IEnumerable<CiscoCodecStatus.MediaChannelCall> calls)
         {
             var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
-            if (currentCall != null)
-            {
-                var videoChannels = currentCall.Channels.Where(x => x.Type.Value == "ChannelVideo").ToList();
+            if (currentCall == null) return null;
+            var videoChannels = currentCall.Channels.Where(x => x.Type.Value.ToLower() == "video").ToList();
 
-                return videoChannels.All(v => v.ChannelVideo.Protocol.Value == "Off") ? "Audio" : "ChannelVideo";
-            }
-            return null;
-
+            return videoChannels.All(v => v.ChannelVideo.Protocol.Value.ToLower() == "off") ? "Audio" : "Aideo";
         }
 
 
         /// <summary>
-        /// MediaChannelCalls when directory results are updated
+        /// Call when directory results are updated
         /// </summary>
         /// <param name="result"></param>
         private void OnDirectoryResultReturned(CodecDirectory result)
@@ -2302,7 +3239,7 @@ ConnectorID: {2}"
 
         public void CodecPollLayouts()
         {
-            EnqueueCommand("xStatus ChannelVideo Layout CurrentLayouts");
+            EnqueueCommand("xStatus Video Layout CurrentLayouts");
         }
 
 
@@ -2310,17 +3247,17 @@ ConnectorID: {2}"
         /// Evaluates an event received from the codec
         /// </summary>
         /// <param name="eventReceived"></param>
-        private void EvalutateDisconnectEvent(CiscoCodecEvents.RootObject eventReceived)
+        private void EvalutateDisconnectEvent(CiscoCodecEvents.Event eventReceived)
         {
-            Debug.Console(0, this, "DISCONNECTEVENT!");
-            if (eventReceived.Event.CallDisconnect == null) return;
+            if (eventReceived == null || eventReceived.CallDisconnect == null) return;
             var tempActiveCall =
-                ActiveCalls.FirstOrDefault(c => c.Id.Equals(eventReceived.Event.CallDisconnect.CallId.Value));
-            if(tempActiveCall != null) Debug.Console(0, this, "DISCONNECT CALL {0}!", tempActiveCall.Id);
-            else Debug.Console(0, this, "NO CALL MATCH!");
+                ActiveCalls.FirstOrDefault(c => c.Id.Equals(eventReceived.CallDisconnect.CallId.Value));
+            if (tempActiveCall == null)
+            {
+                Debug.Console(1, this, "NO CALL MATCH!");
+            }
+            Debug.Console(1, this, "DISCONNECT CALL {0}!", tempActiveCall.Id);
 
-            // Remove the call from the Active calls list
-            if (tempActiveCall == null) return;
             ActiveCalls.Remove(tempActiveCall);
 
             ListCalls();
@@ -2576,7 +3513,7 @@ ConnectorID: {2}"
 
         public override void EndCall(CodecActiveCallItem activeCall)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls Disconnect CallId: {0}", activeCall.Id));
+            EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
             PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
@@ -2584,31 +3521,31 @@ ConnectorID: {2}"
         {
             foreach (CodecActiveCallItem activeCall in ActiveCalls)
             {
-                EnqueueCommand(string.Format("xCommand MediaChannelCalls Disconnect CallId: {0}", activeCall.Id));
+                EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
             }
             PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void AcceptCall(CodecActiveCallItem item)
         {
-            EnqueueCommand("xCommand MediaChannelCalls Accept");
+            EnqueueCommand("xCommand Call Accept");
         }
 
         public override void RejectCall(CodecActiveCallItem item)
         {
-            EnqueueCommand("xCommand MediaChannelCalls Reject");
+            EnqueueCommand("xCommand Call Reject");
         }
 
         #region IHasCallHold Members
 
         public void HoldCall(CodecActiveCallItem activeCall)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls Hold CallId: {0}", activeCall.Id));
+            EnqueueCommand(string.Format("xCommand Call Hold CallId: {0}", activeCall.Id));
         }
 
         public void ResumeCall(CodecActiveCallItem activeCall)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls Resume CallId: {0}", activeCall.Id));
+            EnqueueCommand(string.Format("xCommand Call Resume CallId: {0}", activeCall.Id));
         }
 
         /// <summary>
@@ -2628,7 +3565,7 @@ ConnectorID: {2}"
 
         public void JoinCall(CodecActiveCallItem activeCall)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls Join CallId: {0}", activeCall.Id));
+            EnqueueCommand(string.Format("xCommand Call Join CallId: {0}", activeCall.Id));
         }
 
         public void JoinAllCalls()
@@ -2645,7 +3582,7 @@ ConnectorID: {2}"
 
             if (ids.Length > 0)
             {
-                EnqueueCommand(string.Format("xCommand MediaChannelCalls Join {0}", ids.ToString()));
+                EnqueueCommand(string.Format("xCommand Call Join {0}", ids.ToString()));
             }
         }
 
@@ -2657,7 +3594,7 @@ ConnectorID: {2}"
         /// <param name="s"></param>
         public override void SendDtmf(string s)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls DTMFSend CallId: {0} DTMFString: \"{1}\"", GetCallId(), s));
+            EnqueueCommand(string.Format("xCommand Call DTMFSend CallId: {0} DTMFString: \"{1}\"", GetCallId(), s));
         }
 
         /// <summary>
@@ -2667,7 +3604,7 @@ ConnectorID: {2}"
         /// <param name="activeCall"></param>
         public override void SendDtmf(string s, CodecActiveCallItem activeCall)
         {
-            EnqueueCommand(string.Format("xCommand MediaChannelCalls DTMFSend CallId: {0} DTMFString: \"{1}\"", activeCall.Id, s));
+            EnqueueCommand(string.Format("xCommand Call DTMFSend CallId: {0} DTMFString: \"{1}\"", activeCall.Id, s));
         }
 
         public void SelectPresentationSource(int source)
@@ -3223,7 +4160,7 @@ ConnectorID: {2}"
         }
 
         /// <summary>
-        /// Sets SelfView H323Mode based on config
+        /// Sets SelfView Mode based on config
         /// </summary>
         private void SetSelfViewMode()
         {
@@ -3273,19 +4210,19 @@ ConnectorID: {2}"
 
 
         /// <summary>
-        /// Turns on Selfview H323Mode
+        /// Turns on Selfview Mode
         /// </summary>
         public void SelfViewModeOn()
         {
-            EnqueueCommand("xCommand ChannelVideo Selfview Set H323Mode: On");
+            EnqueueCommand("xCommand Video Selfview Set Mode: On");
         }
 
         /// <summary>
-        /// Turns off Selfview H323Mode
+        /// Turns off Selfview Mode
         /// </summary>
         public void SelfViewModeOff()
         {
-            EnqueueCommand("xCommand ChannelVideo Selfview Set H323Mode: Off");
+            EnqueueCommand("xCommand Video Selfview Set Mode: Off");
         }
 
         /// <summary>
@@ -3300,7 +4237,7 @@ ConnectorID: {2}"
             else
                 mode = "On";
 
-            EnqueueCommand(string.Format("xCommand ChannelVideo Selfview Set H323Mode: {0}", mode));
+            EnqueueCommand(string.Format("xCommand Video Selfview Set Mode: {0}", mode));
         }
 
         /// <summary>
@@ -3309,7 +4246,7 @@ ConnectorID: {2}"
         /// <param name="position"></param>
         public void SelfviewPipPositionSet(CodecCommandWithLabel position)
         {
-            EnqueueCommand(string.Format("xCommand ChannelVideo Selfview Set H323Mode: On PIPPosition: {0}", position.Command));
+            EnqueueCommand(string.Format("xCommand Video Selfview Set Mode: On PIPPosition: {0}", position.Command));
         }
 
         /// <summary>
@@ -3340,7 +4277,7 @@ ConnectorID: {2}"
                 Debug.Console(0, this, "Unable to Recall Layout - Null CodecCommandWithLabel Object Sent");
                 return;
             }
-            EnqueueCommand(string.Format("xCommand ChannelVideo Layout SetLayout LayoutName: \"{0}\"", layout.Command));
+            EnqueueCommand(string.Format("xCommand Video Layout SetLayout LayoutName: \"{0}\"", layout.Command));
             if (!EnhancedLayouts)
             {
                 OnCurrentLayoutChanged(layout.Label);
@@ -3360,7 +4297,7 @@ ConnectorID: {2}"
                 Debug.Console(1, this, "Unable to Recall Layout - Null string Sent");
                 return;
             }
-            EnqueueCommand(string.Format("xCommand ChannelVideo Layout SetLayout LayoutName: \"{0}\"", layout));
+            EnqueueCommand(string.Format("xCommand Video Layout SetLayout LayoutName: \"{0}\"", layout));
 
             
             if (!EnhancedLayouts)
@@ -3417,7 +4354,7 @@ ConnectorID: {2}"
         {
             _currentPresentationView = "Default";
 
-            EnqueueCommand(string.Format("xCommand ChannelVideo PresentationView Set View: {0}", _currentPresentationView));
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
             PresentationViewFeedbackGroup.FireUpdate();
             //PresentationViewMaximizedFeedback.FireUpdate();
         }
@@ -3426,7 +4363,7 @@ ConnectorID: {2}"
         {
             _currentPresentationView = "Minimized";
 
-            EnqueueCommand(string.Format("xCommand ChannelVideo PresentationView Set View: {0}", _currentPresentationView));
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
             PresentationViewFeedbackGroup.FireUpdate();
 
         }
@@ -3435,7 +4372,7 @@ ConnectorID: {2}"
         {
             _currentPresentationView = "Maximized";
 
-            EnqueueCommand(string.Format("xCommand ChannelVideo PresentationView Set View: {0}", _currentPresentationView));
+            EnqueueCommand(string.Format("xCommand Video PresentationView Set View: {0}", _currentPresentationView));
             PresentationViewFeedbackGroup.FireUpdate();
         }
 
@@ -3458,7 +4395,7 @@ ConnectorID: {2}"
         /// </summary>
         void ComputeLocalLayout()
         {
-            _currentLocalLayout = Layouts.FirstOrDefault(l => l.Command.ToLower().Equals(CodecStatus.PresenterTrackStatus.ChannelVideo.Layout.LayoutFamily.Local.Value.ToLower()));
+            _currentLocalLayout = Layouts.FirstOrDefault(l => l.Command.ToLower().Equals(CodecStatus.Status.Video.Layout.LayoutFamily.Local.Value.ToLower()));
 
             if (_currentLocalLayout != null)
                 LocalLayoutFeedback.FireUpdate();
@@ -3491,7 +4428,7 @@ ConnectorID: {2}"
             {
                 case eCameraTrackingCapabilities.None:
                 {
-                    Debug.Console(0, this, "CameraList Auto H323Mode Unavailable");
+                    Debug.Console(0, this, "Camera Auto Mode Unavailable");
                     break;
                 }
                 case eCameraTrackingCapabilities.PresenterTrack:
@@ -3523,7 +4460,7 @@ ConnectorID: {2}"
             {
                 case eCameraTrackingCapabilities.None:
                 {
-                    Debug.Console(0, this, "CameraList Auto H323Mode Unavailable");
+                    Debug.Console(0, this, "Camera Auto Mode Unavailable");
                     break;
                 }
                 case eCameraTrackingCapabilities.PresenterTrack:
@@ -3587,7 +4524,7 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
-            EnqueueCommand("xCommand Cameras PresenterTrack Set H323Mode: Off");
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Off");
         }
 
         public void PresenterTrackFollow()
@@ -3602,7 +4539,7 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
-            EnqueueCommand("xCommand Cameras PresenterTrack Set H323Mode: Follow");
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Follow");
         }
 
         public void PresenterTrackBackground()
@@ -3618,7 +4555,7 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
-            EnqueueCommand("xCommand Cameras PresenterTrack Set H323Mode: Background");
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Background");
         }
 
         public void PresenterTrackPersistent()
@@ -3633,7 +4570,7 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
-            EnqueueCommand("xCommand Cameras PresenterTrack Set H323Mode: Persistent");
+            EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Persistent");
         }
 
 
@@ -3674,7 +4611,7 @@ ConnectorID: {2}"
                 // Setup all the cameras
                 for (int i = 0; i < camCount; i++)
                 {
-                    var cam = CodecStatus.PresenterTrackStatus.Cameras.CameraList[i];
+                    var cam = CodecStatus.Status.Cameras.CameraList[i];
 
                     var CiscoCallId = (uint) i;
                     var name = string.Format("CameraList {0}", CiscoCallId);
@@ -3705,7 +4642,7 @@ ConnectorID: {2}"
                     var id = uint.Parse(item.CameraId);
                     var camId = id;
                     var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == camId);
-                    var name = string.Format("CameraList {0}", camId);
+                    var name = string.Format("Camera {0}", camId);
                     if (camInfo != null)
                     {
                         name = camInfo.Name;
@@ -3719,7 +4656,7 @@ ConnectorID: {2}"
                         camera.SetCapabilites(cam.Capabilities.Options.Value);
                     }
 
-                    Debug.Console(0, this, "Adding CameraList {0}", camera.CameraId);
+                    Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
                     Cameras.Add(camera);
                 }
             }
@@ -3743,7 +4680,7 @@ ConnectorID: {2}"
                 FarEndRoomPresets.Add(new CodecRoomPreset(i, label, true, false));
             }
 
-            Debug.Console(0, this, "Selected CameraList has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
+            Debug.Console(0, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
 
             SelectedCamera = Cameras.First();
             SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.
@@ -3787,7 +4724,7 @@ ConnectorID: {2}"
             var camera = Cameras.FirstOrDefault(c => c.Key.IndexOf(key, StringComparison.OrdinalIgnoreCase) > -1);
             if (camera != null)
             {
-                Debug.Console(2, this, "Selected CameraList with key: '{0}'", camera.Key);
+                Debug.Console(2, this, "Selected Camera with key: '{0}'", camera.Key);
                 SelectedCamera = camera;
             }
             else
@@ -3796,7 +4733,7 @@ ConnectorID: {2}"
             var ciscoCam = camera as CiscoCamera;
             if (ciscoCam != null)
             {
-                EnqueueCommand(string.Format("xCommand ChannelVideo Input SetMainVideoSource SourceId: {0}", ciscoCam.CameraId));
+                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.CameraId));
             }
         }
 
@@ -3834,7 +4771,7 @@ ConnectorID: {2}"
         public void SelectFarEndPreset(int preset)
         {
             EnqueueCommand(
-                string.Format("xCommand MediaChannelCalls FarEndControl RoomPreset Activate CallId: {0} PresetId: {1}",
+                string.Format("xCommand Call FarEndControl RoomPreset Activate CallId: {0} PresetId: {1}",
                     GetCallId(), preset));
         }
 
@@ -3965,7 +4902,7 @@ ConnectorID: {2}"
         /// </summary>
         public void CameraMuteOn()
         {
-            EnqueueCommand("xCommand ChannelVideo Input MainVideo Mute");
+            EnqueueCommand("xCommand Video Input MainVideo Mute");
         }
 
         /// <summary>
@@ -3973,7 +4910,7 @@ ConnectorID: {2}"
         /// </summary>
         public void CameraMuteOff()
         {
-            EnqueueCommand("xCommand ChannelVideo Input MainVideo Unmute");
+            EnqueueCommand("xCommand Video Input MainVideo Unmute");
         }
 
         /// <summary>
@@ -3993,12 +4930,12 @@ ConnectorID: {2}"
 
         public void ActivateDoNotDisturbMode()
         {
-            EnqueueCommand("xCommand ExperimentalConference DoNotDisturb Activate");
+            EnqueueCommand("xCommand Conference DoNotDisturb Activate");
         }
 
         public void DeactivateDoNotDisturbMode()
         {
-            EnqueueCommand("xCommand ExperimentalConference DoNotDisturb Deactivate");
+            EnqueueCommand("xCommand Conference DoNotDisturb Deactivate");
         }
 
         public void ToggleDoNotDisturbMode()

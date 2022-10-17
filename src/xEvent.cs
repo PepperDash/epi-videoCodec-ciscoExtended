@@ -118,10 +118,11 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class CallDisconnect
+        public class CallDisconnect : ValueProperty
         {
+            private string _id;
             [JsonProperty("id")]
-            public string Id { get; set; }
+            public string Id { get { return _id; } set { _id = value; OnValueChanged(); } }
             public CauseValue CauseValue { get; set; }
             public CauseType CauseType { get; set; }
             public CauseString CauseString { get; set; }
@@ -144,40 +145,72 @@ namespace epi_videoCodec_ciscoExtended
             [JsonProperty("id")]
             public string Id { get; set; }
             public Presentation Presentation { get; set; }
+
+            public UserInterface()
+            {
+                Presentation = new Presentation();
+            }
         }
         public class Presentation
         {
             [JsonProperty("id")]
             public string Id { get; set; }
             public ExternalSource ExternalSource { get; set; }
+
+            public Presentation()
+            {
+                ExternalSource = new ExternalSource();
+            }
         }
         public class ExternalSource
         {
             [JsonProperty("id")]
             public string Id { get; set; }
             public Selected Selected { get; set; }
+
+            public ExternalSource()
+            {
+                Selected = new Selected();
+            }
         }
         public class Selected
         {
             [JsonProperty("id")]
             public string Id { get; set; }
             public SourceIdentifier SourceIdentifier { get; set; }
+
+            public Selected()
+            {
+                SourceIdentifier = new SourceIdentifier();
+            }
         }
-        public class SourceIdentifier
+        public class SourceIdentifier : ValueProperty
         {
+            private string _value;
             [JsonProperty("id")]
             public string Id { get; set; }
-            public string Value { get; set; }
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
         }
         public class Event
         {
             public CallDisconnect CallDisconnect { get; set; }
             public UserInterface UserInterface { get; set; }
+
+            public Event()
+            {
+                CallDisconnect = new CallDisconnect();
+                UserInterface = new UserInterface();
+            }
         }
 
         public class RootObject
         {
             public Event Event { get; set; }
+
+            public RootObject()
+            {
+                Event = new Event();
+            }
         }
     }
 }

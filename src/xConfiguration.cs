@@ -27,6 +27,33 @@ namespace epi_videoCodec_ciscoExtended
         public class Mode : ValueProperty
         {
             
+
+            string _value;
+
+            /// <summary>
+            /// Sets Value and triggers the action when set
+            /// </summary>
+            public string Value
+            {
+                get
+                {
+                    return _value;
+                }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+
+        }
+        public class AutoAnswerMode : ValueProperty
+        {
+            public bool BoolValue
+            {
+                get { return _value.ToLower() == "on"; }
+            }
+
             string _value;
 
             /// <summary>
@@ -69,8 +96,6 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Microphone
         {
-            [JsonProperty("id")]
-            public string MicrophoneId { get; set; }
             public EchoControl EchoControl { get; set; }
             public Level Level { get; set; }
             public Mode Mode { get; set; }
@@ -232,8 +257,6 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Camera
         {
-            [JsonProperty("id")]
-            public string CameraIdString { get; set; }
             public Framerate Framerate { get; set; }
             public Backlight Backlight { get; set; }
             public Brightness Brightness { get; set; }
@@ -335,13 +358,14 @@ namespace epi_videoCodec_ciscoExtended
         public class AutoAnswer
         {
             public Delay Delay { get; set; }
-            public Mode Mode { get; set; }
-            [JsonProperty("mute")]
+            [JsonProperty("Mode")]
+            public AutoAnswerMode AutoAnswerMode { get; set; }
+            [JsonProperty("Mute")]
             public MuteString MuteString { get; set; }
 
             public AutoAnswer()
             {
-                Mode = new Mode();
+                AutoAnswerMode = new AutoAnswerMode();
                 Delay = new Delay();
                 MuteString = new MuteString();
             }
@@ -484,16 +508,24 @@ namespace epi_videoCodec_ciscoExtended
             public Address Address { get; set; }
         }
 
-        public class E164
+        public class E164 : ValueProperty
         {
-            
-            public string Value { get; set; }
+            private string _value;
+            public string Value { get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
-        public class Id
+        public class Id : ValueProperty
         {
-            
-            public string Value { get; set; }
+            private string _value;
+
+
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
         }
 
         public class H323Alias
@@ -501,6 +533,12 @@ namespace epi_videoCodec_ciscoExtended
             public E164 E164 { get; set; }
             [JsonProperty("id")]
             public Id H323AliasId { get; set; }
+
+            public H323Alias()
+            {
+                E164 = new E164();
+                H323AliasId = new Id();
+            }
         }
 
 
@@ -520,6 +558,12 @@ namespace epi_videoCodec_ciscoExtended
             public Gatekeeper Gatekeeper { get; set; }
             public H323Alias H323Alias { get; set; }
             public Nat Nat { get; set; }
+
+            public H323()
+            {
+                H323Alias = new H323Alias();
+
+            }
         }
 
         public class Name
@@ -992,10 +1036,6 @@ namespace epi_videoCodec_ciscoExtended
 
         public class PhonebookServer
         {
-            [JsonProperty("id")]
-            public string PhonebookServerId { get; set; }
-            [JsonProperty("id")]
-            public Id IdObject { get; set; }
             public Type Type { get; set; }
             public Url Url { get; set; }
         }
@@ -1606,6 +1646,7 @@ namespace epi_videoCodec_ciscoExtended
                 Audio = new Audio();
                 Conference = new Conference();
                 Networks = new List<Network>();
+                H323 = new H323();
             }
         }
 

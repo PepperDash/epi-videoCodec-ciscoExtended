@@ -70,42 +70,53 @@ namespace epi_videoCodec_ciscoExtended
 
         public void LoginMessageReceived()
         {
+            if (!LoginMessageWasReceived)
+                Debug.Console(1, this, "Login Message Received.");
             LoginMessageWasReceived = true;
-            Debug.Console(1, this, "Login DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void JsonResponseModeMessageReceived()
         {
+            if (!JsonResponseModeSet)
+                Debug.Console(1, this, "Json Response Mode Message Received.");
+
             JsonResponseModeSet = true;
-            Debug.Console(1, this, "Json Response H323Mode DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void InitialStatusMessageReceived()
         {
+            if (!InitialConfigurationMessageWasReceived)
+                Debug.Console(1, this, "Initial Codec Status Message Received.");
+
             InitialStatusMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec PresenterTrackStatus DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void InitialConfigurationMessageReceived()
         {
+            if(!InitialConfigurationMessageWasReceived)
+                Debug.Console(1, this, "Initial Codec Configuration DiagnosticsMessage Received.");
             InitialConfigurationMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec Configuration DiagnosticsMessage Received.");
             CheckSyncStatus();
         }
 
         public void InitialSoftwareVersionMessageReceived()
         {
+            if(!InitialSoftwareVersionMessageWasReceived)
+                Debug.Console(1, this, "Inital Codec Software Information received");
+
             InitialSoftwareVersionMessageWasReceived = true;
-            Debug.Console(1, this, "Inital Codec Software Information received");
             CheckSyncStatus();
         }
+
         public void FeedbackRegistered()
         {
+            if (!FeedbackWasRegistered)
+                Debug.Console(1, this, "Initial Codec Feedback Registration Successful.");
+
             FeedbackWasRegistered = true;
-            Debug.Console(1, this, "Initial Codec Feedback Registration Successful.");
             CheckSyncStatus();
         }
 
@@ -123,14 +134,16 @@ namespace epi_videoCodec_ciscoExtended
 
         void CheckSyncStatus()
         {
-            if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived && InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
+            if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
+                InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                InitialSyncComplete = true;
                 Debug.Console(1, this, "Initial Codec Sync Complete!");
                 Debug.Console(1, this, "{0} Command queued. Processing now...", _commandQueue.Count);
 
                 // Invoke a thread for the queue
                 CrestronInvoke.BeginInvoke(o => ProcessQueuedCommands());
+
+                InitialSyncComplete = true;
             }
             else
                 InitialSyncComplete = false;

@@ -18,6 +18,11 @@ namespace epi_videoCodec_ciscoExtended
         public class ResultInfo
         {
             public TotalRows TotalRows { get; set; }
+
+            public ResultInfo()
+            {
+                TotalRows = new TotalRows();
+            }
         }
 
         public class LastUpdated
@@ -237,6 +242,11 @@ namespace epi_videoCodec_ciscoExtended
         public class Calls
         {
             public List<CiscoCall> Call { get; set; }
+
+            public Calls()
+            {
+                Call = new List<CiscoCall>();
+            }
         }
 
         public class ConnectMode
@@ -258,8 +268,9 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Booking
         {
-            [JsonProperty("LocalInstanceId")]
+            [JsonProperty("id")]
             public string StringId { get; set; }
+            [JsonProperty("Id")]
             public Id Id { get; set; }
             public Title Title { get; set; }
             public Agenda Agenda { get; set; }
@@ -290,12 +301,18 @@ namespace epi_videoCodec_ciscoExtended
 
         public class BookingsListResult
         {
-
+            [JsonProperty("Status")]
             public string Status { get; set; }
             public ResultInfo ResultInfo { get; set; }
             //public LastUpdated LastUpdated { get; set; }
-            [JsonProperty("booking")]
+            [JsonProperty("Booking")]
             public List<Booking> BookingsListResultBooking { get; set; }
+
+            public BookingsListResult()
+            {
+                BookingsListResultBooking = new List<Booking>();
+                ResultInfo = new ResultInfo();
+            }
         }
 
         public class CommandResponse
@@ -318,6 +335,10 @@ namespace epi_videoCodec_ciscoExtended
         {
             var meetings = new List<Meeting>();
 
+            if (bookings == null || bookings.Count == 0)
+            {
+                return meetings;
+            }
 
             foreach (var b in bookings)
             {
@@ -332,8 +353,7 @@ namespace epi_videoCodec_ciscoExtended
                 if (meeting.EndTime <= DateTime.Now) continue;
 
 
-                if (b.Id != null)
-                    meeting.Id = b.Id.Value;
+                meeting.Id = b.Id != null ? b.Id.Value : b.StringId;
 
                 if (b.Organizer != null)
                     meeting.Organizer = string.Format("{0}, {1}", b.Organizer.LastName.Value, b.Organizer.FirstName.Value);

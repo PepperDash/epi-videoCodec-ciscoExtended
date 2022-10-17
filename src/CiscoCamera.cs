@@ -37,12 +37,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void PanLeft()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: Left CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Left CallId: {0}", CallId));
         }
 
         public void PanRight()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: Right CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Right CallId: {0}", CallId));
         }
 
         public void PanStop()
@@ -56,12 +56,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void TiltDown()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: Down CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Down CallId: {0}", CallId));
         }
 
         public void TiltUp()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: Up CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Up CallId: {0}", CallId));
         }
 
         public void TiltStop()
@@ -75,12 +75,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public void ZoomIn()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: ZoomIn CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomIn CallId: {0}", CallId));
         }
 
         public void ZoomOut()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Move Value: ZoomOut CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomOut CallId: {0}", CallId));
         }
 
         public void ZoomStop()
@@ -93,7 +93,7 @@ namespace epi_videoCodec_ciscoExtended
 
         void Stop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand MediaChannelCalls FarEndControl CameraList Stop CallId: {0}", CallId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", CallId));
         }
 
         public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
@@ -185,7 +185,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public void PositionHome()
         {
-            // Not supported on Internal Spark CameraList
+            // Not supported on Internal Spark Camera
 
 
         }
@@ -198,7 +198,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Pan: Left PanSpeed: {1}", CameraId, PanSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Pan: Left PanSpeed: {1}", CameraId, PanSpeed));
                 isPanning = true;
             }
         }
@@ -207,14 +207,14 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Pan: Right PanSpeed: {1}", CameraId, PanSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Pan: Right PanSpeed: {1}", CameraId, PanSpeed));
                 isPanning = true;
             }
         }
 
         public void PanStop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Pan: Stop", CameraId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Pan: Stop", CameraId));
             isPanning = false;
         }
 
@@ -228,7 +228,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Tilt: Down TiltSpeed: {1}", CameraId, TiltSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Tilt: Down TiltSpeed: {1}", CameraId, TiltSpeed));
                 isTilting = true;
             }
         }
@@ -237,14 +237,14 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Tilt: Up TiltSpeed: {1}", CameraId, TiltSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Tilt: Up TiltSpeed: {1}", CameraId, TiltSpeed));
                 isTilting = true;
             }
         }
 
         public void TiltStop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Tilt: Stop", CameraId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Tilt: Stop", CameraId));
             isTilting = false;
         }
 
@@ -256,7 +256,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Zoom: In ZoomSpeed: {1}", CameraId, ZoomSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Zoom: In ZoomSpeed: {1}", CameraId, ZoomSpeed));
                 isZooming = true;
             }
         }
@@ -265,14 +265,14 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Zoom: Out ZoomSpeed: {1}", CameraId, ZoomSpeed));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Zoom: Out ZoomSpeed: {1}", CameraId, ZoomSpeed));
                 isZooming = true;
             }
         }
 
         public void ZoomStop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Zoom: Stop", CameraId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Zoom: Stop", CameraId));
             isZooming = false;
         }
 
@@ -284,7 +284,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Focus: Near", CameraId));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Focus: Near", CameraId));
                 isFocusing = true;
             }
         }
@@ -293,20 +293,20 @@ namespace epi_videoCodec_ciscoExtended
         {
             if (!isMoving)
             {
-                ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Focus: Far", CameraId));
+                ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Focus: Far", CameraId));
                 isFocusing = true;
             }
         }
 
         public void FocusStop()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand CameraList Ramp CameraId: {0} Focus: Stop", CameraId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Camera Ramp CameraId: {0} Focus: Stop", CameraId));
             isFocusing = false;
         }
 
         public void TriggerAutoFocus()
         {
-            ParentCodec.EnqueueCommand(string.Format("xCommand CameraList TriggerAutofocus CameraId: {0}", CameraId));
+            ParentCodec.EnqueueCommand(string.Format("xCommand Camera TriggerAutofocus CameraId: {0}", CameraId));
         }
 
         #endregion
