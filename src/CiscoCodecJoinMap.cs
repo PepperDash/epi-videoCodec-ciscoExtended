@@ -361,8 +361,103 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("WebexPinRequested")]
+        public JoinDataComplete WebexPinRequested = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 311,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex Pin Requested",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
 
+        [JoinName("WebexJoinedAsHost")]
+        public JoinDataComplete WebexJoinedAsHost = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 312,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinedAsHost",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
 
+        [JoinName("WebexJoinedAsGuest")]
+        public JoinDataComplete WebexJoinedAsGuest = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 313,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinedAsGuest",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexPinError")]
+        public JoinDataComplete WebexPinError = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 314,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexPinError",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexSendPin")]
+        public JoinDataComplete WebexSendPin = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 311,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexSendPin",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.DigitalSerial
+            });
+
+        [JoinName("WebexJoinAsGuest")]
+        public JoinDataComplete WebexJoinAsGuest = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 312,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinAsGuest",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexPinClear")]
+        public JoinDataComplete WebexPinClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 313,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexPinClear",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
 
         #endregion
 
