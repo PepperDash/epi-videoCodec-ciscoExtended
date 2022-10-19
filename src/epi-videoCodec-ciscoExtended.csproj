@@ -109,8 +109,10 @@
     <Compile Include="CiscoCodecJoinMap.cs" />
     <Compile Include="CiscoCodecPhonebookDataClasses.cs" />
     <Compile Include="CiscoCamera.cs" />
+    <Compile Include="CiscoCodecRequest.cs" />
     <Compile Include="CiscoRoomOsCodec.cs" />
     <Compile Include="CiscoCodecConfig.cs" />
+    <Compile Include="CiscoWebsocketClient.cs" />
     <Compile Include="CodecSyncState.cs" />
     <Compile Include="HttpApiServerExtended.cs" />
     <Compile Include="IHasCiscoCodecLayouts.cs" />
