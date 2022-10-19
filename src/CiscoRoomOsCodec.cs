@@ -74,6 +74,7 @@ namespace epi_videoCodec_ciscoExtended
 
 
 
+
     public class CiscoCodec : VideoCodecBase, IHasCallHistory, IHasCallFavorites, IHasDirectory,
         IHasScheduleAwareness, IOccupancyStatusProvider, IHasCodecLayoutsAvailable, IHasCodecSelfView,
         ICommunicationMonitor, IRouting, IHasCodecCameras, IHasCameraAutoMode, IHasCodecRoomPresets,
@@ -842,8 +843,8 @@ namespace epi_videoCodec_ciscoExtended
         private string UpdateActiveMeetingXSig(Meeting currentMeeting)
         {
             //const int _meetingsToDisplay = 3;            
-            const int maxDigitals = 4;
-            const int maxStrings = 14;
+            const int maxDigitals = 3;
+            const int maxStrings = 8;
             const int offset = maxDigitals + maxStrings;
             const int digitalIndex = maxStrings; //15
             const int stringIndex = 0;
@@ -871,7 +872,6 @@ namespace epi_videoCodec_ciscoExtended
              * IsJoinable - 1
              * IsDialable - 2
              * IsAvailable - 3
-             * Following Meeting Present - 4
              * 
              * Serials
              * Organizer - 1
@@ -882,24 +882,12 @@ namespace epi_videoCodec_ciscoExtended
              * End Time - 6
              * OrganizerId - 7
              * Active "StartTime - EndTime" - 8
-             * TimeRemaining Text - 9
-             * TimeRemaining MinutesRemaining Text - 10
-             * TimeRemaining MinutesRemaining Analog - 11
-             * TimeToFollowingMeeting Text - 12
-             * TimeToFollowingMeeting Minutes Analog - 13
-             * TimeOfFollowingMeeting - 14
             */
             try
             {
                 if (meeting != null)
                 {
-                    var timeRemaining = meeting.StartTime - DateTime.Now;
-                    var timeRemaingToNext = nextMeeting != null
-                        ? (nextMeeting.StartTime - DateTime.Now).ToString()
-                        : "None Scheduled";
                     //digitals
-                    if (!nextMeetingOnly)
-                    {
                         tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, meeting.Joinable);
                         tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Id != "0");
                         tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, true);
@@ -919,47 +907,7 @@ namespace epi_videoCodec_ciscoExtended
                         tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Format("{0} - {1}",
                             meeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture),
                             meeting.EndTime.ToString(_timeFormatSpecifier, Global.Culture)));
-                        tokenArray[stringIndex + 8] = new XSigSerialToken(stringIndex + 9, String.Format("{0}",
-                            timeRemaining.ToString()));
-                        tokenArray[stringIndex + 9] = new XSigSerialToken(stringIndex + 10, String.Format("{0}",
-                            timeRemaining.Minutes.ToString(CultureInfo.InvariantCulture)));
-                        tokenArray[stringIndex + 10] = new XSigAnalogToken(stringIndex + 11,
-                            (ushort)timeRemaining.Minutes);
 
-                    }
-                    else
-                    {
-                        tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, false);
-                        tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, false);
-                        tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, false);
-
-
-                        tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, String.Empty);
-                        tokenArray[stringIndex + 1] = new XSigSerialToken(stringIndex + 2, String.Empty);
-                        tokenArray[stringIndex + 2] = new XSigSerialToken(stringIndex + 3,
-                            String.Empty);
-                        tokenArray[stringIndex + 3] = new XSigSerialToken(stringIndex + 4, String.Empty);
-                        tokenArray[stringIndex + 4] = new XSigSerialToken(stringIndex + 5, String.Empty);
-                        tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6, String.Empty);
-                        tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, String.Empty);
-                        tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Empty);
-                        tokenArray[stringIndex + 8] = new XSigSerialToken(stringIndex + 9, String.Empty);
-                        tokenArray[stringIndex + 9] = new XSigSerialToken(stringIndex + 10, String.Empty);
-                        tokenArray[stringIndex + 10] = new XSigAnalogToken(stringIndex + 11,
-                            0);
-
-                    }
-
-                    //These are constant, no matter what!
-                    tokenArray[digitalIndex + 3] = new XSigDigitalToken(digitalIndex + 4, nextMeeting != null);
-                    tokenArray[stringIndex + 11] = new XSigSerialToken(stringIndex + 12,
-                        timeRemaingToNext);
-                    tokenArray[stringIndex + 12] = new XSigAnalogToken(stringIndex + 13,
-                        nextMeeting != null ? (ushort)(nextMeeting.StartTime - DateTime.Now).Minutes : (ushort)0);
-                    tokenArray[stringIndex + 13] = new XSigSerialToken(stringIndex + 14,
-                        nextMeeting != null
-                            ? nextMeeting.StartTime.ToString(_timeFormatSpecifier, Global.Culture)
-                            : "None Scheduled");
                 }
 
                 else
@@ -982,12 +930,6 @@ namespace epi_videoCodec_ciscoExtended
                     tokenArray[stringIndex + 5] = new XSigSerialToken(stringIndex + 6, String.Empty);
                     tokenArray[stringIndex + 6] = new XSigSerialToken(stringIndex + 7, String.Empty);
                     tokenArray[stringIndex + 7] = new XSigSerialToken(stringIndex + 8, String.Empty);
-                    tokenArray[stringIndex + 8] = new XSigSerialToken(stringIndex + 9, String.Empty);
-                    tokenArray[stringIndex + 9] = new XSigSerialToken(stringIndex + 10, String.Empty);
-                    tokenArray[stringIndex + 10] = new XSigAnalogToken(stringIndex + 11, 0);
-                    tokenArray[stringIndex + 11] = new XSigSerialToken(stringIndex + 12, String.Empty);
-                    tokenArray[stringIndex + 12] = new XSigAnalogToken(stringIndex + 13, 0);
-                    tokenArray[stringIndex + 13] = new XSigSerialToken(stringIndex + 14, String.Empty);
 
                 }
 
@@ -1999,7 +1941,6 @@ ConnectorID: {2}"
 
                             if (tempActiveCall.Status == eCodecCallStatus.Connected)
                             {
-
                                 GetCallHistory();
                             }
 
@@ -5314,6 +5255,20 @@ ConnectorID: {2}"
 
     }
 
+    public static class ExtensionsMethods
+    {
+        public static string EncodeBase64(this string plainText)
+        {
+            var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
+            return Convert.ToBase64String(plainTextBytes);
+        }
+
+        public static string DecodeBase64(this string encodedText)
+        {
+            var encodedTextBytes = Encoding.UTF8.GetBytes(encodedText);
+            return Convert.ToString(encodedTextBytes);
+        }
+    }
 
 }
 
