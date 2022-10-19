@@ -77,6 +77,7 @@ namespace epi_videoCodec_ciscoExtended
         public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
+            PhonebookMode = "corporate";
         }
     }
 
