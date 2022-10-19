@@ -16,7 +16,7 @@ namespace epi_videoCodec_ciscoExtended
     public class CiscoWebsocketClient : IKeyed
     {
         public int IdTracker { get; private set; }
-        private readonly HttpsClient _client;
+        private readonly WebSocketClient _client;
         public string Key { get; private set; }
         private readonly CrestronQueue<Action> _requestQueue = new CrestronQueue<Action>(20);
         private readonly ControlPropertiesConfig _config;
@@ -39,10 +39,41 @@ namespace epi_videoCodec_ciscoExtended
 
             Key = string.Format("{0}-{1}-websocket", key, _config.Method).ToLower();
 
-            _client = new HttpsClient
-            {
-                IncludeHeaders = true,
-            };
+
+
+            _client =
+                new WebSocketClient()
+                {
+                    URL = String.Format("wss://{0}:{1}@{2}/ws", _config.TcpSshProperties.Username,
+                    _config.TcpSshProperties.Password, _config.TcpSshProperties.Address),
+                    KeepAlive = true,
+                    ConnectionCallBack =  WebsocketConnected,
+                    DisconnectCallBack = WebsocketDisconnected,
+                    ReceiveCallBack = WebsocketReceiveCallback
+                };
+            _client.ConnectAsync();
+        }
+
+        public int WebsocketConnected(WebSocketClient.WEBSOCKET_RESULT_CODES error)
+        {
+            Debug.Console(1, this, "Websocket Connected Result = {0}", error);
+            return (int)error;
+        }
+
+        public int WebsocketDisconnected(WebSocketClient.WEBSOCKET_RESULT_CODES error, object item)
+        {
+            Debug.Console(1, this, "Websocket Disconnected Result = {0}", error);
+            return (int)error;
+        }
+
+        public int WebsocketReceiveCallback(byte[] data, uint dataLen, 
+            WebSocketClient.WEBSOCKET_PACKET_TYPES opcode, WebSocketClient.WEBSOCKET_RESULT_CODES error)
+        {
+            if (opcode != WebSocketClient.WEBSOCKET_PACKET_TYPES.LWS_WS_OPCODE_07__TEXT_FRAME) return (int) error;
+            var strData = Encoding.ASCII.GetString(data, 0, data.Length);
+            Debug.Console(0, this, "Incoming Data Packet From Websocket");
+            Debug.Console(0, this, "{0}", strData);
+            return (int) error;
         }
 
         /*

@@ -2100,7 +2100,7 @@ ConnectorID: {2}"
             var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
             var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
             var systemUnitToken = statusToken.SelectToken("SystemUnit");
-            var cameraToken = statusToken.SelectToken("Camera");
+            var cameraToken = statusToken.SelectToken("Cameras");
             var networkToken = statusToken.SelectToken("Network");
             var sipToken = statusToken.SelectToken("Sip");
             var conferenceToken = statusToken.SelectToken("Conference");
