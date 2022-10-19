@@ -115,6 +115,7 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
+        public readonly WebexPinRequestHandler WebexPinRequestHandler;
 
         private Meeting _currentMeeting;
 
@@ -141,7 +142,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public StatusMonitorBase CommunicationMonitor { get; private set; }
 
-        private readonly GenericQueue _receiveQueue;
+        private readonly MessageProcessor _receiveQueue;
 
         public BoolFeedback PresentationViewMaximizedFeedback { get; private set; }
 
@@ -199,6 +200,7 @@ namespace epi_videoCodec_ciscoExtended
         public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
         public BoolFeedback SpeakerTrackAvailableFeedback { get; private set; }
         public BoolFeedback PresenterTrackAvailableFeedback { get; private set; }
+        public BoolFeedback DirectorySearchInProgress { get; private set; }
 
         public FeedbackGroup PresenterTrackFeedbackGroup { get; private set; }
 
@@ -535,20 +537,21 @@ namespace epi_videoCodec_ciscoExtended
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
             PresentationStates = eCodecPresentationStates.LocalOnly;
-
+            _receiveQueue = new MessageProcessor(this);
+            WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
 
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
             _config = props;
 
             MeetingsToDisplay = _config.OverrideMeetingsLimit ? 50 : 0;
-            _timeFormatSpecifier = _config.TimeFormatSpecifier.NullIfEmpty() ?? "t";
-            _dateFormatSpecifier = _config.DateFormatSpecifier.NullIfEmpty() ?? "d";
+            _timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
+            _dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
             _joinableCooldownSeconds = _config.JoinableCooldownSeconds;
 
             PreferredTrackingMode = eCameraTrackingCapabilities.SpeakerTrack;
 
-            var trackingMode = _config.DefaultCameraTrackingMode.ToLower();
+            var trackingMode = _config.DefaultCameraTrackingMode ?? string.Empty;
 
 
             if (!String.IsNullOrEmpty(trackingMode))
@@ -566,7 +569,6 @@ namespace epi_videoCodec_ciscoExtended
             }
 
             // The queue that will collect the repsonses in the order they are received
-            _receiveQueue = new GenericQueue(this.Key + "-rxQueue", 25);
 
             RoomIsOccupiedFeedback = new BoolFeedback(RoomIsOccupiedFeedbackFunc);
             PeopleCountFeedback = new IntFeedback(PeopleCountFeedbackFunc);
@@ -577,7 +579,7 @@ namespace epi_videoCodec_ciscoExtended
             FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
             CameraIsOffFeedback = new BoolFeedback(() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue);
             AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
-
+            DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
             //PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
 
 
@@ -723,12 +725,9 @@ namespace epi_videoCodec_ciscoExtended
             {
                 return;
             }
+
             Debug.Console(2, this, "Setting branding properties enable: {0} _brandingUrl {1}", props.UiBranding.Enable,
                 props.UiBranding.BrandingUrl);
-
-            BrandingEnabled = props.UiBranding.Enable;
-
-            _brandingUrl = props.UiBranding.BrandingUrl;
 
             AvailableLayoutsChanged += CiscoCodec_AvailableLayoutsChanged;
             CurrentLayoutChanged += CiscoCodec_CurrentLayoutChanged;
@@ -1258,27 +1257,38 @@ namespace epi_videoCodec_ciscoExtended
 
         public override void Initialize()
         {
-            RegisterSystemUnitEvents();
-            RegisterSipEvents();
-            RegisterNetworkEvents();
-            //RegisterVideoEvents();
-            //RegisterConferenceEvents();
-            RegisterRoomPresetEvents();
-            RegisterH323Configuration();
-            RegisterAutoAnswer();
-            RegisterDisconnectEvents();
-            RegisterUserInterfaceEvents();
-
-            var socket = Communication as ISocketStatus;
-            if (socket != null)
+            try
             {
-                socket.ConnectionChange += socket_ConnectionChange;
+                RegisterSystemUnitEvents();
+                RegisterSipEvents();
+                RegisterNetworkEvents();
+                //RegisterVideoEvents();
+                //RegisterConferenceEvents();
+                RegisterRoomPresetEvents();
+                RegisterH323Configuration();
+                RegisterAutoAnswer();
+                RegisterDisconnectEvents();
+                RegisterUserInterfaceEvents();
+
+                var socket = Communication as ISocketStatus;
+                if (socket != null)
+                {
+                    socket.ConnectionChange += socket_ConnectionChange;
+                }
+
+                if (Communication == null)
+                    throw new NullReferenceException("Coms");
+
+                Communication.Connect();
+
+                CommunicationMonitor.Start();
+
             }
-
-            Communication.Connect();
-
-            CommunicationMonitor.Start();
-
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Caught an exception in initialize:{0}", ex.StackTrace);
+                throw;
+            }
 
         }
 
@@ -1293,6 +1303,7 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Status/Audio" + Delimiter +
                 prefix + "/Status/Call" + Delimiter +
                 prefix + "/Status/Conference/Presentation" + Delimiter +
+                prefix + "/Status/Conference/Call/AuthenticationRequest" + Delimiter +
                 prefix + "/Status/Conference/DoNotDisturb" + Delimiter +
                 prefix + "/Status/Cameras/SpeakerTrack" + Delimiter +
                 prefix + "/Status/Cameras/SpeakerTrack/Status" + Delimiter +
@@ -1311,7 +1322,8 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Event/Bookings" + Delimiter +
                 prefix + "/Event/CameraPresetListUpdated" + Delimiter +
                 prefix + "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier" + Delimiter +
-                prefix + "/Event/CallDisconnect" + Delimiter;
+                prefix + "/Event/CallDisconnect" + Delimiter +
+                prefix + "/Event/Conference/Call/AuthenticationResponse" + Delimiter;
             // Keep CallDisconnect last to detect when feedback registration completes correctly
             return feedbackRegistrationExpression;
         }
@@ -1453,6 +1465,7 @@ ConnectorID: {2}"
             //Communication.Connect();
         }
 
+        
         /// <summary>
         /// Gathers responses from the codec (including the delimiter.  Responses are checked to see if they contain JSON data and if so, the data is collected until a complete JSON
         /// message is received before forwarding the message to be deserialized.
@@ -1467,78 +1480,81 @@ ConnectorID: {2}"
                     Debug.Console(1, this, "RX: '{0}'", ComTextHelper.GetDebugText(args.Text));
             }
 
-            if (args.Text.ToLower().Contains("xcommand"))
-            {
-                Debug.Console(1, this, "Received command echo response.  Ignoring");
-                return;
-            }
-
-            if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = true;
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Incoming JSON message...");
-
-                _jsonMessage = new StringBuilder();
-            }
-            else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = false;
-
-                _jsonMessage.Append(args.Text);
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                // Enqueue the complete message to be deserialized
-
-                _receiveQueue.Enqueue(new ProcessStringMessage(_jsonMessage.ToString(), DeserializeResponse));
-
-                return;
-            }
-
-            if (_jsonFeedbackMessageIsIncoming)
-            {
-                _jsonMessage.Append(args.Text);
-
-                //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                return;
-            }
-
-            if (!_syncState.InitialSyncComplete)
-            {
-                switch (args.Text.Trim().ToLower()) // remove the whitespace
+            _receiveQueue.PostMessage(() => 
                 {
-                    case "*r login successful":
+                    if (args.Text.ToLower().Contains("xcommand"))
                     {
-                        _syncState.LoginMessageReceived();
-
-                        if (_loginMessageReceivedTimer != null)
-                            _loginMessageReceivedTimer.Stop();
-
-                        //SendText("echo off");
-                        SendText("xPreferences outputmode json");
-                        break;
+                        Debug.Console(1, this, "Received command echo response.  Ignoring");
+                        return;
                     }
-                    case "xpreferences outputmode json":
+
+                    if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
                     {
-                        if (_syncState.JsonResponseModeSet)
-                            return;
+                        _jsonFeedbackMessageIsIncoming = true;
 
-                        _syncState.JsonResponseModeMessageReceived();
+                        if (CommDebuggingIsOn)
+                            Debug.Console(1, this, "Incoming JSON message...");
 
-                        if (!_syncState.InitialStatusMessageWasReceived)
-                            SendText("xStatus");
-                        break;
+                        _jsonMessage = new StringBuilder();
                     }
-                    case "xfeedback register /event/calldisconnect":
+                    else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
                     {
-                        _syncState.FeedbackRegistered();
-                        break;
+                        _jsonFeedbackMessageIsIncoming = false;
+
+                        _jsonMessage.Append(args.Text);
+
+                        if (CommDebuggingIsOn)
+                            Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
+
+                        // Enqueue the complete message to be deserialized
+
+                        DeserializeResponse(_jsonMessage.ToString());
+
+                        return;
                     }
-                }
-            }
+
+                    if (_jsonFeedbackMessageIsIncoming)
+                    {
+                        _jsonMessage.Append(args.Text);
+
+                        //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
+                        return;
+                    }
+
+                    if (!_syncState.InitialSyncComplete)
+                    {
+                        switch (args.Text.Trim().ToLower()) // remove the whitespace
+                        {
+                            case "*r login successful":
+                            {
+                                _syncState.LoginMessageReceived();
+
+                                if (_loginMessageReceivedTimer != null)
+                                    _loginMessageReceivedTimer.Stop();
+
+                                //SendText("echo off");
+                                SendText("xPreferences outputmode json");
+                                break;
+                            }
+                            case "xpreferences outputmode json":
+                            {
+                                if (_syncState.JsonResponseModeSet)
+                                    return;
+
+                                _syncState.JsonResponseModeMessageReceived();
+
+                                if (!_syncState.InitialStatusMessageWasReceived)
+                                    SendText("xStatus");
+                                break;
+                            }
+                            case "xfeedback register /event/calldisconnect":
+                            {
+                                _syncState.FeedbackRegistered();
+                                break;
+                            }
+                        }
+                    }
+                });
         }
 
         /// <summary>
@@ -2132,6 +2148,7 @@ ConnectorID: {2}"
                 Debug.Console(2, this, "Selector = {0}", tokenSelector);
             }
         }
+
         private object ReturnPopulatedObjectWithToken(JToken jToken, string tokenSelector, object target)
         {
             try
@@ -2214,8 +2231,8 @@ ConnectorID: {2}"
             }
             if (mediaChannelsToken != null)
             {
-                Debug.Console(0, this, "MediaChannelsToken = ");
-                Debug.Console(0, this, "{0}", mediaChannelsToken);
+                Debug.Console(1, this, "MediaChannelsToken = ");
+                Debug.Console(1, this, "{0}", mediaChannelsToken);
             }
             if (status.Audio != null)
             {
@@ -2274,7 +2291,10 @@ ConnectorID: {2}"
                     SetPresentationMode(sendingModeToken.ToString());
                 }
             }
+
+            WebexPinRequestHandler.ParseAuthenticationRequest(conferenceToken);
         }
+
 
         private bool ProcessConferencePresentationGhost(JToken ghostToken)
         {
@@ -2340,23 +2360,30 @@ ConnectorID: {2}"
         }
 
         private void ParsePhonebookDirectoryResponseTypical(
-            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject, string resultId)
         {
-            var directoryResults = new CodecDirectory();
+            while (_searches.Count > 0)
+            {
+                if (resultId != _searches.Dequeue())
+                    continue;
 
-            if (
-                phonebookSearchResultResponseObject.ResultInfo
-                    .TotalRows.Value != "0")
-                directoryResults =
-                    CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-                        phonebookSearchResultResponseObject);
+                var directoryResults = new CodecDirectory();
 
-            PrintDirectory(directoryResults);
+                if (
+                    phonebookSearchResultResponseObject.ResultInfo
+                        .TotalRows.Value != "0")
+                    directoryResults =
+                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+                            phonebookSearchResultResponseObject);
 
-            DirectoryBrowseHistory.Add(directoryResults);
+                PrintDirectory(directoryResults);
 
-            OnDirectoryResultReturned(directoryResults);
+                DirectoryBrowseHistory.Add(directoryResults);
 
+                OnDirectoryResultReturned(directoryResults);
+                _searchInProgress = false;
+                DirectorySearchInProgress.FireUpdate();
+            }
         }
 
         private void ParsePhonebookDirectoryFolders(
@@ -2400,26 +2427,43 @@ ConnectorID: {2}"
         private void ParseEventObject(JToken eventToken)
         {
             if (eventToken == null) return;
-            var codecEvent = new CiscoCodecEvents.Event();
-            var bookingsEvent = eventToken.SelectToken("Bookings");
-            var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
-            if (codecEvent.CallDisconnect != null)
-            {
-                PopulateObjectWithToken(eventToken, "CallDisconnect", codecEvent.CallDisconnect);
-                EvalutateDisconnectEvent(codecEvent);
-            }
-            if (bookingsEvent != null)
-            {
-                Debug.Console(2, this, "Parse Bookings");
-                GetBookings(null);
-            }
-            if (userInterfaceEvent != null)
-            {
-                Debug.Console(2, this, "Parse UserInterface");
 
-                PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
+            try
+            {
+                var codecEvent = new CiscoCodecEvents.Event();
+                var bookingsEvent = eventToken.SelectToken("Bookings");
+                var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
+                var conferenceEvent = eventToken.SelectToken("Conference");
 
-                ParseUserInterfaceEvent(codecEvent.UserInterface);
+                if (codecEvent.CallDisconnect != null)
+                {
+                    PopulateObjectWithToken(eventToken, "CallDisconnect", codecEvent.CallDisconnect);
+                    EvalutateDisconnectEvent(codecEvent);
+                }
+                if (bookingsEvent != null)
+                {
+                    Debug.Console(2, this, "Parse Bookings");
+                    GetBookings(null);
+                }
+                if (userInterfaceEvent != null)
+                {
+                    Debug.Console(2, this, "Parse UserInterface");
+
+                    PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
+
+                    ParseUserInterfaceEvent(codecEvent.UserInterface);
+                }
+                if (conferenceEvent != null)
+                {
+                    Debug.Console(0, this, "Parse conference event token {0}", conferenceEvent);
+                    WebexPinRequestHandler.ParseAuthenticationResponse(conferenceEvent);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Caught an exception parsing an event {0}", ex);
+                throw;
             }
         }
 
@@ -2431,11 +2475,10 @@ ConnectorID: {2}"
             CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
         }
 
-        private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken)
+        private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken, string resultId)
         {
             Debug.Console(2, this, "Parse Phonebook Search Result Response");
             var phonebookSearchResultResponseObject = new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
-
             PopulateObjectWithToken(phonebookSearchResultResponseToken, "PhonebookSearchResult",
                 phonebookSearchResultResponseObject);
             
@@ -2451,10 +2494,10 @@ ConnectorID: {2}"
                 ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
             }
             if (PhonebookSyncState.InitialSyncComplete)
-                ParsePhonebookDirectoryResponseTypical(phonebookSearchResultResponseObject);
+                ParsePhonebookDirectoryResponseTypical(phonebookSearchResultResponseObject, resultId);
         }
 
-        private void ParseCommandResponseObject(JToken commandResponseToken)
+        private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
         {
             if (commandResponseToken == null) return;
             var callHistoryRecentsResultResponse = commandResponseToken.SelectToken("CallHistoryRecentsResult");
@@ -2494,7 +2537,7 @@ ConnectorID: {2}"
             if (phonebookSearchResultResponse != null)
             {
                 Debug.Console(0, this, "Phonebook Search Result");
-                ParsePhonebookSearchResultResponse(commandResponseToken);
+                ParsePhonebookSearchResultResponse(commandResponseToken, resultId);
                 return;
 
             }
@@ -2541,35 +2584,38 @@ ConnectorID: {2}"
             BookingsRefreshTimer.Reset(90000, 90000);
         }
 
-
-
-
-
+        private static string ParseResultId(JObject obj)
+        {
+            try
+            {
+                return obj["ResultId"].ToString();
+            }
+            catch (Exception ex)
+            {
+                return Guid.Empty.ToString();
+            }
+        }
 
         private void DeserializeResponse(string response)
         {
             try
             {
                 using (var sReader = new StringReader(response))
+                using (var jReader = new JsonTextReader(sReader))
                 {
-                    using (var jReader = new JsonTextReader(sReader))
+                    while (jReader.Read())
                     {
-                        while (jReader.Read())
-                        {
-                            if (jReader.TokenType != JsonToken.StartObject) continue;
-                            var obj = JObject.Load(jReader);
+                        if (jReader.TokenType != JsonToken.StartObject) continue;
+                        var obj = JObject.Load(jReader);
 
-                            ParseStatusObject(JTokenValidInObject(obj, "Status"));
-                            ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
-                            ParseEventObject(JTokenValidInObject(obj, "Event"));
-                            ParseCommandResponseObject(JTokenValidInObject(obj, "CommandResponse"));
-                        }
+                        var resultId = ParseResultId(obj);
+                        Debug.Console(1, this, "Result ID:{0}", resultId);
+                        ParseStatusObject(JTokenValidInObject(obj, "Status"));
+                        ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
+                        ParseEventObject(JTokenValidInObject(obj, "Event"));
+                        ParseCommandResponseObject(JTokenValidInObject(obj, "CommandResponse"), resultId);
                     }
                 }
-
-
-
-
 
                 #region status
                 /*
@@ -3326,13 +3372,17 @@ ConnectorID: {2}"
         /// <param name="eventReceived"></param>
         private void EvalutateDisconnectEvent(CiscoCodecEvents.Event eventReceived)
         {
-            if (eventReceived == null || eventReceived.CallDisconnect == null) return;
+            if (eventReceived == null || eventReceived.CallDisconnect == null || eventReceived.CallDisconnect.CallId == null) return;
             var tempActiveCall =
-                ActiveCalls.FirstOrDefault(c => c.Id.Equals(eventReceived.CallDisconnect.CallId.Value));
+                ActiveCalls
+                    .FirstOrDefault(c => c.Id.Equals(eventReceived.CallDisconnect.CallId.Value));
+
             if (tempActiveCall == null)
             {
                 Debug.Console(1, this, "NO CALL MATCH!");
+                return;
             }
+
             Debug.Console(1, this, "DISCONNECT CALL {0}!", tempActiveCall.Id);
 
             ActiveCalls.Remove(tempActiveCall);
@@ -3448,6 +3498,7 @@ ConnectorID: {2}"
                 _phonebookMode));
         }
 
+        
         private void GetPhonebookContacts()
         {
             // Get Phonebook Folders (determine local/corporate from config, and set results limit)
@@ -3456,6 +3507,9 @@ ConnectorID: {2}"
                 _phonebookResultsLimit));
         }
 
+        private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
+        private bool _searchInProgress;
+ 
         /// <summary>
         /// Searches the codec phonebook for all contacts matching the search string
         /// </summary>
@@ -3468,12 +3522,17 @@ ConnectorID: {2}"
                 _phonebookInitialSearch ? "true" : "false");
 
             if (!_phonebookAutoPopulate && searchString == _lastSearched && !_phonebookInitialSearch) return;
+
+            _searchInProgress = !String.IsNullOrEmpty(searchString);
+            var tag = Guid.NewGuid();
+            _searches.Enqueue(tag.ToString());
             EnqueueCommand(
                 string.Format(
-                    "xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2}",
-                    searchString, _phonebookMode, _phonebookResultsLimit));
+                    "xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
+                    searchString, _phonebookMode, _phonebookResultsLimit, tag));
             _lastSearched = searchString;
             _phonebookInitialSearch = false;
+            DirectorySearchInProgress.FireUpdate();
         }
 
 
@@ -3851,6 +3910,8 @@ ConnectorID: {2}"
             LinkVideoCodecToApi(this, trilist, joinMap);
 
             LinkCiscoCodecToApi(trilist, joinMap);
+
+            WebexPinRequestHandler.LinkToApi(trilist, joinMap);
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
@@ -4097,6 +4158,7 @@ ConnectorID: {2}"
             trilist.SetSigTrueAction(joinMap.PresenterTrackBackground.JoinNumber, PresenterTrackBackground);
             trilist.SetSigTrueAction(joinMap.PresenterTrackPersistent.JoinNumber, PresenterTrackPersistent);
 
+            DirectorySearchInProgress.LinkInputSig(trilist.BooleanInput[joinMap.DirectorySearchBusy.JoinNumber]);
             PresentationActiveFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationActive.JoinNumber]);
 
             CodecSchedule.MeetingEventChange += (sender, args) =>
