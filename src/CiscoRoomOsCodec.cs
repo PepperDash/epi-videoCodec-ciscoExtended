@@ -116,6 +116,7 @@ namespace epi_videoCodec_ciscoExtended
         }
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
+        public readonly DoNotDisturbHandler DoNotDisturbHandler;
 
         private Meeting _currentMeeting;
 
@@ -539,6 +540,7 @@ namespace epi_videoCodec_ciscoExtended
             PresentationStates = eCodecPresentationStates.LocalOnly;
             _receiveQueue = new MessageProcessor(this);
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
+            DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
@@ -616,7 +618,6 @@ namespace epi_videoCodec_ciscoExtended
             CameraIsMutedFeedback = CameraIsOffFeedback;
             SupportsCameraOff = true;
 
-            DoNotDisturbModeIsOnFeedback = new BoolFeedback(() => CodecStatus.Status.StatusConference.DoNotDisturb.BoolValue);
             HalfWakeModeIsOnFeedback =
                 new BoolFeedback(() => CodecStatus.Status.Standby.State.Value.ToLower() == "halfwake");
             EnteringStandbyModeFeedback =
@@ -1032,9 +1033,6 @@ namespace epi_videoCodec_ciscoExtended
                 LocalLayoutFeedback.FireUpdate;
 
             CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction = ComputeLegacyLayout;
-
-            CodecStatus.Status.StatusConference.DoNotDisturb.ValueChangedAction = DoNotDisturbModeIsOnFeedback.FireUpdate;
-
 
             CodecConfiguration.Configuration.Audio.SoundsAndAlerts.RingVolume.ValueChangedAction =
                 RingtoneVolumeFeedback.FireUpdate;
@@ -2293,6 +2291,7 @@ ConnectorID: {2}"
             }
 
             WebexPinRequestHandler.ParseAuthenticationRequest(conferenceToken);
+            DoNotDisturbHandler.ParseStatus(conferenceToken);
         }
 
 
@@ -2609,7 +2608,6 @@ ConnectorID: {2}"
                         var obj = JObject.Load(jReader);
 
                         var resultId = ParseResultId(obj);
-                        Debug.Console(1, this, "Result ID:{0}", resultId);
                         ParseStatusObject(JTokenValidInObject(obj, "Status"));
                         ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
                         ParseEventObject(JTokenValidInObject(obj, "Event"));
@@ -3922,8 +3920,6 @@ ConnectorID: {2}"
             var dndCodec = this as IHasDoNotDisturbMode;
             dndCodec.DoNotDisturbModeIsOnFeedback.LinkInputSig(
                 trilist.BooleanInput[joinMap.ActivateDoNotDisturbMode.JoinNumber]);
-            dndCodec.DoNotDisturbModeIsOnFeedback.LinkComplementInputSig(
-                trilist.BooleanInput[joinMap.DeactivateDoNotDisturbMode.JoinNumber]);
 
             trilist.SetSigFalseAction(joinMap.ActivateDoNotDisturbMode.JoinNumber,
                 dndCodec.ActivateDoNotDisturbMode);
@@ -5059,29 +5055,6 @@ ConnectorID: {2}"
 
         #region IHasDoNotDisturbMode Members
 
-        public BoolFeedback DoNotDisturbModeIsOnFeedback { get; private set; }
-
-        public void ActivateDoNotDisturbMode()
-        {
-            EnqueueCommand("xCommand Conference DoNotDisturb Activate");
-        }
-
-        public void DeactivateDoNotDisturbMode()
-        {
-            EnqueueCommand("xCommand Conference DoNotDisturb Deactivate");
-        }
-
-        public void ToggleDoNotDisturbMode()
-        {
-            if (DoNotDisturbModeIsOnFeedback.BoolValue)
-            {
-                DeactivateDoNotDisturbMode();
-            }
-            else
-            {
-                ActivateDoNotDisturbMode();
-            }
-        }
 
         #endregion
 
@@ -5120,6 +5093,25 @@ ConnectorID: {2}"
             handler(this, args);
         }
 
+        public void ActivateDoNotDisturbMode()
+        {
+            DoNotDisturbHandler.ActivateDoNotDisturbMode();
+        }
+
+        public void DeactivateDoNotDisturbMode()
+        {
+            DoNotDisturbHandler.DeactivateDoNotDisturbMode();
+        }
+
+        public void ToggleDoNotDisturbMode()
+        {
+            DoNotDisturbHandler.ToggleDoNotDisturbMode();
+        }
+
+        public BoolFeedback DoNotDisturbModeIsOnFeedback
+        {
+            get { return DoNotDisturbHandler.DoNotDisturbModeIsOnFeedback; }
+        }
     }
 
     public class CodecInfoChangedEventArgs : EventArgs

@@ -152,7 +152,6 @@ namespace epi_videoCodec_ciscoExtended
                 if (request.Call == null || request.Call.AuthenticationResponse == null)
                     return;
 
-                //var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
                 var pinEntered = request.Call.AuthenticationResponse.PinEntered;
                 
                 if (pinEntered != null)
@@ -181,7 +180,6 @@ namespace epi_videoCodec_ciscoExtended
                     PinIncorrect.Start();
                     _hostPin = string.Empty;
                     Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
-                    return;
                 }
             });
         }
