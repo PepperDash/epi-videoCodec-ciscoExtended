@@ -540,6 +540,16 @@ namespace epi_videoCodec_ciscoExtended
             CurrentLayout = string.Empty;
             PresentationStates = eCodecPresentationStates.LocalOnly;
             _receiveQueue = new MessageProcessor(this);
+            _searchTimeout = new CTimer(_ =>
+            {
+                Debug.Console(1, this, "Search timed out... clearing");
+                _searches.Clear();
+                _searchInProgress = false;
+                DirectorySearchInProgress.FireUpdate();
+                var emptyDirectory = new CodecDirectory();
+                OnDirectoryResultReturned(emptyDirectory);
+            }, Timeout.Infinite);
+
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 
@@ -2290,7 +2300,6 @@ ConnectorID: {2}"
                 {
                     SendText("xStatus SystemUnit");
                 }
-
             }
             catch (Exception e)
             {
@@ -2304,23 +2313,19 @@ ConnectorID: {2}"
         {
             while (_searches.Count > 0)
             {
-                if (resultId != _searches.Dequeue())
+                if (resultId != _searches.Dequeue(50))
                     continue;
 
+                _searchTimeout.Stop();
                 var directoryResults = new CodecDirectory();
-
-                if (
-                    phonebookSearchResultResponseObject.ResultInfo
-                        .TotalRows.Value != "0")
+                if (phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value != "0")
                     directoryResults =
-                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-                            phonebookSearchResultResponseObject);
+                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(phonebookSearchResultResponseObject);
 
                 PrintDirectory(directoryResults);
-
                 DirectoryBrowseHistory.Add(directoryResults);
-
                 OnDirectoryResultReturned(directoryResults);
+
                 _searchInProgress = false;
                 DirectorySearchInProgress.FireUpdate();
             }
@@ -3447,6 +3452,7 @@ ConnectorID: {2}"
         }
 
         private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
+        private readonly CTimer _searchTimeout;
         private bool _searchInProgress;
  
         /// <summary>
@@ -3461,7 +3467,6 @@ ConnectorID: {2}"
                 _phonebookInitialSearch ? "true" : "false");
 
             if (!_phonebookAutoPopulate && searchString == _lastSearched && !_phonebookInitialSearch) return;
-
             _searchInProgress = !String.IsNullOrEmpty(searchString);
             var tag = Guid.NewGuid();
             _searches.Enqueue(tag.ToString());
@@ -3472,6 +3477,7 @@ ConnectorID: {2}"
             _lastSearched = searchString;
             _phonebookInitialSearch = false;
             DirectorySearchInProgress.FireUpdate();
+            _searchTimeout.Reset(10000);
         }
 
 
