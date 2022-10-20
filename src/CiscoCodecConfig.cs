@@ -86,8 +86,8 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("autoShareContentWhileInCall")]
         public bool AutoShareContentWhileInCall { get; set; }
 
-        [JsonProperty("defaultShareLocalRemote")]
-        public bool DefaultShareLocalRemote { get; set; }
+        [JsonProperty("defaultShareLocalOnly")]
+        public bool DefaultShareLocalOnly { get; set; }
     }
 
     public class BrandingLogoProperties
