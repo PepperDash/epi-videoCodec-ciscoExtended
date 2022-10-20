@@ -561,6 +561,9 @@ namespace epi_videoCodec_ciscoExtended
             _timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
             _dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
             _joinableCooldownSeconds = _config.JoinableCooldownSeconds;
+            PresentationStates = _config.Sharing.DefaultShareLocalRemote
+                ? eCodecPresentationStates.LocalRemote
+                : eCodecPresentationStates.LocalOnly;
 
             PreferredTrackingMode = eCameraTrackingCapabilities.SpeakerTrack;
 
@@ -4211,13 +4214,15 @@ ConnectorID: {2}"
         public void SetPresentationLocalOnly()
         {
             PresentationStates = eCodecPresentationStates.LocalOnly;
-            StartSharing();
+            if (_presentationActive)
+                StartSharing();
         }
 
         public void SetPresentationLocalRemote()
         {
             PresentationStates = eCodecPresentationStates.LocalRemote;
-            StartSharing();
+            if (_presentationActive)
+                StartSharing();
         }
 
         public void SetPresentationLocalRemoteToggle()

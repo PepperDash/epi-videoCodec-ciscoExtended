@@ -352,7 +352,6 @@ namespace epi_videoCodec_ciscoExtended
                 
                 if (meeting.EndTime <= DateTime.Now) continue;
 
-
                 meeting.Id = b.Id != null ? b.Id.Value : b.StringId;
 
                 if (b.Organizer != null)
