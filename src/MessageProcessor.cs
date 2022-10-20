@@ -7,8 +7,8 @@ namespace epi_videoCodec_ciscoExtended
     public class MessageProcessor
     {
         private readonly IKeyed _parent;
-        public const int Idle = 0;
-        public const int InProgress = 1;
+        private const int Idle = 0;
+        private const int InProgress = 1;
 
         private int _status;
 
