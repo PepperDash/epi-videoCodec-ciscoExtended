@@ -3605,7 +3605,7 @@ ConnectorID: {2}"
         public override void EndCall(CodecActiveCallItem activeCall)
         {
             EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
-            PresentationStates = eCodecPresentationStates.LocalOnly;
+            // PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void EndAllCalls()
@@ -3614,7 +3614,7 @@ ConnectorID: {2}"
             {
                 EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
             }
-            PresentationStates = eCodecPresentationStates.LocalOnly;
+            // PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void AcceptCall(CodecActiveCallItem item)
