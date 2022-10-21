@@ -144,7 +144,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public StatusMonitorBase CommunicationMonitor { get; private set; }
 
-        private readonly MessageProcessor _receiveQueue;
+        private readonly GenericQueue _receiveQueue;
 
         public BoolFeedback PresentationViewMaximizedFeedback { get; private set; }
 
@@ -538,7 +538,7 @@ namespace epi_videoCodec_ciscoExtended
             _lastSearched = string.Empty;
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
-            _receiveQueue = new MessageProcessor(this);
+            _receiveQueue = new GenericQueue(Key + "-queue", 500);
             _searchTimeout = new CTimer(_ =>
             {
                 Debug.Console(1, this, "Search timed out... clearing");
@@ -1440,81 +1440,84 @@ ConnectorID: {2}"
                     Debug.Console(1, this, "RX: '{0}'", ComTextHelper.GetDebugText(args.Text));
             }
 
-            _receiveQueue.PostMessage(() => 
+            var message = new ProcessStringMessage(args.Text, ProcessResponse);
+            _receiveQueue.Enqueue(message);
+        }
+
+        private void ProcessResponse(string response)
+        {
+            if (response.ToLower().Contains("xcommand"))
+            {
+                Debug.Console(1, this, "Received command echo response.  Ignoring");
+                return;
+            }
+
+            if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
+            {
+                _jsonFeedbackMessageIsIncoming = true;
+
+                if (CommDebuggingIsOn)
+                    Debug.Console(1, this, "Incoming JSON message...");
+
+                _jsonMessage = new StringBuilder();
+            }
+            else if (response == "}" + Delimiter) // Check for the end of a JSON message
+            {
+                _jsonFeedbackMessageIsIncoming = false;
+
+                _jsonMessage.Append(response);
+
+                if (CommDebuggingIsOn)
+                    Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
+
+                // Enqueue the complete message to be deserialized
+
+                DeserializeResponse(_jsonMessage.ToString());
+
+                return;
+            }
+
+            if (_jsonFeedbackMessageIsIncoming)
+            {
+                _jsonMessage.Append(response);
+
+                //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
+                return;
+            }
+
+            if (!_syncState.InitialSyncComplete)
+            {
+                switch (response.Trim().ToLower()) // remove the whitespace
                 {
-                    if (args.Text.ToLower().Contains("xcommand"))
-                    {
-                        Debug.Console(1, this, "Received command echo response.  Ignoring");
-                        return;
-                    }
-
-                    if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = true;
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Incoming JSON message...");
-
-                        _jsonMessage = new StringBuilder();
-                    }
-                    else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = false;
-
-                        _jsonMessage.Append(args.Text);
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                        // Enqueue the complete message to be deserialized
-
-                        DeserializeResponse(_jsonMessage.ToString());
-
-                        return;
-                    }
-
-                    if (_jsonFeedbackMessageIsIncoming)
-                    {
-                        _jsonMessage.Append(args.Text);
-
-                        //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                        return;
-                    }
-
-                    if (!_syncState.InitialSyncComplete)
-                    {
-                        switch (args.Text.Trim().ToLower()) // remove the whitespace
+                    case "*r login successful":
                         {
-                            case "*r login successful":
-                            {
-                                _syncState.LoginMessageReceived();
+                            _syncState.LoginMessageReceived();
 
-                                if (_loginMessageReceivedTimer != null)
-                                    _loginMessageReceivedTimer.Stop();
+                            if (_loginMessageReceivedTimer != null)
+                                _loginMessageReceivedTimer.Stop();
 
-                                //SendText("echo off");
-                                SendText("xPreferences outputmode json");
-                                break;
-                            }
-                            case "xpreferences outputmode json":
-                            {
-                                if (_syncState.JsonResponseModeSet)
-                                    return;
-
-                                _syncState.JsonResponseModeMessageReceived();
-
-                                if (!_syncState.InitialStatusMessageWasReceived)
-                                    SendText("xStatus");
-                                break;
-                            }
-                            case "xfeedback register /event/calldisconnect":
-                            {
-                                _syncState.FeedbackRegistered();
-                                break;
-                            }
+                            //SendText("echo off");
+                            SendText("xPreferences outputmode json");
+                            break;
                         }
-                    }
-                });
+                    case "xpreferences outputmode json":
+                        {
+                            if (_syncState.JsonResponseModeSet)
+                                return;
+
+                            _syncState.JsonResponseModeMessageReceived();
+
+                            if (!_syncState.InitialStatusMessageWasReceived)
+                                SendText("xStatus");
+                            break;
+                        }
+                    case "xfeedback register /event/calldisconnect":
+                        {
+                            _syncState.FeedbackRegistered();
+                            break;
+                        }
+                }
+            }
         }
 
         /// <summary>

@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Core.Queues;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -101,7 +102,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private readonly IKeyed _parent;
         private readonly IBasicCommunication _coms;
-        private readonly MessageProcessor _handler;
+        private readonly GenericQueue _handler;
 
         private int _authRequestedCallInstance;
         private bool _authRequested;
@@ -112,7 +113,7 @@ namespace epi_videoCodec_ciscoExtended
         public readonly BoolFeedbackPulse PinIncorrect;
         public readonly IntFeedback AuthRequestedCallInstance;
 
-        public WebexPinRequestHandler(IKeyed parent, IBasicCommunication coms, MessageProcessor handler)
+        public WebexPinRequestHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
@@ -124,64 +125,74 @@ namespace epi_videoCodec_ciscoExtended
             AuthRequestedCallInstance = new IntFeedback(() => _authRequestedCallInstance);
         }
 
+        class ProcessActionMethod : IQueueMessage
+        {
+            private readonly Action _action;
+
+            public ProcessActionMethod(Action action)
+            {
+                _action = action;
+            }
+
+            public void Dispatch()
+            {
+                _action();
+            }
+        }
+
         public void ParseAuthenticationRequest(JToken token)
         {
-            _handler.PostMessage(() =>
-            {
-                var request = token.ToObject<AuthenticationRequestObject>();
-                if (request.Call == null)
-                    return;
+            var request = token.ToObject<AuthenticationRequestObject>();
+            if (request.Call == null)
+                return;
 
-                var authRequest = request.Call.FirstOrDefault(x => x.AuthenticationRequest != null);
-                if (authRequest != null)
-                {
-                    _authRequested = authRequest.AuthenticationRequest.Value != "None";
-                    _authRequestedCallInstance = request.Call.IndexOf(authRequest);
-                    Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance, authRequest.AuthenticationRequest.Value);
-                    AuthRequestedCallInstance.FireUpdate();
-                    AuthRequested.FireUpdate();
-                }
-            });
+            var authRequest = request.Call.FirstOrDefault(x => x.AuthenticationRequest != null);
+            if (authRequest != null)
+            {
+                _authRequested = authRequest.AuthenticationRequest.Value != "None";
+                _authRequestedCallInstance = request.Call.IndexOf(authRequest);
+                Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance,
+                    authRequest.AuthenticationRequest.Value);
+                AuthRequestedCallInstance.FireUpdate();
+                AuthRequested.FireUpdate();
+            }
         }
 
         public void ParseAuthenticationResponse(JToken token)
         {
-            _handler.PostMessage(() =>
+            var request = token.ToObject<AuthenticationResponseObject>();
+            if (request.Call == null || request.Call.AuthenticationResponse == null)
+                return;
+
+            var pinEntered = request.Call.AuthenticationResponse.PinEntered;
+
+            if (pinEntered != null)
             {
-                var request = token.ToObject<AuthenticationResponseObject>();
-                if (request.Call == null || request.Call.AuthenticationResponse == null)
-                    return;
-
-                var pinEntered = request.Call.AuthenticationResponse.PinEntered;
-                
-                if (pinEntered != null)
+                var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
+                if (!String.IsNullOrEmpty(role) && role == "Guest")
                 {
-                    var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
-                    if (!String.IsNullOrEmpty(role) && role == "Guest")
-                    {
-                        JoinedAsGuest.Start();
-                        _hostPin = string.Empty;
-                        Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
-                        return;   
-                    }
-
-                    if (!String.IsNullOrEmpty(role) && role == "Host")
-                    {
-                        JoinedAsHost.Start();
-                        _hostPin = string.Empty;
-                        Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
-                        return;
-                    }
-                }
-
-                var pinError = request.Call.AuthenticationResponse.PinError;
-                if (pinError != null)
-                {
-                    PinIncorrect.Start();
+                    JoinedAsGuest.Start();
                     _hostPin = string.Empty;
-                    Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
+                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    return;
                 }
-            });
+
+                if (!String.IsNullOrEmpty(role) && role == "Host")
+                {
+                    JoinedAsHost.Start();
+                    _hostPin = string.Empty;
+                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    return;
+                }
+            }
+
+            var pinError = request.Call.AuthenticationResponse.PinError;
+            if (pinError != null)
+            {
+                PinIncorrect.Start();
+                _hostPin = string.Empty;
+                Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
+            }
         }
 
         public void JoinAsGuest()

@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Core.Queues;
 using PepperDash.Essentials.Devices.Common.Codec;
 
 namespace epi_videoCodec_ciscoExtended
@@ -10,11 +11,11 @@ namespace epi_videoCodec_ciscoExtended
     {
         private readonly IKeyed _parent;
         private readonly IBasicCommunication _coms;
-        private readonly MessageProcessor _handler;
+        private readonly GenericQueue _handler;
 
         private bool _doNotDisturbEnabled;
 
-        public DoNotDisturbHandler(IKeyed parent, IBasicCommunication coms, MessageProcessor handler)
+        public DoNotDisturbHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
@@ -32,13 +33,10 @@ namespace epi_videoCodec_ciscoExtended
             if (String.IsNullOrEmpty(doNoDistubToken))
                 return;
 
-            _handler.PostMessage(() =>
-            {
-                _doNotDisturbEnabled = doNoDistubToken.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
-                                       doNoDistubToken.Equals("On", StringComparison.OrdinalIgnoreCase);
+            _doNotDisturbEnabled = doNoDistubToken.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
+                                                   doNoDistubToken.Equals("On", StringComparison.OrdinalIgnoreCase);
 
-                DoNotDisturbModeIsOnFeedback.FireUpdate();
-            });
+            DoNotDisturbModeIsOnFeedback.FireUpdate();
         }
 
         public void ActivateDoNotDisturbMode()
