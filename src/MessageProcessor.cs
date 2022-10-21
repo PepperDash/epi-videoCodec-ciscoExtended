@@ -12,13 +12,13 @@ namespace epi_videoCodec_ciscoExtended
 
         private int _status;
 
-        private readonly BlockingUnboundedQueue<Action> _messages
-            = new BlockingUnboundedQueue<Action>();
+        private readonly BlockingUnboundedQueue<Action> _messages;
 
 
         public MessageProcessor(IKeyed parent)
         {
             _parent = parent;
+            _messages = new BlockingUnboundedQueue<Action>(parent);
         }
 
         public void PostMessage(Action message)
@@ -58,7 +58,7 @@ namespace epi_videoCodec_ciscoExtended
                 }
                 catch (Exception ex)
                 {
-                    Debug.Console(1, _parent, "Error processing message:{0}", ex);
+                    Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error processing message:{0}", ex);
                 }
             }
         }

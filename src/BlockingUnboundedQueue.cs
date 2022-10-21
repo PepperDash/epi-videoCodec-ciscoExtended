@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System;
+using System.Collections.Generic;
 using Crestron.SimplSharp;
+using PepperDash.Core;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -9,9 +9,11 @@ namespace epi_videoCodec_ciscoExtended
     {
         private readonly object _lock = new object();
         private readonly LinkedList<T> _queue;
+        private readonly IKeyed _parent;
 
-        public BlockingUnboundedQueue()
+        public BlockingUnboundedQueue(IKeyed parent)
         {
+            _parent = parent;
             _queue = new LinkedList<T>();
         }
 
@@ -23,6 +25,11 @@ namespace epi_videoCodec_ciscoExtended
                 try
                 {
                     return _queue.Count > 0;
+                }
+                catch (Exception ex)
+                {
+                    Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error checking message:{0}", ex);
+                    throw;
                 }
                 finally
                 {
@@ -37,6 +44,10 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 _queue.AddLast(message);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error pushing message:{0}", ex);
             }
             finally
             {
@@ -59,6 +70,11 @@ namespace epi_videoCodec_ciscoExtended
                 result = _queue.First.Value;
                 _queue.RemoveFirst();
                 return result;
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error popping message:{0}", ex);
+                throw;
             }
             finally
             {
