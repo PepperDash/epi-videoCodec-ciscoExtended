@@ -144,7 +144,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public StatusMonitorBase CommunicationMonitor { get; private set; }
 
-        private readonly GenericQueue _receiveQueue;
+        private readonly MessageProcessor _receiveQueue;
 
         public BoolFeedback PresentationViewMaximizedFeedback { get; private set; }
 
@@ -538,17 +538,8 @@ namespace epi_videoCodec_ciscoExtended
             _lastSearched = string.Empty;
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
-            _receiveQueue = new GenericQueue(Key + "-queue", 500);
-            _searchTimeout = new CTimer(_ =>
-            {
-                Debug.Console(1, this, "Search timed out... clearing");
-                _searches.Clear();
-                _searchInProgress = false;
-                DirectorySearchInProgress.FireUpdate();
-                var emptyDirectory = new CodecDirectory();
-                OnDirectoryResultReturned(emptyDirectory);
-            }, Timeout.Infinite);
-
+            PresentationStates = eCodecPresentationStates.LocalOnly;
+            _receiveQueue = new MessageProcessor(this);
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 
@@ -560,17 +551,9 @@ namespace epi_videoCodec_ciscoExtended
             _timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
             _dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
             _joinableCooldownSeconds = _config.JoinableCooldownSeconds;
-
-            if (_config.Sharing != null)
-            {
-                PresentationStates = _config.Sharing.DefaultShareLocalOnly
-                    ? eCodecPresentationStates.LocalOnly
-                    : eCodecPresentationStates.LocalRemote;
-            }
-            else
-            {
-                PresentationStates = eCodecPresentationStates.LocalRemote;
-            }
+            PresentationStates = _config.Sharing.DefaultShareLocalOnly
+                ? eCodecPresentationStates.LocalOnly
+                : eCodecPresentationStates.LocalRemote;
 
             PreferredTrackingMode = eCameraTrackingCapabilities.SpeakerTrack;
 
@@ -1219,7 +1202,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             try
             {
-                RegisterSystemUnitEvents();
+                //RegisterSystemUnitEvents();
                 RegisterSipEvents();
                 RegisterNetworkEvents();
                 //RegisterVideoEvents();
@@ -1440,84 +1423,81 @@ ConnectorID: {2}"
                     Debug.Console(1, this, "RX: '{0}'", ComTextHelper.GetDebugText(args.Text));
             }
 
-            var message = new ProcessStringMessage(args.Text, ProcessResponse);
-            _receiveQueue.Enqueue(message);
-        }
-
-        private void ProcessResponse(string response)
-        {
-            if (response.ToLower().Contains("xcommand"))
-            {
-                Debug.Console(1, this, "Received command echo response.  Ignoring");
-                return;
-            }
-
-            if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = true;
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Incoming JSON message...");
-
-                _jsonMessage = new StringBuilder();
-            }
-            else if (response == "}" + Delimiter) // Check for the end of a JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = false;
-
-                _jsonMessage.Append(response);
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                // Enqueue the complete message to be deserialized
-
-                DeserializeResponse(_jsonMessage.ToString());
-
-                return;
-            }
-
-            if (_jsonFeedbackMessageIsIncoming)
-            {
-                _jsonMessage.Append(response);
-
-                //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                return;
-            }
-
-            if (!_syncState.InitialSyncComplete)
-            {
-                switch (response.Trim().ToLower()) // remove the whitespace
+            _receiveQueue.PostMessage(() => 
                 {
-                    case "*r login successful":
+                    if (args.Text.ToLower().Contains("xcommand"))
+                    {
+                        Debug.Console(1, this, "Received command echo response.  Ignoring");
+                        return;
+                    }
+
+                    if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
+                    {
+                        _jsonFeedbackMessageIsIncoming = true;
+
+                        if (CommDebuggingIsOn)
+                            Debug.Console(1, this, "Incoming JSON message...");
+
+                        _jsonMessage = new StringBuilder();
+                    }
+                    else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
+                    {
+                        _jsonFeedbackMessageIsIncoming = false;
+
+                        _jsonMessage.Append(args.Text);
+
+                        if (CommDebuggingIsOn)
+                            Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
+
+                        // Enqueue the complete message to be deserialized
+
+                        DeserializeResponse(_jsonMessage.ToString());
+
+                        return;
+                    }
+
+                    if (_jsonFeedbackMessageIsIncoming)
+                    {
+                        _jsonMessage.Append(args.Text);
+
+                        //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
+                        return;
+                    }
+
+                    if (!_syncState.InitialSyncComplete)
+                    {
+                        switch (args.Text.Trim().ToLower()) // remove the whitespace
                         {
-                            _syncState.LoginMessageReceived();
+                            case "*r login successful":
+                            {
+                                _syncState.LoginMessageReceived();
 
-                            if (_loginMessageReceivedTimer != null)
-                                _loginMessageReceivedTimer.Stop();
+                                if (_loginMessageReceivedTimer != null)
+                                    _loginMessageReceivedTimer.Stop();
 
-                            //SendText("echo off");
-                            SendText("xPreferences outputmode json");
-                            break;
+                                //SendText("echo off");
+                                SendText("xPreferences outputmode json");
+                                break;
+                            }
+                            case "xpreferences outputmode json":
+                            {
+                                if (_syncState.JsonResponseModeSet)
+                                    return;
+
+                                _syncState.JsonResponseModeMessageReceived();
+
+                                if (!_syncState.InitialStatusMessageWasReceived)
+                                    SendText("xStatus");
+                                break;
+                            }
+                            case "xfeedback register /event/calldisconnect":
+                            {
+                                _syncState.FeedbackRegistered();
+                                break;
+                            }
                         }
-                    case "xpreferences outputmode json":
-                        {
-                            if (_syncState.JsonResponseModeSet)
-                                return;
-
-                            _syncState.JsonResponseModeMessageReceived();
-
-                            if (!_syncState.InitialStatusMessageWasReceived)
-                                SendText("xStatus");
-                            break;
-                        }
-                    case "xfeedback register /event/calldisconnect":
-                        {
-                            _syncState.FeedbackRegistered();
-                            break;
-                        }
-                }
-            }
+                    }
+                });
         }
 
         /// <summary>
@@ -1644,6 +1624,94 @@ ConnectorID: {2}"
             CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber.ValueChangedAction +=
                 () => ParseSerialNumberObject(CodecStatus.Status.SystemUnit.Hardware.Module.SerialNumber);
         }
+
+
+        private void ParseSystemUnit(JToken systemUnitToken)
+        {
+            try
+            {
+                var jToken = systemUnitToken;
+                const string softwareDisplayTokenSelector = "Software.DisplayName.Value";
+                const string multisiteSelector = "Software.OptionKeys.Multisite.Value";
+                const string serialSelector = "Hardware.Module.SerialNumber.Value";
+
+                var firmwareToken = JTokenValidInToken(jToken, softwareDisplayTokenSelector);
+                var multisiteToken = JTokenValidInToken(jToken, multisiteSelector);
+                var serialToken = JTokenValidInToken(jToken, serialSelector);
+                if (firmwareToken != null)
+                {
+                    ParseFirmwareToken(firmwareToken);
+                }
+                if (multisiteToken != null)
+                {
+                    ParseMultisiteToken(multisiteToken);
+                }
+                if (serialToken != null)
+                {
+                    ParseSerialToken(serialToken);
+                }
+
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSystemUnit : ");
+                Debug.Console(0, this, "{0}", e.Message);
+                if (e.InnerException != null)
+                {
+                    if (String.IsNullOrEmpty(e.InnerException.Message)) return;
+                    Debug.Console(0, this, "Inner Exception in ParseSystemUnit : ");
+                    Debug.Console(0, this, "{0}", e.InnerException.Message);
+                }
+               
+            }
+        }
+
+        private void ParseSerialToken(JToken serialToken)
+        {
+            var serial = serialToken.ToString();
+            if (String.IsNullOrEmpty(serial)) return;
+
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.SerialNumber)
+            {
+                SerialNumber = serial
+            });
+            if (DeviceInfo == null) return;
+            DeviceInfo.SerialNumber = serial;
+            UpdateDeviceInfo();
+
+        }
+
+        private void ParseMultisiteToken(JToken multisiteToken)
+        {
+            var multisite = multisiteToken.ToString();
+            if (String.IsNullOrEmpty(multisite)) return;
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Multisite)
+            {
+                MultiSiteOptionIsEnabled = bool.Parse(multisite)
+            });
+        }
+
+        private void ParseFirmwareToken(JToken firmwareToken)
+        {
+            var firmware = firmwareToken.ToString();
+            if (String.IsNullOrEmpty(firmware)) return;
+
+            var parts = firmware.Split(' ');
+            if (parts.Length <= 1) return;
+            CodecFirmware = new Version(parts[1]);
+
+            var codecFirmwareString = CodecFirmware.ToString();
+
+            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Firmware)
+            {
+                Firmware = codecFirmwareString
+            });
+            if (DeviceInfo == null) return;
+            DeviceInfo.FirmwareVersion = codecFirmwareString;
+            UpdateDeviceInfo();
+            _syncState.InitialSoftwareVersionMessageReceived();
+        }
+
 
         private void RegisterH323Configuration()
         {
@@ -2157,7 +2225,7 @@ ConnectorID: {2}"
 
             if (systemUnitToken != null)
             {
-                PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
+                ParseSystemUnit(systemUnitToken);
             }
             if (cameraToken != null)
             {
@@ -2313,6 +2381,7 @@ ConnectorID: {2}"
                 {
                     SendText("xStatus SystemUnit");
                 }
+
             }
             catch (Exception e)
             {
@@ -2326,19 +2395,23 @@ ConnectorID: {2}"
         {
             while (_searches.Count > 0)
             {
-                if (resultId != _searches.Dequeue(50))
+                if (resultId != _searches.Dequeue())
                     continue;
 
-                _searchTimeout.Stop();
                 var directoryResults = new CodecDirectory();
-                if (phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value != "0")
+
+                if (
+                    phonebookSearchResultResponseObject.ResultInfo
+                        .TotalRows.Value != "0")
                     directoryResults =
-                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(phonebookSearchResultResponseObject);
+                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+                            phonebookSearchResultResponseObject);
 
                 PrintDirectory(directoryResults);
-                DirectoryBrowseHistory.Add(directoryResults);
-                OnDirectoryResultReturned(directoryResults);
 
+                DirectoryBrowseHistory.Add(directoryResults);
+
+                OnDirectoryResultReturned(directoryResults);
                 _searchInProgress = false;
                 DirectorySearchInProgress.FireUpdate();
             }
@@ -3465,7 +3538,6 @@ ConnectorID: {2}"
         }
 
         private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
-        private readonly CTimer _searchTimeout;
         private bool _searchInProgress;
  
         /// <summary>
@@ -3480,6 +3552,7 @@ ConnectorID: {2}"
                 _phonebookInitialSearch ? "true" : "false");
 
             if (!_phonebookAutoPopulate && searchString == _lastSearched && !_phonebookInitialSearch) return;
+
             _searchInProgress = !String.IsNullOrEmpty(searchString);
             var tag = Guid.NewGuid();
             _searches.Enqueue(tag.ToString());
@@ -3490,7 +3563,6 @@ ConnectorID: {2}"
             _lastSearched = searchString;
             _phonebookInitialSearch = false;
             DirectorySearchInProgress.FireUpdate();
-            _searchTimeout.Reset(10000);
         }
 
 
@@ -3608,7 +3680,7 @@ ConnectorID: {2}"
         public override void EndCall(CodecActiveCallItem activeCall)
         {
             EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
-            // PresentationStates = eCodecPresentationStates.LocalOnly;
+            PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void EndAllCalls()
@@ -3617,7 +3689,7 @@ ConnectorID: {2}"
             {
                 EnqueueCommand(string.Format("xCommand Call Disconnect CallId: {0}", activeCall.Id));
             }
-            // PresentationStates = eCodecPresentationStates.LocalOnly;
+            PresentationStates = eCodecPresentationStates.LocalOnly;
         }
 
         public override void AcceptCall(CodecActiveCallItem item)
