@@ -79,7 +79,7 @@ namespace epi_videoCodec_ciscoExtended
         IHasScheduleAwareness, IOccupancyStatusProvider, IHasCodecLayoutsAvailable, IHasCodecSelfView,
         ICommunicationMonitor, IRouting, IHasCodecCameras, IHasCameraAutoMode, IHasCodecRoomPresets,
         IHasExternalSourceSwitching, IHasBranding, IHasCameraOff, IHasCameraMute, IHasDoNotDisturbMode,
-        IHasHalfWakeMode, IHasCallHold, IJoinCalls, IDeviceInfoProvider
+        IHasHalfWakeMode, IHasCallHold, IJoinCalls, IDeviceInfoProvider, IHasPhoneDialing
     {
 
 
@@ -99,7 +99,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private const int XSigEncoding = 28591;
 
-        private List<Meeting> _currentMeetings; 
+        private List<Meeting> _currentMeetings;
 
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
@@ -170,14 +170,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public BoolFeedback PresentationActiveFeedback { get; private set; }
 
+
         private string _currentLayoutBacker;
 
         private string CurrentLayout
         {
-            get
-            {
-                return _currentLayoutBacker != "Grid" ? _currentLayoutBacker : "Side by Side";
-            }
+            get { return _currentLayoutBacker != "Grid" ? _currentLayoutBacker : "Side by Side"; }
             set { _currentLayoutBacker = value; }
         }
 
@@ -224,7 +222,7 @@ namespace epi_videoCodec_ciscoExtended
             new CodecCommandWithLabel("single", "Single")
         };
 
-        private CodecCommandWithLabel _currentLegacyLayout; 
+        private CodecCommandWithLabel _currentLegacyLayout;
 
 
         /// <summary>
@@ -328,6 +326,44 @@ namespace epi_videoCodec_ciscoExtended
         protected Func<bool> RoomIsOccupiedFeedbackFunc
         {
             get { return () => CodecStatus.Status.RoomAnalytics.PeoplePresence.BoolValue; }
+        }
+
+        protected Func<bool> PhoneOffHookFeedbackFunc
+        {
+            get { return CheckAudioCallActive; }
+        }
+
+        protected Func<string> CallerIdNumberFeedbackFunc
+        {
+            get { return GetCallerIdNumber; }
+        }
+
+        private string GetCallerIdNumber()
+        {
+
+            var activeAudioCall =
+                ActiveCalls.FirstOrDefault(
+                    o => o.Type == eCodecCallType.Audio && o.Direction == eCodecCallDirection.Incoming);
+            return activeAudioCall == null ? "" : activeAudioCall.Number;
+        }
+        private string GetCallerIdName()
+        {
+
+            var activeAudioCall =
+                ActiveCalls.FirstOrDefault(
+                    o => o.Type == eCodecCallType.Audio && o.Direction == eCodecCallDirection.Incoming);
+            return activeAudioCall == null ? "" : activeAudioCall.Name;
+        }
+
+        protected  Func<string> CallerIdNameFeedbackFunc
+        {
+            get { return GetCallerIdName; }
+        }
+
+        private bool CheckAudioCallActive()
+        {
+            var activeAudioCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);
+            return activeAudioCall != null;
         }
 
         protected Func<bool> PresentationActiveFeedbackFunc
@@ -586,6 +622,9 @@ namespace epi_videoCodec_ciscoExtended
             CameraIsOffFeedback = new BoolFeedback(() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue);
             AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
             DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
+            PhoneOffHookFeedback = new BoolFeedback(PhoneOffHookFeedbackFunc);
+            CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
+            CallerIdNumberFeedback = new StringFeedback(CallerIdNumberFeedbackFunc);
             //PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
 
 
@@ -853,22 +892,7 @@ namespace epi_videoCodec_ciscoExtended
             const int stringIndex = 0;
             const int meetingIndex = 0;
             var meeting = currentMeeting;
-            bool nextMeetingOnly = false;
-            Meeting nextMeeting;
 
-            if (currentMeeting == null)
-            {
-                nextMeeting = _currentMeetings.Count >= 1 ? _currentMeetings.First() : null;
-                if (nextMeeting != null)
-                {
-                    meeting = new Meeting();
-                    nextMeetingOnly = true;
-                }
-            }
-            else
-            {
-                nextMeeting = _currentMeetings.Count >= 2 ? _currentMeetings[1] : null;
-            }
             var tokenArray = new XSigToken[offset];
             /* 
              * Digitals
@@ -893,7 +917,7 @@ namespace epi_videoCodec_ciscoExtended
                     //digitals
                         tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, meeting.Joinable);
                         tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Id != "0");
-                        tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, true);
+                        tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, meeting.Joinable && (meeting.Id != "0"));
 
 
                         tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, meeting.Organizer);
@@ -1203,8 +1227,8 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 //RegisterSystemUnitEvents();
-                RegisterSipEvents();
-                RegisterNetworkEvents();
+                //RegisterSipEvents();
+                //RegisterNetworkEvents();
                 //RegisterVideoEvents();
                 //RegisterConferenceEvents();
                 RegisterRoomPresetEvents();
@@ -1423,6 +1447,7 @@ ConnectorID: {2}"
                     Debug.Console(1, this, "RX: '{0}'", ComTextHelper.GetDebugText(args.Text));
             }
             var message = new ProcessStringMessage(args.Text, ProcessResponse);
+            _receiveQueue.Enqueue(message);
         }
 
         private void ProcessResponse(string response)
@@ -1956,6 +1981,7 @@ ConnectorID: {2}"
 
         }
 
+
         private void RegisterNetworkEvents()
         {
             CodecStatus.Status.NetworkCount.ValueChangedAction += () =>
@@ -1991,6 +2017,12 @@ ConnectorID: {2}"
             };
         }
 
+        private void ParseRoomPresetToken(JToken roomPresetToken)
+        {
+            if (String.IsNullOrEmpty(roomPresetToken.ToString())) return;
+
+        }
+
         private void ParseNetworkList(IEnumerable<CiscoCodecStatus.Network> networks)
         {
             var myNetwork = networks.FirstOrDefault(i => i.NetworkId == "1");
@@ -2011,6 +2043,74 @@ ConnectorID: {2}"
             DeviceInfo.IpAddress = ipAddress;
             DeviceInfo.MacAddress = macAddress;
             UpdateDeviceInfo();
+        }
+
+
+        public void ParseSipToken(JToken sipToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(sipToken.ToString())) return;
+                var registrationArrayToken = sipToken.SelectToken("Registration");
+                var registrationArray = registrationArrayToken as JArray;
+                if (registrationArray == null) return;
+                
+                foreach(var r in registrationArray.Children<JObject>())
+                {
+                    var sipUri = r.SelectToken("Uri.Value").ToString().NullIfEmpty()
+                                 ?? "Unknown";
+                    var match = Regex.Match(sipUri, @"(\d+)");
+                    var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
+                    {
+                        SipPhoneNumber = sipPhoneNumber,
+                        SipUri = sipUri
+                    });
+                    return;
+                }
+
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSipToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+            }
+
+        }
+
+        private void ParseNetworkToken(JToken networkToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(networkToken.ToString())) return;
+                var networkArray = networkToken as JArray;
+                if (networkArray == null) return;
+                foreach (var n in networkArray.Children<JObject>())
+                {
+                    if (n.SelectToken("id").ToString() != "1") continue;
+                    var hostname = n.SelectToken("Cdp.DeviceId.Value").ToString().NullIfEmpty() ?? "Unknown";
+                    var ipAddress = n.SelectToken("IPv4.Address.Value").ToString().NullIfEmpty() ?? "Unknown";
+                    var macAddress = n.SelectToken("Ethernet.MacAddress.Value").ToString().NullIfEmpty()
+                                     ?? "Unknown";
+                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
+                    {
+                        IpAddress = ipAddress
+                    });
+
+                    if (DeviceInfo == null) return;
+                    DeviceInfo.HostName = hostname;
+                    DeviceInfo.IpAddress = ipAddress;
+                    DeviceInfo.MacAddress = macAddress;
+                    UpdateDeviceInfo();
+                    return;
+                }
+
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseNetworkToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+            }
         }
 
         
@@ -2203,6 +2303,39 @@ ConnectorID: {2}"
                     //ClearLayouts();
 
                 }
+                    /*
+                else if (call.GhostString != null || call.GhostString.ToLower() == "true")
+                {
+                    Debug.Console(0, this, "Found the Ghost in ID : {0}", call.CallIdString);
+                    var removeCall = ActiveCalls.FirstOrDefault(o => o.Id == call.CallIdString);
+                    Debug.Console(0, this, "This call {0} in the Active Call List", removeCall == null ? "is not" : "is");
+                    if (removeCall == null) continue;
+
+                    var oldCallItem = new CodecActiveCallItem()
+                    {
+
+                        Id = call.CallIdString,
+                        Status = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value),
+                        Name = call.DisplayName.Value,
+                        Number = call.RemoteNumber.Value,
+                        Type = CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value),
+                        Direction = CodecCallDirection.ConvertToDirectionEnum(call.Direction.Value),
+                        Duration = call.Duration.DurationValue,
+                        IsOnHold = call.PlacedOnHold.BoolValue,
+                    };
+
+
+                    ActiveCalls.Remove(removeCall);
+                    ListCalls();
+
+                    SetSelfViewMode();
+
+                    OnCallStatusChange(oldCallItem);
+
+                    CodecPollLayouts();
+
+                }
+                     */
 
             }
         }
@@ -2309,15 +2442,18 @@ ConnectorID: {2}"
             }
             if (cameraToken != null)
             {
+                //ParseCameraToken(cameraToken);
                 PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
             }
             if (networkToken != null)
             {
-                PopulateObjectWithToken(statusToken, "Network", CodecStatus.Status.Networks);
+                //PopulateObjectWithToken(statusToken, "Network", CodecStatus.Status.Networks);
+                ParseNetworkToken(networkToken);
             }
             if (sipToken != null)
             {
                 PopulateObjectWithToken(statusToken, "Sip", CodecStatus.Status.Sip);
+                //ParseSipToken(sipToken);
                 //ParseSipObject(status.Sip);
             }
             if (layoutsToken != null)
@@ -2335,6 +2471,8 @@ ConnectorID: {2}"
             }
             if (callToken != null)
             {
+                Debug.Console(0, this, "callToken : ");
+                Debug.Console(0, this, "{0}", callToken.ToString());
                 //if(mediaChannelsToken)
                 var mediaChannelCalls = mediaChannelsToken == null ? null : status.MediaChannels.MediaChannelCalls;
                 ParseCallObjectList(status.Calls, mediaChannelCalls);
@@ -4295,13 +4433,20 @@ ConnectorID: {2}"
             const string boilerplate1 = "Available for ";
             const string boilerplate2 = "Next meeting in ";
 
+            Debug.Console(0, this, "Checking Metings");
 
 
             _currentMeetings =
                 codec.CodecSchedule.Meetings.Where(m => m.StartTime >= currentTime || m.EndTime >= currentTime).ToList();
 
+                        Debug.Console(0, this, "There are {0} Meetings Scheduled", _currentMeetings.Count);
+
+
+            trilist.SetUshort(joinMap.MeetingCount.JoinNumber, (ushort)_currentMeetings.Count);
+
             if (_currentMeetings.Count == 0)
             {
+                Debug.Console(0, this, "no Meetings");
                 trilist.SetBool(joinMap.CodecAvailable.JoinNumber, true);
                 trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, false);
                 trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, false);
@@ -4326,43 +4471,55 @@ ConnectorID: {2}"
 
             _currentMeeting = currentMeeting;
             trilist.SetBool(joinMap.CodecAvailable.JoinNumber, currentMeeting == null);
-            trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, currentMeeting != null);
+            trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, currentMeeting != null && currentMeeting.Joinable);
             trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, warningBanner);
-            string availabilityMessage;
-            string nextMeetingMessage;
+            var availabilityMessage = String.Empty;
+            var nextMeetingMessage = String.Empty;
 
-            if (upcomingMeeting == null) return;
-            var timeRemainingAvailable = upcomingMeeting.StartTime - currentTime;
-            var hoursRemainingAvailable = timeRemainingAvailable.Hours;
-            var minutesRemainingAvailable = timeRemainingAvailable.Minutes;
-            var totalMinutesRemainingAvailable = timeRemainingAvailable.TotalMinutes;
-            var hoursPlural = hoursRemainingAvailable > 1;
-            var hoursPresent = hoursRemainingAvailable > 0;
-            var minutesPlural = minutesRemainingAvailable > 1;
-            var minutesPresent = minutesRemainingAvailable > 0;
-            var hourString = String.Format("{0} {1}", hoursRemainingAvailable,
-                hoursPlural ? "hours" : "hour");
-            var minuteString = String.Format("{0}{1} {2}", hoursPresent ? " and " : String.Empty,
-                minutesRemainingAvailable,
-                minutesPlural ? "minutes" : "minute");
-            var messageBase = String.Format("{0}{1}", hoursPresent ? hourString : String.Empty,
-                minutesPresent ? minuteString : String.Empty);
+            
+            double totalMinutesRemainingAvailable = 0;
+            var hoursRemainingAvailable = 0;
+            var minutesRemainingAvailable = 0;
+             
 
 
-            if (totalMinutesRemainingAvailable > 0)
+            if (upcomingMeeting != null)
             {
-                availabilityMessage = String.Format("{0}{1}.", boilerplate1, messageBase);
-                nextMeetingMessage = String.Format("{0}{1}.", boilerplate2, messageBase);
+                Debug.Console(0, this, "Upcoming Meeting Not Null");
+                Debug.Console(0, this, "Upcoming Meeting StartTime = {0}", upcomingMeeting.StartTime.ToString());
+                Debug.Console(0, this, "Upcoming Meeting EndTime = {0}", upcomingMeeting.EndTime.ToString());
+                var timeRemainingAvailable = upcomingMeeting.StartTime - currentTime;
+                hoursRemainingAvailable = timeRemainingAvailable.Hours;
+                minutesRemainingAvailable = timeRemainingAvailable.Minutes;
+                totalMinutesRemainingAvailable = timeRemainingAvailable.TotalMinutes;
+                var hoursPlural = hoursRemainingAvailable > 1;
+                var hoursPresent = hoursRemainingAvailable > 0;
+                var minutesPlural = minutesRemainingAvailable > 1;
+                var minutesPresent = minutesRemainingAvailable > 0;
+                var hourString = String.Format("{0} {1}", hoursRemainingAvailable,
+                    hoursPlural ? "hours" : "hour");
+                var minuteString = String.Format("{0}{1} {2}", hoursPresent ? " and " : String.Empty,
+                    minutesRemainingAvailable,
+                    minutesPlural ? "minutes" : "minute");
+                var messageBase = String.Format("{0}{1}", hoursPresent ? hourString : String.Empty,
+                    minutesPresent ? minuteString : String.Empty);
 
-            }
-            else
-            {
-                availabilityMessage = "Unavailable";
-                nextMeetingMessage = "Next meeting starts soon.";
+
+                if (totalMinutesRemainingAvailable > 0)
+                {
+                    availabilityMessage = String.Format("{0}{1}.", boilerplate1, messageBase);
+                    nextMeetingMessage = String.Format("{0}{1}.", boilerplate2, messageBase);
+
+                }
+                else
+                {
+                    availabilityMessage = "Unavailable";
+                    nextMeetingMessage = "Next meeting starts soon.";
+                }
             }
 
             trilist.SetString(joinMap.ActiveMeetingDataXSig.JoinNumber, UpdateActiveMeetingXSig(currentMeeting));
-            trilist.SetUshort(joinMap.TotalMinutesUntilMeeting.JoinNumber, (ushort) totalMinutesRemainingAvailable);
+            trilist.SetUshort(joinMap.TotalMinutesUntilMeeting.JoinNumber, (ushort) (totalMinutesRemainingAvailable > 0 ? totalMinutesRemainingAvailable : 0));
             trilist.SetUshort(joinMap.HoursUntilMeeting.JoinNumber, (ushort) hoursRemainingAvailable);
             trilist.SetUshort(joinMap.MinutesUntilMeeting.JoinNumber, (ushort) minutesRemainingAvailable);
             trilist.SetString(joinMap.AvailableTimeRemaining.JoinNumber, availabilityMessage);
@@ -5226,6 +5383,36 @@ ConnectorID: {2}"
         {
             get { return DoNotDisturbHandler.DoNotDisturbModeIsOnFeedback; }
         }
+
+        #region IHasPhoneDialing Members
+
+        public StringFeedback CallerIdNameFeedback { get; private set; }
+
+        public StringFeedback CallerIdNumberFeedback { get; private set; }
+
+        public void DialPhoneCall(string number)
+        {
+            EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\" CallType: Audio", number));
+        }
+
+        public void EndPhoneCall()
+        {
+            var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);
+            if(phoneCall != null)
+            EndCall(phoneCall);
+        }
+
+        public BoolFeedback PhoneOffHookFeedback { get; private set; }
+
+        public void SendDtmfToPhone(string digit)
+        {
+            var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);
+            if(phoneCall != null)
+                SendDtmf(digit, phoneCall);
+
+        }
+
+        #endregion
     }
 
     public class CodecInfoChangedEventArgs : EventArgs
