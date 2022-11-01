@@ -574,7 +574,6 @@ namespace epi_videoCodec_ciscoExtended
             _lastSearched = string.Empty;
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
-            PresentationStates = eCodecPresentationStates.LocalOnly;
             _receiveQueue = new GenericQueue(Key + "-queue", 500); 
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
@@ -589,9 +588,17 @@ namespace epi_videoCodec_ciscoExtended
             _timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
             _dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
             _joinableCooldownSeconds = _config.JoinableCooldownSeconds;
-            PresentationStates = _config.Sharing.DefaultShareLocalOnly
-                ? eCodecPresentationStates.LocalOnly
-                : eCodecPresentationStates.LocalRemote;
+
+            if (_config.Sharing != null)
+            {
+                PresentationStates = _config.Sharing.DefaultShareLocalOnly
+                    ? eCodecPresentationStates.LocalOnly
+                    : eCodecPresentationStates.LocalRemote;
+            }
+            else
+            {
+                PresentationStates = eCodecPresentationStates.LocalRemote;
+            }
 
             PreferredTrackingMode = eCameraTrackingCapabilities.SpeakerTrack;
 
