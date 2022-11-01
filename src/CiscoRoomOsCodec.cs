@@ -581,6 +581,8 @@ namespace epi_videoCodec_ciscoExtended
 
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
+            _scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
+
             _config = props;
 
             MeetingsToDisplay = _config.OverrideMeetingsLimit ? 50 : 0;
@@ -782,7 +784,7 @@ namespace epi_videoCodec_ciscoExtended
         
         void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
         {
-            Debug.Console(0, "CODECINFOCHANGED!!!!");
+            Debug.Console(0, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
             if (args.InfoChangeType == eCodecInfoChangeType.Firmware)
             {
                 Debug.Console(0, this, "Got Firmware Event!!!!!!");
@@ -1343,6 +1345,8 @@ ConnectorID: {2}"
                             , camera.Model.Value);
 
                         var id = Convert.ToUInt16(camera.CameraId);
+                        var newCamera = cameraInfo.FirstOrDefault(o => o.CameraNumber == id);
+                        if (newCamera != null) continue;
                         var info = new CameraInfo()
                         {
                             CameraNumber = id,
@@ -2054,21 +2058,28 @@ ConnectorID: {2}"
                 var registrationArrayToken = sipToken.SelectToken("Registration");
                 var registrationArray = registrationArrayToken as JArray;
                 if (registrationArray == null) return;
-                
-                foreach(var r in registrationArray.Children<JObject>())
+
+                var sipPhoneNumber = "Unknown";
+                var sipUri = "Unknown";
+
+                var registrationItem =
+                    registrationArray.Children<JObject>().FirstOrDefault(o => o.SelectToken("id").ToString() == "1");
+
+                if (registrationItem != null)
                 {
-                    var sipUri = r.SelectToken("Uri.Value").ToString().NullIfEmpty()
-                                 ?? "Unknown";
+                    sipUri = registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
+                             ?? "Unknown";
                     var match = Regex.Match(sipUri, @"(\d+)");
-                    var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
-                    OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
-                    {
-                        SipPhoneNumber = sipPhoneNumber,
-                        SipUri = sipUri
-                    });
-                    return;
+                    sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+
                 }
 
+
+                OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
+                {
+                    SipPhoneNumber = sipPhoneNumber,
+                    SipUri = sipUri
+                });
             }
             catch (Exception e)
             {
@@ -2421,7 +2432,7 @@ ConnectorID: {2}"
             var systemUnitToken = statusToken.SelectToken("SystemUnit");
             var cameraToken = statusToken.SelectToken("Cameras");
             var networkToken = statusToken.SelectToken("Network");
-            var sipToken = statusToken.SelectToken("Sip");
+            var sipToken = statusToken.SelectToken("SIP");
             var conferenceToken = statusToken.SelectToken("Conference");
             var callToken = statusToken.SelectToken("Call");
             var errorToken = JTokenValidInToken(statusToken, "Reason");
@@ -2452,8 +2463,8 @@ ConnectorID: {2}"
             }
             if (sipToken != null)
             {
-                PopulateObjectWithToken(statusToken, "Sip", CodecStatus.Status.Sip);
-                //ParseSipToken(sipToken);
+                //PopulateObjectWithToken(statusToken, "Sip", CodecStatus.Status.Sip);
+                ParseSipToken(sipToken);
                 //ParseSipObject(status.Sip);
             }
             if (layoutsToken != null)
@@ -2755,6 +2766,16 @@ ConnectorID: {2}"
             var bookingsListResultResponse = commandResponseToken.SelectToken("BookingsListResult");
             var presentationStatus = commandResponseToken.SelectToken("PresentationStopResult.status");
             var statusToken = commandResponseToken.SelectToken("status");
+            var errorToken = JTokenValidInToken(statusToken, "Reason");
+
+            if (errorToken != null)
+            {
+                //This is an Error - Deal with it somehow?
+                Debug.Console(2, this, "Error In Command Response :");
+                Debug.Console(2, this, "{0}", errorToken.ToString());
+                return;
+            }
+
 
             if (statusToken != null)
             {
@@ -4329,6 +4350,8 @@ ConnectorID: {2}"
 
             CodecInfoChanged += (sender, args) =>
             {
+                Debug.Console(0, "CodecInfoChanged in Link To Api - Type : {0}", args.InfoChangeType.ToString());
+
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
                 {
@@ -4409,7 +4432,7 @@ ConnectorID: {2}"
 
             CodecSchedule.MeetingEventChange += (sender, args) =>
             {
-                if (_scheduleCheckTimer == null) _scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
+                
 
                 if (args.ChangeType != eMeetingEventChangeType.Unknown)
                 {
@@ -4433,13 +4456,12 @@ ConnectorID: {2}"
             const string boilerplate1 = "Available for ";
             const string boilerplate2 = "Next meeting in ";
 
-            Debug.Console(0, this, "Checking Metings");
+            Debug.Console(0, this, "Checking Meetings");
 
 
             _currentMeetings =
                 codec.CodecSchedule.Meetings.Where(m => m.StartTime >= currentTime || m.EndTime >= currentTime).ToList();
 
-                        Debug.Console(0, this, "There are {0} Meetings Scheduled", _currentMeetings.Count);
 
 
             trilist.SetUshort(joinMap.MeetingCount.JoinNumber, (ushort)_currentMeetings.Count);
@@ -5035,12 +5057,18 @@ ConnectorID: {2}"
                     Cameras.Add(camera);
                 }
                  */
-
+                if (CodecStatus.Status.Cameras.CameraList == null) return;
                 foreach (var item in CodecStatus.Status.Cameras.CameraList)
                 {
                     var cam = item;
-                    var id = uint.Parse(item.CameraId);
-                    var camId = id;
+                    if (cam.Connected.Value.ToLower() == "false")
+                    {
+                        Debug.Console(0, this, "Camera {0} is Disconnected", cam.CameraId);
+                        continue;
+                    }
+                    Debug.Console(0, this, "Camera {0} is Connected", cam.CameraId);
+
+                    var camId = uint.Parse(item.CameraId);
                     var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == camId);
                     var name = string.Format("Camera {0}", camId);
                     if (camInfo != null)
@@ -5074,7 +5102,7 @@ ConnectorID: {2}"
             FarEndRoomPresets = new List<CodecRoomPreset>(15);
 
             // Add the far end presets
-            for (int i = 1; i <= FarEndRoomPresets.Capacity; i++)
+            for (var i = 1; i <= FarEndRoomPresets.Capacity; i++)
             {
                 var label = string.Format("Far End Preset {0}", i);
                 FarEndRoomPresets.Add(new CodecRoomPreset(i, label, true, false));
@@ -5589,6 +5617,7 @@ ConnectorID: {2}"
             _codec = codec;
             _codec.CodecInfoChanged += (sender, args) =>
             {
+                Debug.Console(0, "CodecInfoChanged in CiscoCodecInfo - Type : {0}", args.InfoChangeType.ToString());
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
                 {

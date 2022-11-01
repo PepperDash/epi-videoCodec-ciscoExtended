@@ -273,7 +273,27 @@ namespace epi_videoCodec_ciscoExtended
         public class Camera
         {
             [JsonProperty("CameraId")]
-            public string CameraId { get; set; }
+            public string CameraIdModern { get; set; }
+            [JsonProperty("id")]
+            public string CameraIdLegacy { get; set; }
+
+            [JsonIgnore]
+            public string CameraId
+            {
+                get
+                {
+                    if (!String.IsNullOrEmpty(CameraIdModern))
+                    {
+                        return CameraIdModern;
+                    }
+                    if (!String.IsNullOrEmpty(CameraIdLegacy))
+                    {
+                        return CameraIdLegacy;
+                    }
+                    return "999";
+                }
+            }
+
             public Capabilities Capabilities { get; set; }
             public Connected Connected { get; set; }
             public DectectedConnector DetectedConnector { get; set; }
