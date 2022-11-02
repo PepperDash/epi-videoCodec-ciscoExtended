@@ -137,10 +137,11 @@ namespace epi_videoCodec_ciscoExtended
 
         public class PhonebookSearchResult
         {
-            public string status { get; set; }
+            public string Status { get; set; }
             public ResultInfo ResultInfo { get; set; }
             public List<Folder> Folder { get; set; }
             public List<Contact> Contact { get; set; }
+            public string ResultId { get; set; }
 
             public PhonebookSearchResult()
             {

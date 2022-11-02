@@ -10,7 +10,7 @@ namespace epi_videoCodec_ciscoExtended
     {
         public CiscoCodecFactory()
         {
-            MinimumEssentialsFrameworkVersion = "1.11.0";
+            MinimumEssentialsFrameworkVersion = "1.12.0";
 
             TypeNames = new List<string>() { "ciscoRoomOS" };
         }
@@ -23,26 +23,4 @@ namespace epi_videoCodec_ciscoExtended
             return new CiscoCodec(dc, comm);
         }
     }
-
-    public class CiscoCodecDevelopmentFactory : EssentialsPluginDevelopmentDeviceFactory<CiscoCodec>
-    {
-        public CiscoCodecDevelopmentFactory()
-        {
-            MinimumEssentialsFrameworkVersion = "1.11.0";
-
-            DevelopmentEssentialsFrameworkVersions = new List<string>() {"1.11.0-rc-1935"};
-
-            TypeNames = new List<string>() { "ciscoRoomOS-development" };
-        }
-
-        public override EssentialsDevice BuildDevice(DeviceConfig dc)
-        {
-            Debug.Console(1, "Factory Attempting to create new Cisco RoomOs Development Device");
-
-            var comm = CommFactory.CreateCommForDevice(dc);
-            return new CiscoCodec(dc, comm);
-        }
-    }
-
-
 }

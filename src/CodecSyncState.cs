@@ -11,10 +11,17 @@ namespace epi_videoCodec_ciscoExtended
     public class CodecSyncState : IKeyed
     {
         bool _initialSyncComplete;
+
+        private const int Idle = 0;
+        private const int Processing = 1;
+        private int _isProcessing;
+
         private readonly CiscoCodec _parent;
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
-        private readonly CrestronQueue<string> _commandQueue;
+
+        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
+        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
 
         public string Key { get; private set; }
 
@@ -23,7 +30,7 @@ namespace epi_videoCodec_ciscoExtended
             get { return _initialSyncComplete; }
             private set
             {
-                if (value)
+                if (value && !_initialSyncComplete)
                 {
                     var handler = InitialSyncCompleted;
                     if (handler != null)
@@ -49,92 +56,186 @@ namespace epi_videoCodec_ciscoExtended
         {
             Key = key;
             _parent = parent;
-            _commandQueue = new CrestronQueue<string>(50);
-            CodecDisconnected();
-        }
-
-        private void ProcessQueuedCommands()
-        {
-            while (InitialSyncComplete)
-            {
-                var query = _commandQueue.Dequeue();
-
-                _parent.SendText(query);
-            }
         }
 
         public void AddCommandToQueue(string query)
         {
-            _commandQueue.Enqueue(query);
+            if (string.IsNullOrEmpty(query))
+                return;
+
+            if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
+            {
+                Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Unable to enqueue command:{0}", query);
+            }
+            else
+            {
+                Schedule();
+            }
         }
 
         public void LoginMessageReceived()
         {
-            LoginMessageWasReceived = true;
-            Debug.Console(1, this, "Login Message Received.");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!LoginMessageWasReceived)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
+                    
+                LoginMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void JsonResponseModeMessageReceived()
         {
-            JsonResponseModeSet = true;
-            Debug.Console(1, this, "Json Response Mode Message Received.");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!JsonResponseModeSet)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Json Response Mode Message Received.");
+
+                JsonResponseModeSet = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialStatusMessageReceived()
         {
-            InitialStatusMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec Status Message Received.");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!InitialStatusMessageWasReceived)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Status Message Received.");
+
+                InitialStatusMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialConfigurationMessageReceived()
         {
-            InitialConfigurationMessageWasReceived = true;
-            Debug.Console(1, this, "Initial Codec Configuration Message Received.");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!InitialConfigurationMessageWasReceived)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Configuration DiagnosticsMessage Received.");
+                    
+                InitialConfigurationMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialSoftwareVersionMessageReceived()
         {
-            InitialSoftwareVersionMessageWasReceived = true;
-            Debug.Console(1, this, "Inital Codec Software Information received");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!InitialSoftwareVersionMessageWasReceived)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Inital Codec Software Information received");
+
+                InitialSoftwareVersionMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
+
         public void FeedbackRegistered()
         {
-            FeedbackWasRegistered = true;
-            Debug.Console(1, this, "Initial Codec Feedback Registration Successful.");
-            CheckSyncStatus();
+            _systemActions.Enqueue(() =>
+            {
+                if (!FeedbackWasRegistered)
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Feedback Registration Successful.");
+
+                FeedbackWasRegistered = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void CodecDisconnected()
         {
-            _commandQueue.Clear();
-            LoginMessageWasReceived = false;
-            JsonResponseModeSet = false;
-            InitialConfigurationMessageWasReceived = false;
-            InitialStatusMessageWasReceived = false;
-            FeedbackWasRegistered = false;
-            InitialSyncComplete = false;
-        }
+            _systemActions.Enqueue(() =>
+            {
+                LoginMessageWasReceived = false;
+                JsonResponseModeSet = false;
+                InitialConfigurationMessageWasReceived = false;
+                InitialStatusMessageWasReceived = false;
+                FeedbackWasRegistered = false;
+                InitialSyncComplete = false;
+            });
 
+            Schedule();
+        }
 
         void CheckSyncStatus()
         {
-            if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived && InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
+            if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
+                InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
+                Debug.Console(1, this, "Codec Sync Complete");
                 InitialSyncComplete = true;
-                Debug.Console(1, this, "Initial Codec Sync Complete!");
-                Debug.Console(1, this, "{0} Command queued. Processing now...", _commandQueue.Count);
-
-                // Invoke a thread for the queue
-                CrestronInvoke.BeginInvoke(o => ProcessQueuedCommands());
             }
             else
                 InitialSyncComplete = false;
         }
-    }
 
+        private void Schedule()
+        {
+            if (Interlocked.CompareExchange(
+                ref _isProcessing,
+                Processing,
+                Idle) ==
+                Idle)
+                RunAsync();
+        }
+
+        private void RunAsync()
+        {
+            CrestronInvoke.BeginInvoke(_ =>
+            {
+                try
+                {
+                    Debug.Console(1, this, "Processing actions SYS:{0} COMMANDS:{1}", _systemActions.Count, _commandActions.Count);
+                    ProcessMessages();
+                }
+                catch (Exception ex)
+                {
+                    Debug.Console(1, this, "Error processing command actions:{0}", ex);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _isProcessing, Idle);
+                }
+
+                if (_systemActions.Count > 0 || (_commandActions.Count > 0 && InitialSyncComplete))
+                    Schedule();
+            });
+        }
+
+        private void ProcessMessages()
+        {
+            const int throughput = 6;
+            for (var i = 0; i < throughput; ++i)
+            {
+                Action sys;
+                if (_systemActions.TryToDequeue(out sys))
+                {
+                    sys();
+                    continue;
+                }
+
+                if (!InitialSyncComplete)
+                    break;
+
+                Action cmd;
+                if (_commandActions.TryToDequeue(out cmd))
+                    cmd();
+            }
+        }
+    }
 }

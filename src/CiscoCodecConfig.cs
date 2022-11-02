@@ -77,6 +77,7 @@ namespace epi_videoCodec_ciscoExtended
         public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
+            PhonebookMode = "corporate";
         }
     }
 
@@ -84,6 +85,9 @@ namespace epi_videoCodec_ciscoExtended
     {
         [JsonProperty("autoShareContentWhileInCall")]
         public bool AutoShareContentWhileInCall { get; set; }
+
+        [JsonProperty("defaultShareLocalOnly")]
+        public bool DefaultShareLocalOnly { get; set; }
     }
 
     public class BrandingLogoProperties

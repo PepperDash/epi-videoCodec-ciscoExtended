@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
+using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Core.Presets;
@@ -41,14 +41,16 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Microphone
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string MicrophoneId { get; set; }
             public ConnectionStatus ConnectionStatus { get; set; }
             public EcReferenceDelay EcReferenceDelay { get; set; }
         }
 
         public class Connectors
         {
-            public List<Microphone> Microphone { get; set; }
+            [JsonProperty("Microphone")]
+            public List<Microphone> MicrophoneList { get; set; }
         }
 
         public class Input
@@ -81,10 +83,6 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
-        public class ConnectionStatus2
-        {
-            public string Value { get; set; }
-        }
 
         public class DelayMs
         {
@@ -93,24 +91,27 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Line
         {
-            public string id { get; set; }
-            public ConnectionStatus2 ConnectionStatus { get; set; }
+            [JsonProperty("LineId")]
+            public string LineId { get; set; }
+            public ConnectionStatus ConnectionStatus { get; set; }
             public DelayMs DelayMs { get; set; }
         }
 
-        public class Connectors2
+        public class OutputConnectors
         {
-            public List<Line> Line { get; set; }
+            [JsonProperty("Line")]
+            public List<Line> Lines { get; set; }
         }
 
         public class Output
         {
-            public Connectors2 Connectors { get; set; }
+            [JsonProperty("Connectors")]
+            public OutputConnectors OutputConnectors { get; set; }
         }
 
         public class Volume : ValueProperty
         {
-            string _Value;
+            string _value;
 
             /// <summary>
             /// Sets Value and triggers the action when set
@@ -119,11 +120,11 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -133,12 +134,8 @@ namespace epi_videoCodec_ciscoExtended
             /// </summary>
             public int IntValue
             {
-                get
-                {
-                    if (!string.IsNullOrEmpty(_Value))
-                        return Convert.ToInt32(_Value);
-                    else
-                        return 0;
+                get {
+                    return !string.IsNullOrEmpty(_value) ? Convert.ToInt32(_value) : 0;
                 }
             }
         }
@@ -152,7 +149,7 @@ namespace epi_videoCodec_ciscoExtended
                 set
                 {
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
-                    BoolValue = value == "On";
+                    BoolValue = value.ToLower() == "on";
                     OnValueChanged();
                 }
             }
@@ -214,7 +211,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class HardwareID
+        public class HardwareId
         {
             public string Value { get; set; }
         }
@@ -251,7 +248,7 @@ namespace epi_videoCodec_ciscoExtended
             public Zoom Zoom { get; set; }
         }
 
-        public class SoftwareID
+        public class SoftwareId
         {
             public string Value { get; set; }
         }
@@ -260,7 +257,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             public string Value { get; set; }
 
-            public int ConnectorId
+            public int DetectedConnectorId
             {
                 get
                 {
@@ -268,26 +265,46 @@ namespace epi_videoCodec_ciscoExtended
                     {
                         return Convert.ToUInt16(Value);
                     }
-                    else
-                        return -1;
+                    return -1;
                 }
             }
         }
 
         public class Camera
         {
-            public string id { get; set; }
+            [JsonProperty("CameraId")]
+            public string CameraIdModern { get; set; }
+            [JsonProperty("id")]
+            public string CameraIdLegacy { get; set; }
+
+            [JsonIgnore]
+            public string CameraId
+            {
+                get
+                {
+                    if (!String.IsNullOrEmpty(CameraIdModern))
+                    {
+                        return CameraIdModern;
+                    }
+                    if (!String.IsNullOrEmpty(CameraIdLegacy))
+                    {
+                        return CameraIdLegacy;
+                    }
+                    return "999";
+                }
+            }
+
             public Capabilities Capabilities { get; set; }
             public Connected Connected { get; set; }
             public DectectedConnector DetectedConnector { get; set; }
             public Flip Flip { get; set; }
-            public HardwareID HardwareID { get; set; }
+            public HardwareId HardwareId { get; set; }
             public MacAddress MacAddress { get; set; }
             public Manufacturer Manufacturer { get; set; }
             public Model Model { get; set; }
             public Position Position { get; set; }
             public SerialNumber SerialNumber { get; set; }
-            public SoftwareID SoftwareID { get; set; }
+            public SoftwareId SoftwareId { get; set; }
 
             public Camera()
             {
@@ -299,20 +316,21 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Availability : ValueProperty
         {
-            string _Value;
+            string _value;
             public bool BoolValue { get; private set; }
 
             public string Value
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
                     // If the incoming value is "Available" it sets the BoolValue true, otherwise sets it false
-                    _Value = value;
-                    BoolValue = value != "Unavailable";
+                    _value = value;
+
+                    BoolValue = value.ToLower() == "available";
                     OnValueChanged();
                 }
             }
@@ -320,7 +338,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class CallStatus : ValueProperty
         {
-            string _Value;
+            string _value;
             public bool BoolValue { get; private set; }
 
 
@@ -328,13 +346,13 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
-                    _Value = value;
-                    BoolValue = value == "Connected";
+                    _value = value;
+                    BoolValue = value.ToLower() == "connected";
                     OnValueChanged();
                 }
             }
@@ -342,7 +360,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class SpeakerTrackStatus : ValueProperty
         {
-            string _Value;
+            string _value;
             public bool BoolValue { get; private set; }
             public string StringValue { get; private set; }
 
@@ -353,12 +371,12 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
-                    _Value = value;
+                    _value = value;
                     BoolValue = value.ToLower() == "active";
                     StringValue = value;
                     OnValueChanged();
@@ -367,18 +385,19 @@ namespace epi_videoCodec_ciscoExtended
 
             public SpeakerTrackStatus()
             {
-                SpeakerTrackStatusValues = new List<string>() { "active", "inactive" };
+                SpeakerTrackStatusValues = new List<string> { "active", "inactive" };
             }
         }
 
         public class SpeakerTrack
         {
             public Availability Availability { get; set; }
-            public SpeakerTrackStatus Status { get; set; }
+            [JsonProperty("Status")]
+            public SpeakerTrackStatus SpeakerTrackStatus { get; set; }
 
             public SpeakerTrack()
             {
-                Status = new SpeakerTrackStatus();
+                SpeakerTrackStatus = new SpeakerTrackStatus();
                 Availability = new Availability();
             }
         }
@@ -386,11 +405,12 @@ namespace epi_videoCodec_ciscoExtended
         public class PresenterTrack
         {
             public Availability Availability { get; set; }
-            public PresenterTrackStatus Status { get; set; }
+            [JsonProperty("Status")]
+            public PresenterTrackStatus PresenterTrackStatus { get; set; }
 
             public PresenterTrack()
             {
-                Status = new PresenterTrackStatus();
+                PresenterTrackStatus = new PresenterTrackStatus();
                 Availability = new Availability();
             }
 
@@ -398,7 +418,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class PresenterTrackStatus : ValueProperty
         {
-            string _Value;
+            string _value;
             public string StringValue { get; private set; }
             public bool BoolValue { get; private set; }
             public List<string> PresenterTrackStatusValues { get; private set; }  
@@ -407,35 +427,34 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
-                    _Value = value;
+                    _value = value;
                     StringValue = value;
-                    BoolValue = value.ToLower() != "off";
+                    BoolValue = value.ToLower() == "off";
                     OnValueChanged();
                 }
             }
 
             public PresenterTrackStatus()
             {
-                PresenterTrackStatusValues = new List<string>(){"off", "follow", "diagnostic", "background", "setup", "persistent"};
+                PresenterTrackStatusValues = new List<string> {"off", "follow", "diagnostic", "background", "setup", "persistent"};
             }
         }
 
         public class Cameras
         {
-            //            [JsonConverter(typeof(CameraConverter))]
-            public List<Camera> Camera { get; set; }
+            [JsonProperty("Camera")]
+            public List<Camera> CameraList { get; set; }
             public SpeakerTrack SpeakerTrack { get; set; }
             public PresenterTrack PresenterTrack { get; set; }
-            //public CameraTrackingCapability CameraCapability { get; set; }
 
             public Cameras()
             {
-                Camera = new List<Camera>();
+                CameraList = new List<Camera>();
                 SpeakerTrack = new SpeakerTrack();
                 PresenterTrack = new PresenterTrack();
                 //CameraCapability = new CameraTrackingCapability(SpeakerTrack, PresenterTrack);
@@ -449,10 +468,11 @@ namespace epi_videoCodec_ciscoExtended
             private readonly PresenterTrack _presenterTrack;
 
 
-            public CameraTrackingCapability(SpeakerTrack speakerTrack, PresenterTrack presenterTrack)
+            public CameraTrackingCapability(SpeakerTrack speakerTrack, PresenterTrack presenterTrack, eCameraTrackingCapabilities cameraTrackingCapabilities)
             {
                 _speakerTrack = speakerTrack;
                 _presenterTrack = presenterTrack;
+                CameraTrackingCapabilities = cameraTrackingCapabilities;
             }
 
             protected Func<eCameraTrackingCapabilities> CameraTrackingFeedbackFunc
@@ -490,7 +510,7 @@ namespace epi_videoCodec_ciscoExtended
 
         //    public override bool CanConvert(System.Type objectType)
         //    {
-        //        return true; // objectType == typeof(Camera) || objectType == typeof(List<Camera>); // This should not be called but is required for implmentation
+        //        return true; // objectType == typeof(CameraList) || objectType == typeof(List<CameraList>); // This should not be called but is required for implmentation
         //    }
 
         //    public override object ReadJson(JsonReader reader, System.Type objectType, object existingValue, JsonSerializer serializer)
@@ -499,11 +519,11 @@ namespace epi_videoCodec_ciscoExtended
         //        {
         //            if (reader.TokenType == JsonToken.StartArray)
         //            {
-        //                var l = new List<Camera>();
+        //                var l = new List<CameraList>();
         //                reader.Read();
         //                while (reader.TokenType != JsonToken.EndArray)
         //                {
-        //                    l.Add(reader.Value as Camera);
+        //                    l.Add(reader.Value as CameraList);
         //                    reader.Read();
         //                }
         //                Debug.Console(1, "[xStatus]: Cameras converted as list");
@@ -511,15 +531,15 @@ namespace epi_videoCodec_ciscoExtended
         //            }
         //            else
         //            {
-        //                Debug.Console(1, "[xStatus]: Camera converted as single object and added to list");
-        //                return new List<Camera> { reader.Value as Camera };
+        //                Debug.Console(1, "[xStatus]: CameraList converted as single object and added to list");
+        //                return new List<CameraList> { reader.Value as CameraList };
         //            }
         //        }
         //        catch (Exception e)
         //        {
         //            Debug.Console(1, "[xStatus]: Unable to convert JSON for camera objects: {0}", e);
 
-        //            return new List<Camera>();
+        //            return new List<CameraList>();
         //        }
         //    }
 
@@ -566,7 +586,7 @@ namespace epi_videoCodec_ciscoExtended
             public MaxVideoCalls MaxVideoCalls { get; set; }
         }
 
-        public class Capabilities2
+        public class StatusCapabilities
         {
             public Conference Conference { get; set; }
         }
@@ -583,7 +603,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public class DoNotDisturb : ValueProperty
         {
-            string _Value;
+            string _value;
 
             public bool BoolValue { get; private set; }
 
@@ -591,13 +611,13 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
-                    BoolValue = value == "On" || value == "Active";
+                    BoolValue = value.ToLower() == "on" || value.ToLower() == "active";
                     OnValueChanged();
                 }
             }
@@ -613,37 +633,33 @@ namespace epi_videoCodec_ciscoExtended
             public Mode Mode { get; set; }
         }
 
-        public class CallId2
-        {
-            public string Value { get; set; }
-        }
 
-        public class Mode2 : ValueProperty
+        public class ModeValueProperty : ValueProperty
         {
-            string _Value;
+            string _value;
 
-            public bool BoolValue { get; private set; }
+            public bool SendingBoolValue { get; private set; }
+            public bool ActiveBoolValue { get; private set; }
+            public bool ReceivingBoolValue { get; private set; }
 
             public string Value
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     // If the incoming value is "Sending" it sets the BoolValue true, otherwise sets it false
-                    BoolValue = value == "Sending";
+                    SendingBoolValue = value.ToLower() == "sending";
+                    ActiveBoolValue = value.ToLower() != "off";
+                    ReceivingBoolValue = value.ToLower() == "receiving";
                     OnValueChanged();
                 }
             }
         }
 
-        public class Mode3
-        {
-            public string Value { get; set; }
-        }
 
         public class ReleaseFloorAvailability
         {
@@ -657,164 +673,122 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Whiteboard
         {
-            public Mode3 Mode { get; set; }
+            public Mode Mode { get; set; }
             public ReleaseFloorAvailability ReleaseFloorAvailability { get; set; }
             public RequestFloorAvailability RequestFloorAvailability { get; set; }
         }
 
-        public class Source2 : ValueProperty
+
+        public class SourceValueProperty
         {
-            string _Value;
 
             /// <summary>
             /// Sets Value and triggers the action when set
             /// </summary>
-            public string Value
-            {
-                get
-                {
-                    return _Value;
-                }
-                set
-                {
-                    _Value = value;
-                    OnValueChanged();
-                }
-            }
-
-            /// <summary>
-            /// Converted value of _Value for use as feedback
-            /// </summary>
-            public int IntValue
-            {
-                get
-                {
-                    if (!string.IsNullOrEmpty(_Value))
-                        return Convert.ToInt32(_Value);
-                    else
-                        return 0;
-                }
-            }
+            public string Value { get; set; }
         }
 
-        public class SendingMode : ValueProperty
+        public class SendingMode
         {
-            string _Value;
 
             /// <summary>
             /// Sets Value and triggers the action when set
             /// </summary>
-            public string Value
-            {
-                get
-                {
-                    return _Value;
-                }
-                set
-                {
-                    _Value = value;
-                    OnValueChanged();
-                }
-            }
+            public string Value { get; set; }
+
 
             public bool LocalOnly
             {
-                get
-                {
-                    if (string.IsNullOrEmpty(_Value))
-                        return false;
-
-
-                    return _Value.ToLower() == "localonly";
-                }
+                get { return Value.ToLower() == "localonly"; }
             }
 
             public bool LocalRemote
             {
-                get
-                {
-                    if (string.IsNullOrEmpty(_Value))
-                        return false;
-
-                    return _Value.ToLower() == "localremote";
-                }
+                get { return Value.ToLower() == "localremote"; }
             }
 
-            public bool Off
-            {
-                get
-                {
-                    if (string.IsNullOrEmpty(_Value))
-                        return false;
-
-                    return _Value.ToLower() == "off";
-                }
-            }
+            public bool Off { get { return !LocalOnly && !LocalRemote; } }
         }
 
-        public class LocalInstance
+        public class LocalInstance 
         {
-            public string id { get; set; }
-            public string ghost { get; set; }
+
+
+            [JsonProperty("ghost")]
+            public string Ghost { get; set; }
+
             public SendingMode SendingMode { get; set; }
-            public Source2 Source { get; set; }
+            [JsonProperty("Source")]
+            public SourceValueProperty SourceValueProperty { get; set; }
 
-            public LocalInstance()
-            {
-                Source = new Source2();
-                SendingMode = new SendingMode();
-            }
         }
 
-        public class Presentation
+        public class Presentation : ValueProperty
         {
-            public CallId2 CallId { get; set; }
-            public Mode2 Mode { get; set; }
+            public CallId CallId { get; set; }
+            [JsonProperty("Mode")]
+            public ModeValueProperty ModeValueProperty { get; set; }
             public Whiteboard Whiteboard { get; set; }
-            public List<LocalInstance> LocalInstance { get; set; }
+            private List<LocalInstance> _presentationLocalInstances;
+
+            [JsonProperty("LocalInstance")]
+            public List<LocalInstance> PresentationLocalInstances
+            {
+                get { return _presentationLocalInstances; }
+                set
+                {
+                    if (value == null) return;
+                    _presentationLocalInstances = value;
+                    OnValueChanged();
+                }
+            }
 
             public Presentation()
             {
-                Mode = new Mode2();
-                LocalInstance = new List<LocalInstance>();
+                _presentationLocalInstances = new List<LocalInstance>();
+                ModeValueProperty = new ModeValueProperty();
+                PresentationLocalInstances = new List<LocalInstance>();
             }
         }
 
-        public class CallId3
-        {
-            public string Value { get; set; }
-        }
 
-        public class Mode4
-        {
-            public string Value { get; set; }
-        }
 
         public class SpeakerLock
         {
-            public CallId3 CallId { get; set; }
-            public Mode4 Mode { get; set; }
+            public CallId CallId { get; set; }
+            public Mode Mode { get; set; }
         }
 
-        public class Conference2
+        public class StatusConference : ValueProperty
         {
             public ActiveSpeaker ActiveSpeaker { get; set; }
             public DoNotDisturb DoNotDisturb { get; set; }
             public Multipoint Multipoint { get; set; }
-            public Presentation Presentation { get; set; }
+            private Presentation _presentation;
+
+            public Presentation Presentation
+            {
+                get
+                {
+                    return _presentation;
+                }
+                set
+                {
+                    _presentation = value;
+                    OnValueChanged();
+                }
+            }
+
             public SpeakerLock SpeakerLock { get; set; }
 
-            public Conference2()
+            public StatusConference()
             {
+                _presentation = new Presentation();
                 Presentation = new Presentation();
                 DoNotDisturb = new DoNotDisturb();
             }
         }
 
-        public class Description
-        {
-            public string Value { get; set; }
-        }
 
         public class Level
         {
@@ -826,14 +800,10 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Type
-        {
-            public string Value { get; set; }
-        }
-
         public class Message
         {
-            public string id { get; set; }
+
+            public string MessageId { get; set; }
             public Description Description { get; set; }
             public Level Level { get; set; }
             public References References { get; set; }
@@ -842,16 +812,18 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Diagnostics
         {
-            public List<Message> Message { get; set; }
+            [JsonProperty("Message")]
+            public List<Message> DiagnosticsMessage { get; set; }
         }
 
-        public class Conference3
+        public class ExperimentalConference
         {
         }
 
         public class Experimental
         {
-            public Conference3 Conference { get; set; }
+            [JsonProperty("Conference")]
+            public ExperimentalConference ExperimentalConference { get; set; }
         }
 
         public class Address
@@ -864,49 +836,41 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Reason
-        {
-            public string Value { get; set; }
-        }
 
-        public class Status3
-        {
-            public string Value { get; set; }
-        }
 
         public class Gatekeeper
         {
             public Address Address { get; set; }
             public Port Port { get; set; }
             public Reason Reason { get; set; }
-            public Status3 Status { get; set; }
+            public Status Status { get; set; }
         }
 
-        public class Reason2
+        public class Reason
         {
             public string Value { get; set; }
         }
 
-        public class Status4
+
+
+        public class H323Mode
         {
-            public string Value { get; set; }
+            public Reason Reason { get; set; }
+            public Status Status { get; set; }
         }
 
-        public class Mode5
-        {
-            public Reason2 Reason { get; set; }
-            public Status4 Status { get; set; }
-        }
 
         public class H323
         {
             public Gatekeeper Gatekeeper { get; set; }
-            public Mode5 Mode { get; set; }
+            [JsonProperty("Mode")]
+            public H323Mode H323Mode { get; set; }
         }
 
         public class Expression
         {
-            public string id { get; set; }
+            [JsonProperty("ExpressionId")]
+            public string ExpressionId { get; set; }
             public string Value { get; set; }
         }
 
@@ -915,53 +879,50 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class URL
+        public class Url
         {
             public string Value { get; set; }
         }
 
         public class HttpFeedback
         {
-            public string id { get; set; }
-            public List<Expression> Expression { get; set; }
+            [JsonProperty("HttpFeedbackId")]
+            public string HttpFeedbackId { get; set; }
+            [JsonProperty("Expression")]
+            public List<Expression> HttpFedbackExpressions { get; set; }
             public Format Format { get; set; }
-            public URL URL { get; set; }
+            public Url Url { get; set; }
         }
 
         public class MediaChannels
         {
-            public List<Call2> Call { get; set; }
+            [JsonProperty("Call")]
+            public List<MediaChannelCall> MediaChannelCalls { get; set; }
         }
 
-        public class Call2
+        public class MediaChannelCall
         {
-            public List<Channel> Channel { get; set; }
-            public string Id { get; set; }
+            [JsonProperty("Channel")]
+            public List<Channel> Channels { get; set; }
+            [JsonProperty("ExpressionId")]
+            public string MediaChannelCallId { get; set; }
         }
 
         public class Channel
         {
-            public Video2 Video;
-            public Type6 Type { get; set; }
+            [JsonProperty("Video")]
+            public ChannelVideo ChannelVideo;
+            public Type Type { get; set; }
         }
 
-        public class Video2
+        public class ChannelVideo
         {
             public Protocol Protocol;
 
         }
 
-        public class Type6
-        {
-            public string Value;
-        }
 
-        public class Address2
-        {
-            public string Value { get; set; }
-        }
-
-        public class Capabilities3
+        public class CapabilitiesString
         {
             public string Value { get; set; }
         }
@@ -981,7 +942,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class PortID
+        public class PortId
         {
             public string Value { get; set; }
         }
@@ -996,40 +957,51 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class SysObjectID
+        public class SysObjectId
         {
             public string Value { get; set; }
         }
 
-        public class VTPMgmtDomain
+        public class VtpMgmtDomain
         {
             public string Value { get; set; }
         }
 
-        public class Version
+        public class Version : ValueProperty
+        {
+            private string _value;
+
+            public string Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+        }
+
+        public class VoIpApplianceVlanId
         {
             public string Value { get; set; }
         }
 
-        public class VoIPApplianceVlanID
+        public class Cdp
         {
-            public string Value { get; set; }
-        }
-
-        public class CDP
-        {
-            public Address2 Address { get; set; }
-            public Capabilities3 Capabilities { get; set; }
+            public Address Address { get; set; }
+            [JsonProperty("Capabilities")]
+            public CapabilitiesString CapabilitiesString { get; set; }
             public DeviceId DeviceId { get; set; }
             public Duplex Duplex { get; set; }
             public Platform Platform { get; set; }
-            public PortID PortID { get; set; }
+            public PortId PortId { get; set; }
             public PrimaryMgmtAddress PrimaryMgmtAddress { get; set; }
             public SysName SysName { get; set; }
-            public SysObjectID SysObjectID { get; set; }
-            public VTPMgmtDomain VTPMgmtDomain { get; set; }
+            public SysObjectId SysObjectId { get; set; }
+            public VtpMgmtDomain VtpMgmtDomain { get; set; }
             public Version Version { get; set; }
-            public VoIPApplianceVlanID VoIPApplianceVlanID { get; set; }
+            public VoIpApplianceVlanId VoIpApplianceVlanId { get; set; }
         }
 
         public class Name
@@ -1042,21 +1014,19 @@ namespace epi_videoCodec_ciscoExtended
             public Name Name { get; set; }
         }
 
-        public class Address3
-        {
-            public string Value { get; set; }
-        }
 
         public class Server
         {
-            public string id { get; set; }
-            public Address3 Address { get; set; }
+            [JsonProperty("NetworkId")]
+            public string ServerId { get; set; }
+            public Address Address { get; set; }
         }
 
-        public class DNS
+        public class Dns
         {
             public Domain Domain { get; set; }
-            public List<Server> Server { get; set; }
+            [JsonProperty("Server")]
+            public List<Server> Servers { get; set; }
         }
 
         public class MacAddress
@@ -1075,10 +1045,6 @@ namespace epi_videoCodec_ciscoExtended
             public Speed Speed { get; set; }
         }
 
-        public class Address4
-        {
-            public string Value { get; set; }
-        }
 
         public class Gateway
         {
@@ -1090,32 +1056,26 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
+// ReSharper disable once InconsistentNaming
         public class IPv4
         {
-            public Address4 Address { get; set; }
+            public Address Address { get; set; }
             public Gateway Gateway { get; set; }
             public SubnetMask SubnetMask { get; set; }
 
             public IPv4()
             {
-                Address = new Address4();
+                Address = new Address();
             }
         }
 
-        public class Address5
-        {
-            public string Value { get; set; }
-        }
 
-        public class Gateway2
-        {
-            public string Value { get; set; }
-        }
-
+// ReSharper disable once InconsistentNaming
         public class IPv6
         {
-            public Address5 Address { get; set; }
-            public Gateway2 Gateway { get; set; }
+            public Address Address { get; set; }
+            [JsonProperty("Gateway")]
+            public Gateway GatewayIPv6 { get; set; }
         }
 
         public class VlanId
@@ -1128,20 +1088,23 @@ namespace epi_videoCodec_ciscoExtended
             public VlanId VlanId { get; set; }
         }
 
-        public class VLAN
+        public class Vlan
         {
             public Voice Voice { get; set; }
         }
 
         public class Network
         {
-            public string id { get; set; }
-            public CDP CDP { get; set; }
-            public DNS DNS { get; set; }
+            [JsonProperty("id")]
+            public string NetworkId { get; set; }
+            public Cdp Cdp { get; set; }
+            public Dns Dns { get; set; }
             public Ethernet Ethernet { get; set; }
+// ReSharper disable once InconsistentNaming
             public IPv4 IPv4 { get; set; }
+// ReSharper disable once InconsistentNaming
             public IPv6 IPv6 { get; set; }
-            public VLAN VLAN { get; set; }
+            public Vlan Vlan { get; set; }
 
             public Network()
             {
@@ -1154,32 +1117,20 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Address6
-        {
-            public string Value { get; set; }
-        }
 
-        public class Server2
-        {
-            public string id { get; set; }
-            public Address6 Address { get; set; }
-        }
 
-        public class Status5
-        {
-            public string Value { get; set; }
-        }
 
-        public class NTP
+        public class Ntp
         {
             public CurrentAddress CurrentAddress { get; set; }
-            public List<Server2> Server { get; set; }
-            public Status5 Status { get; set; }
+            [JsonProperty("Server")]
+            public List<Server> Servers { get; set; }
+            public Status Status { get; set; }
         }
 
         public class NetworkServices
         {
-            public NTP NTP { get; set; }
+            public Ntp Ntp { get; set; }
         }
 
         public class HardwareInfo
@@ -1187,30 +1138,14 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class ID2
-        {
-            public string Value { get; set; }
-        }
 
-        public class Name2
-        {
-            public string Value { get; set; }
-        }
 
         public class SoftwareInfo
         {
             public string Value { get; set; }
         }
 
-        public class Status6
-        {
-            public string Value { get; set; }
-        }
 
-        public class Type2
-        {
-            public string Value { get; set; }
-        }
 
         public class UpgradeStatus
         {
@@ -1219,19 +1154,24 @@ namespace epi_videoCodec_ciscoExtended
 
         public class ConnectedDevice
         {
-            public string id { get; set; }
             public HardwareInfo HardwareInfo { get; set; }
-            public ID2 ID { get; set; }
-            public Name2 Name { get; set; }
+            public Id ConnectedDeviceId { get; set; }
+            public Name Name { get; set; }
             public SoftwareInfo SoftwareInfo { get; set; }
-            public Status6 Status { get; set; }
-            public Type2 Type { get; set; }
+            public Status Status { get; set; }
+            public Type Type { get; set; }
             public UpgradeStatus UpgradeStatus { get; set; }
+        }
+
+        public class StatusString
+        {
+            public string Value { get; set; }
         }
 
         public class Peripherals
         {
-            public List<ConnectedDevice> ConnectedDevice { get; set; }
+            [JsonProperty("ConnectedDevice")]
+            public List<ConnectedDevice> ConnectedDevices { get; set; }
         }
 
         public class Enabled
@@ -1256,7 +1196,7 @@ namespace epi_videoCodec_ciscoExtended
             public LoggedIn LoggedIn { get; set; }
         }
 
-        public class CUCM
+        public class Cucm
         {
             public ExtensionMobility ExtensionMobility { get; set; }
         }
@@ -1266,20 +1206,16 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class URL2
-        {
-            public string Value { get; set; }
-        }
 
         public class VersionId
         {
             public string Value { get; set; }
         }
 
-        public class Current2
+        public class SoftwareCurrent
         {
             public CompletedAt CompletedAt { get; set; }
-            public URL2 URL { get; set; }
+            public Url Url { get; set; }
             public VersionId VersionId { get; set; }
         }
 
@@ -1288,7 +1224,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Message2
+        public class UpgradeStatusMessage
         {
             public string Value { get; set; }
         }
@@ -1303,48 +1239,36 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Status7
-        {
-            public string Value { get; set; }
-        }
 
-        public class URL3
-        {
-            public string Value { get; set; }
-        }
 
-        public class VersionId2
-        {
-            public string Value { get; set; }
-        }
 
-        public class UpgradeStatus2
+        public class UpgradeStatusExpanded
         {
             public LastChange LastChange { get; set; }
-            public Message2 Message { get; set; }
+            [JsonProperty("Message")]
+            public UpgradeStatusMessage UpgradeStatusMessage { get; set; }
             public Phase Phase { get; set; }
             public SessionId SessionId { get; set; }
-            public Status7 Status { get; set; }
-            public URL3 URL { get; set; }
-            public VersionId2 VersionId { get; set; }
+            public Status Status { get; set; }
+            public Url Url { get; set; }
+            [JsonProperty("VersionId")]
+            public VersionId UgpradeStatusVersionId { get; set; }
         }
 
         public class Software
         {
-            public Current2 Current { get; set; }
-            public UpgradeStatus2 UpgradeStatus { get; set; }
+            [JsonProperty("Current")]
+            public SoftwareCurrent SoftwareCurrent { get; set; }
+            [JsonProperty("UpgradeStatus")]
+            public UpgradeStatusExpanded SoftwareUpgradeStatus { get; set; }
         }
 
-        public class Status8
-        {
-            public string Value { get; set; }
-        }
 
         public class Provisioning
         {
-            public CUCM CUCM { get; set; }
+            public Cucm Cucm { get; set; }
             public Software Software { get; set; }
-            public Status8 Status { get; set; }
+            public Status Status { get; set; }
         }
 
         public class Availability2
@@ -1354,7 +1278,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Services
         {
-            public Availability2 Availability { get; set; }
+            public Availability Availability { get; set; }
+
+            public Services()
+            {
+                Availability = new Availability();
+            }
         }
 
         public class Proximity
@@ -1362,9 +1291,9 @@ namespace epi_videoCodec_ciscoExtended
             public Services Services { get; set; }
         }
 
-        public class Current3 : ValueProperty
+        public class CurrentPeopleCount : ValueProperty
         {
-            string _Value;
+            string _value;
 
             /// <summary>
             /// Sets Value and triggers the action when set
@@ -1373,11 +1302,11 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -1387,23 +1316,20 @@ namespace epi_videoCodec_ciscoExtended
             /// </summary>
             public int IntValue
             {
-                get
-                {
-                    if (!string.IsNullOrEmpty(_Value))
-                        return Convert.ToInt32(_Value);
-                    else
-                        return 0;
+                get {
+                    return !string.IsNullOrEmpty(_value) ? Convert.ToInt32(_value) : 0;
                 }
             }
         }
 
         public class PeopleCount
         {
-            public Current3 Current { get; set; }
+            [JsonProperty("Current")]
+            public CurrentPeopleCount CurrentPeopleCount { get; set; }
 
             public PeopleCount()
             {
-                Current = new Current3();
+                CurrentPeopleCount = new CurrentPeopleCount();
             }
         }
 
@@ -1436,19 +1362,19 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Primary
         {
-            public URI URI { get; set; }
+            public CiscoUri Uri { get; set; }
 
             public Primary()
             {
-                URI = new URI();
+                Uri = new CiscoUri();
             }
         }
 
-        public class AlternateURI
+        public class AlternateUri
         {
             public Primary Primary { get; set; }
 
-            public AlternateURI()
+            public AlternateUri()
             {
                 Primary = new Primary();
             }
@@ -1459,17 +1385,26 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class DisplayName
+        public class DisplayName : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public string Value
+            {
+                get
+                {
+                    return _value;
+                }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
-        public class Mode6
-        {
-            public string Value { get; set; }
-        }
 
-        public class URI
+        public class CiscoUri
         {
             public string Value { get; set; }
         }
@@ -1477,8 +1412,13 @@ namespace epi_videoCodec_ciscoExtended
         public class CallForward
         {
             public DisplayName DisplayName { get; set; }
-            public Mode6 Mode { get; set; }
-            public URI URI { get; set; }
+            public Mode Mode { get; set; }
+            public CiscoUri Uri { get; set; }
+
+            public CallForward()
+            {
+                DisplayName = new DisplayName();    
+            }
         }
 
         public class MessagesWaiting
@@ -1486,59 +1426,37 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class URI2
-        {
-            public string Value { get; set; }
-        }
 
         public class Mailbox
         {
             public MessagesWaiting MessagesWaiting { get; set; }
-            public URI2 URI { get; set; }
+            public CiscoUri Uri { get; set; }
         }
 
-        public class Address7
-        {
-            public string Value { get; set; }
-        }
 
-        public class Status9
-        {
-            public string Value { get; set; }
-        }
 
         public class Proxy
         {
-            public string id { get; set; }
-            public Address7 Address { get; set; }
-            public Status9 Status { get; set; }
+            [JsonProperty("id")]
+            public string ProxyId { get; set; }
+            public Address Address { get; set; }
+            public Status Status { get; set; }
         }
 
-        public class Reason3
-        {
-            public string Value { get; set; }
-        }
 
-        public class Status10
-        {
-            public string Value { get; set; }
-        }
 
-        public class URI3
-        {
-            public string Value { get; set; }
-        }
 
         public class Registration
         {
-            public string id { get; set; }
-            public Reason3 Reason { get; set; }
-            public Status10 Status { get; set; }
-            public URI3 URI { get; set; }
+            [JsonProperty("id")]
+            public string StringId { get; set; }
+            public Reason Reason { get; set; }
+            public Status Status { get; set; }
+            public CiscoUri Uri { get; set; }
 
             public Registration()
             {
-                URI = new URI3();
+                Uri = new CiscoUri();
             }
         }
 
@@ -1552,32 +1470,61 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class SIP
+        public class Sip
         {
-            public AlternateURI AlternateURI { get; set; }
+            public AlternateUri AlternateUri { get; set; }
             public Authentication Authentication { get; set; }
             public CallForward CallForward { get; set; }
             public Mailbox Mailbox { get; set; }
-            public List<Proxy> Proxy { get; set; }
-            public List<Registration> Registration { get; set; }
+            [JsonProperty("Proxy")]
+            public List<Proxy> Proxies { get; set; }
+            public RegistrationCount RegistrationCount { get; set; }
+            private List<Registration> _registrations;
+
+            [JsonProperty("Registration")]
+            public List<Registration> Registrations
+            {
+                get { return _registrations; }
+                set
+                {
+                    if (value == null) return;
+                    _registrations = value;
+                    RegistrationCount.Value = value.Count;
+                }
+            }
+
             public Secure Secure { get; set; }
             public Verified Verified { get; set; }
 
-            public SIP()
+            public Sip()
             {
-                AlternateURI = new AlternateURI();
-                Registration = new List<Registration>();
+                RegistrationCount = new RegistrationCount();
+                AlternateUri = new AlternateUri();
+                _registrations = new List<Registration>();
+                Registrations = new List<Registration>();
             }
         }
 
-        public class Mode7
+        public class RegistrationCount : ValueProperty
         {
-            public string Value { get; set; }
+            private int _value;
+
+            public int Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
-        public class FIPS
+
+
+        public class Fips
         {
-            public Mode7 Mode { get; set; }
+            public Mode Mode { get; set; }
         }
 
         public class CallHistory
@@ -1590,7 +1537,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class DHCP
+        public class Dhcp
         {
             public string Value { get; set; }
         }
@@ -1609,14 +1556,14 @@ namespace epi_videoCodec_ciscoExtended
         {
             public CallHistory CallHistory { get; set; }
             public Configurations Configurations { get; set; }
-            public DHCP DHCP { get; set; }
+            public Dhcp Dhcp { get; set; }
             public InternalLogging InternalLogging { get; set; }
             public LocalPhonebook LocalPhonebook { get; set; }
         }
 
         public class Security
         {
-            public FIPS FIPS { get; set; }
+            public Fips Fips { get; set; }
             public Persistency Persistency { get; set; }
         }
 
@@ -1633,7 +1580,7 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     _value = value;
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
-                    BoolValue = value == "On" || value == "Standby";
+                    BoolValue = value.ToLower() == "on" || value.ToLower() == "standby";
                     OnValueChanged();
                 }
             }
@@ -1654,20 +1601,41 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class SerialNumber
+        public class SerialNumber : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public string Value
+            {
+                get { return _value; }
+                set
+                {
+                    if (String.IsNullOrEmpty(value)) return;
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
         public class Module
         {
             public CompatibilityLevel CompatibilityLevel { get; set; }
             public SerialNumber SerialNumber { get; set; }
+
+            public Module()
+            {
+                SerialNumber = new SerialNumber();
+            }
         }
 
         public class Hardware
         {
             public Module Module { get; set; }
+
+            public Hardware()
+            {
+                Module = new Module();
+            }
         }
 
         public class ProductId
@@ -1685,24 +1653,35 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class DisplayName2
-        {
-            public string Value { get; set; }
-        }
-
-        public class Name3
-        {
-            public string Value { get; set; }
-        }
-
         public class Encryption
         {
             public string Value { get; set; }
         }
 
-        public class MultiSite
+        public class MultiSite : ValueProperty
         {
-            public string Value { get; set; }
+            private string _value;
+
+            public bool BoolValue
+            {
+                get
+                {
+                    if (String.IsNullOrEmpty(_value)) return false;
+
+                    return _value.ToLower() == "true";
+                }
+            }
+
+            public string Value
+            {
+                get { return _value; }
+                set
+                {
+                    if (String.IsNullOrEmpty(value)) return;
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
         public class RemoteMonitoring
@@ -1727,22 +1706,46 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Version2
-        {
-            public string Value { get; set; }
-        }
 
-        public class Software2
+        public class SystemUnitSoftware
         {
-            public DisplayName2 DisplayName { get; set; }
-            public Name3 Name { get; set; }
+            public Firmware Firmware { get; private set; }
+            public DisplayName DisplayName { get; set; }
+            public Name Name { get; set; }
             public OptionKeys OptionKeys { get; set; }
             public ReleaseDate ReleaseDate { get; set; }
-            public Version2 Version { get; set; }
+            public Version Version { get; set; }
 
-            public Software2()
+            public SystemUnitSoftware()
             {
                 OptionKeys = new OptionKeys();
+                Version = new Version();
+                DisplayName = new DisplayName();
+                Firmware = new Firmware();
+                DisplayName.ValueChangedAction += () =>
+                {
+                    if (String.IsNullOrEmpty(DisplayName.Value)) return;
+                    var displayName = DisplayName.Value;
+                    var splitSoftware = displayName.Split(' ');
+                    if (splitSoftware.Length < 2) return;
+                    Firmware.FirmwareValue = new System.Version(splitSoftware[1]);
+                };
+            }
+        }
+
+        public class Firmware : ValueProperty
+        {
+            private System.Version _firmwareValue;
+
+            public System.Version FirmwareValue
+            {
+                get { return _firmwareValue; }
+                set
+                {
+                    if (value == null) return;
+                    _firmwareValue = value;
+                    OnValueChanged();
+                }
             }
         }
 
@@ -1779,13 +1782,16 @@ namespace epi_videoCodec_ciscoExtended
             public ProductId ProductId { get; set; }
             public ProductPlatform ProductPlatform { get; set; }
             public ProductType ProductType { get; set; }
-            public Software2 Software { get; set; }
-            public State2 State { get; set; }
+            [JsonProperty("Software")]
+            public SystemUnitSoftware SystemUnitSoftware { get; set; }
+            [JsonProperty("State")]
+            public State2 SystemUnitState { get; set; }
             public Uptime Uptime { get; set; }
 
             public SystemUnit()
             {
-                Software = new Software2();
+                SystemUnitSoftware = new SystemUnitSoftware();
+                Hardware = new Hardware();
             }
         }
 
@@ -1806,19 +1812,16 @@ namespace epi_videoCodec_ciscoExtended
 
         public class ContactMethod
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string ContactMethodId { get; set; }
             public Number Number { get; set; }
-        }
-
-        public class Name4
-        {
-            public string Value { get; set; }
         }
 
         public class ContactInfo
         {
-            public List<ContactMethod> ContactMethod { get; set; }
-            public Name4 Name { get; set; }
+            [JsonProperty("ContactMethod")]
+            public List<ContactMethod> ContactMethods { get; set; }
+            public Name Name { get; set; }
         }
 
         public class UserInterface
@@ -1826,20 +1829,12 @@ namespace epi_videoCodec_ciscoExtended
             public ContactInfo ContactInfo { get; set; }
         }
 
-        public class PIPPosition
+
+        public class ActiveSpeakerPip
         {
-            public string Value { get; set; }
+            public PipPosition PipPosition { get; set; }
         }
 
-        public class ActiveSpeaker2
-        {
-            public PIPPosition PIPPosition { get; set; }
-        }
-
-        public class Connected2
-        {
-            public string Value { get; set; }
-        }
 
         public class SignalState
         {
@@ -1851,18 +1846,24 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Type3
+
+#region Type
+        public class Type
         {
             public string Value { get; set; }
         }
 
+#endregion
+
+
         public class Connector
         {
-            public string id { get; set; }
-            public Connected2 Connected { get; set; }
+            [JsonProperty("id")]
+            public string ConnectorIdString { get; set; }
+            public Connected Connected { get; set; }
             public SignalState SignalState { get; set; }
             public SourceId SourceId { get; set; }
-            public Type3 Type { get; set; }
+            public Type Type { get; set; }
         }
 
         public class MainVideoSource
@@ -1930,7 +1931,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Source
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string SourceIdString { get; set; }
             public ConnectorId ConnectorId { get; set; }
             public FormatStatus FormatStatus { get; set; }
             public FormatType FormatType { get; set; }
@@ -1938,14 +1940,16 @@ namespace epi_videoCodec_ciscoExtended
             public Resolution Resolution { get; set; }
         }
 
-        public class Input2
+        public class VideoInput
         {
-            public List<Connector> Connector { get; set; }
+            [JsonProperty("Connector")]
+            public List<Connector> InputConnectors { get; set; }
             public MainVideoSource MainVideoSource { get; set; }
             public MainVideoMute MainVideoMute { get; set; }
-            public List<Source> Source { get; set; }
+            [JsonProperty("Source")]
+            public List<Source> InputSources { get; set; }
 
-            public Input2()
+            public VideoInput()
             {
                 MainVideoMute = new MainVideoMute();
             }
@@ -1953,17 +1957,17 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Local : ValueProperty
         {
-            string _Value;
+            string _value;
 
             public string Value // Valid values are On/Off
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -2002,19 +2006,15 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Name5
-        {
-            public string Value { get; set; }
-        }
 
         public class PreferredFormat
         {
             public string Value { get; set; }
         }
 
-        public class ConnectedDevice2
+        public class VideoOutputConnectedDevice
         {
-            public Name5 Name { get; set; }
+            public Name Name { get; set; }
             public PreferredFormat PreferredFormat { get; set; }
         }
 
@@ -2040,39 +2040,33 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Resolution2
         {
-            public Height2 Height { get; set; }
-            public RefreshRate2 RefreshRate { get; set; }
-            public Width2 Width { get; set; }
+            public Height Height { get; set; }
+            public RefreshRate RefreshRate { get; set; }
+            public Width Width { get; set; }
         }
 
-        public class Type4
-        {
-            public string Value { get; set; }
-        }
 
-        public class Connector2
+        public class VideoOutputConnector
         {
-            public string id { get; set; }
-            public Connected3 Connected { get; set; }
-            public ConnectedDevice2 ConnectedDevice { get; set; }
+            [JsonProperty("id")]
+            public string VideoOutputConnectorId { get; set; }
+            public Connected Connected { get; set; }
+            [JsonProperty("ConnectedDevice")]
+            public VideoOutputConnectedDevice VideoOutputConnectedDevice { get; set; }
             public MonitorRole MonitorRole { get; set; }
-            public Resolution2 Resolution { get; set; }
-            public Type4 Type { get; set; }
+            public Resolution Resolution { get; set; }
+            public Type Type { get; set; }
         }
 
-        public class Output2
+        public class VideoOutput
         {
-            public List<Connector2> Connector { get; set; }
+            [JsonProperty("Connector")]
+            public List<VideoOutputConnector> VideoOutputConnectors { get; set; }
         }
 
-        public class PIPPosition2
+        public class PresentationPip
         {
-            public string Value { get; set; }
-        }
-
-        public class Presentation2
-        {
-            public PIPPosition2 PIPPosition { get; set; }
+            public PipPosition PipPosition { get; set; }
         }
 
         public class FullscreenMode
@@ -2080,7 +2074,7 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class Mode8 : ValueProperty
+        public class SelfViewMode : ValueProperty
         {
             public bool BoolValue { get; private set; }
 
@@ -2101,19 +2095,19 @@ namespace epi_videoCodec_ciscoExtended
             public string Value { get; set; }
         }
 
-        public class PIPPosition3 : ValueProperty
+        public class PipPosition : ValueProperty
         {
-            string _Value;
+            string _value;
 
             public string Value
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -2122,32 +2116,37 @@ namespace epi_videoCodec_ciscoExtended
         public class Selfview
         {
             public FullscreenMode FullscreenMode { get; set; }
-            public Mode8 Mode { get; set; }
+            [JsonProperty("Mode")]
+            public SelfViewMode SelfViewMode { get; set; }
             public OnMonitorRole OnMonitorRole { get; set; }
-            public PIPPosition3 PIPPosition { get; set; }
+            public PipPosition PipPosition { get; set; }
 
             public Selfview()
             {
-                Mode = new Mode8();
-                PIPPosition = new PIPPosition3();
+                SelfViewMode = new SelfViewMode();
+                PipPosition = new PipPosition();
             }
         }
 
         public class Video
         {
-            public ActiveSpeaker2 ActiveSpeaker { get; set; }
-            public Input2 Input { get; set; }
+            [JsonProperty("ActiveSpeaker")]
+            public ActiveSpeakerPip ActiveSpeakerPip { get; set; }
+            [JsonProperty("Input")]
+            public VideoInput VideoInput { get; set; }
             public Layout Layout { get; set; }
             public Monitors Monitors { get; set; }
-            public Output2 Output { get; set; }
-            public Presentation2 Presentation { get; set; }
+            [JsonProperty("Output")]
+            public VideoOutput VideoOutput { get; set; }
+            [JsonProperty("Presentation")]
+            public PresentationPip PresentationPip { get; set; }
             public Selfview Selfview { get; set; }
 
             public Video()
             {
                 Selfview = new Selfview();
                 Layout = new Layout();
-                Input = new Input2();
+                VideoInput = new VideoInput();
             }
         }
 
@@ -2178,17 +2177,17 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Duration : ValueProperty
         {
-            private string _Value;
+            private string _value;
 
             public string Value
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -2197,7 +2196,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 get
                 {
-                    return new TimeSpan(0, 0, Int32.Parse(_Value));
+                    return new TimeSpan(0, 0, Int32.Parse(_value));
                 }
             }
         }
@@ -2249,7 +2248,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public class Call
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string CallIdString { get; set; }
             public AnswerState AnswerState { get; set; }
             public CallType CallType { get; set; }
             public CallbackNumber CallbackNumber { get; set; }
@@ -2259,41 +2259,40 @@ namespace epi_videoCodec_ciscoExtended
             public Duration Duration { get; set; }
             public Encryption Encryption { get; set; }
             public FacilityServiceId FacilityServiceId { get; set; }
-            public string ghost { get; set; }
+            [JsonProperty("Ghost")]
+            public string GhostString { get; set; }
             public HoldReason HoldReason { get; set; }
             public PlacedOnHold PlacedOnHold { get; set; }
             public Protocol Protocol { get; set; }
             public ReceiveCallRate ReceiveCallRate { get; set; }
             public RemoteNumber RemoteNumber { get; set; }
-            public CallStatus Status { get; set; }
+            [JsonProperty("Status")]
+            public CallStatus CallStatus { get; set; }
             public TransmitCallRate TransmitCallRate { get; set; }
 
             public Call()
             {
                 CallType = new CallType();
-                Status = new CallStatus();
+                CallStatus = new CallStatus();
                 Duration = new Duration();
+                DisplayName = new DisplayName();
             }
         }
 
-        public class Type5
-        {
-            public string Value { get; set; }
-        }
 
-        public class Description2 : ValueProperty
+        public class Description : ValueProperty
         {
-            string _Value;
+            string _value;
 
             public string Value
             {
                 get
                 {
-                    return _Value;
+                    return _value;
                 }
                 set
                 {
-                    _Value = value;
+                    _value = value;
                     OnValueChanged();
                 }
             }
@@ -2308,7 +2307,7 @@ namespace epi_videoCodec_ciscoExtended
                 set
                 {
                     // If the incoming value is "True" it sets the BoolValue true, otherwise sets it false
-                    BoolValue = value == "True";
+                    BoolValue = value.ToLower() == "true";
                     OnValueChanged();
                 }
             }
@@ -2317,7 +2316,7 @@ namespace epi_videoCodec_ciscoExtended
         /*
         public class RoomPreset
         {
-            public string id { get; set; }
+            public string CiscoCallId { get; set; }
             public Defined Defined { get; set; }
             public Description2 Description { get; set; }
             public Type5 Type { get; set; }
@@ -2337,25 +2336,53 @@ namespace epi_videoCodec_ciscoExtended
         {
             public Audio Audio { get; set; }
             public Bookings Bookings { get; set; }
-            public List<Call> Call { get; set; }
+            [JsonProperty("Call")]
+            public List<Call> Calls { get; set; }
             public Cameras Cameras { get; set; }
-            public Capabilities2 Capabilities { get; set; }
-            public Conference2 Conference { get; set; }
+            [JsonProperty("Capabilities")]
+            public StatusCapabilities StatusCapabilities { get; set; }
+            [JsonProperty("Conference")]
+            public StatusConference StatusConference { get; set; }
             public Diagnostics Diagnostics { get; set; }
             public Experimental Experimental { get; set; }
             public H323 H323 { get; set; }
-            public List<HttpFeedback> HttpFeedback { get; set; }
+            [JsonProperty("HttpFeedback")]
+            public List<HttpFeedback> HttpFeedbacks { get; set; }
             public MediaChannels MediaChannels { get; set; }
-            public List<Network> Network { get; set; }
+            public NetworkCount NetworkCount { get; set; }
+            private List<Network> _networks;
+            [JsonProperty("Network")]
+            public List<Network> Networks {
+                get { return _networks; }
+                set
+                {
+                    if (value == null) return;
+                    _networks = value;
+                    NetworkCount.Value = value.Count;
+                } }
             public NetworkServices NetworkServices { get; set; }
             public Peripherals Peripherals { get; set; }
             public Provisioning Provisioning { get; set; }
             public Proximity Proximity { get; set; }
             public RoomAnalytics RoomAnalytics { get; set; }
+            public RoomPresetsChange RoomPresetsChange { get; set; }
+            private List<RoomPreset> _roomPresets;
+            [JsonProperty("RoomPreset")]
+            public List<RoomPreset> RoomPresets
+            {
+                get { return _roomPresets; }
+                set
+                {
+                    if (value == null) return;
+                    _roomPresets = value;
 
-            public List<RoomPreset> RoomPreset { get; set; }
+                    if (RoomPresetsChange == null) return;
 
-            public SIP SIP { get; set; }
+                    RoomPresetsChange.Value = true;
+                }
+            }
+
+            public Sip Sip { get; set; }
             public Security Security { get; set; }
             public Standby Standby { get; set; }
             public SystemUnit SystemUnit { get; set; }
@@ -2365,47 +2392,88 @@ namespace epi_videoCodec_ciscoExtended
 
             public Status()
             {
+                RoomPresetsChange = new RoomPresetsChange();
+                _roomPresets = new List<RoomPreset>();
+
                 Audio = new Audio();
-                Call = new List<Call>();
+                Calls = new List<Call>();
                 Standby = new Standby();
                 Cameras = new Cameras();
                 RoomAnalytics = new RoomAnalytics();
-                RoomPreset = new List<RoomPreset>();
-                Conference = new Conference2();
+                StatusConference = new StatusConference();
                 SystemUnit = new SystemUnit();
                 Video = new Video();
-                Conference = new Conference2();
-                Network = new List<Network>();
+                NetworkCount = new NetworkCount();
+                _networks = new List<Network>();
+                Networks = new List<Network>();
+                Sip = new Sip();
+
+                RoomPresets = new List<RoomPreset>();
+            }
+        }
+
+        public class RoomPresetsChange : ValueProperty
+        {
+            private bool _value;
+
+            public bool Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+
+
+
+
+        }
+
+        public class NetworkCount : ValueProperty
+        {
+            private int _value;
+
+            public int Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
             }
         }
 
         public class RoomPreset : ConvertiblePreset
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string RoomPresetId { get; set; }
             public Defined Defined { get; set; }
-            public Description2 Description { get; set; }
-            public Type5 Type { get; set; }
+            public Description Description { get; set; }
+            public Type Type { get; set; }
 
             public RoomPreset()
             {
                 Defined = new Defined();
-                Description = new Description2();
-                Type = new Type5();
+                Description = new Description();
+                Type = new Type();
             }
 
             public override PresetBase ConvertCodecPreset()
             {
                 try
                 {
-                    var preset = new CodecRoomPreset(UInt16.Parse(id), Description.Value, Defined.BoolValue, true);
+                    var preset = new CodecRoomPreset(UInt16.Parse(RoomPresetId), Description.Value, Defined.BoolValue, true);
 
-                    Debug.Console(2, "Preset ID {0} Converted from Cisco Codec Preset to Essentials Preset", id);
+                    Debug.Console(2, "Preset ID {0} Converted from Cisco Codec Preset to Essentials Preset", RoomPresetId);
 
                     return preset;
                 }
                 catch (Exception e)
                 {
-                    Debug.Console(2, "Unable to convert preset: {0}. Error: {1}", id, e);
+                    Debug.Console(2, "Unable to convert preset: {0}. Error: {1}", RoomPresetId, e);
                     return null;
                 }
             }
@@ -2422,52 +2490,84 @@ namespace epi_videoCodec_ciscoExtended
                 Status = new Status();
             }
         }
-    }
-
-    public class CurrentLayouts
-    {
-        public ActiveLayout ActiveLayout { get; set; }
-
-        public List<LayoutData> AvailableLayouts { get; set; }
-
-        public CurrentLayouts()
+        public class CurrentLayouts
         {
-            AvailableLayouts = new List<LayoutData>();
-            ActiveLayout = new ActiveLayout();
+            private List<LayoutData> _availableLayouts; 
+
+            public ActiveLayout ActiveLayout { get; set; }
+
+            public AvailableLayoutsCount AvailableLayoutsCount { get; set; }
+
+            public List<LayoutData> AvailableLayouts
+            {
+                get { return _availableLayouts; }
+                set
+                {
+                    if (value == null) return;
+                    _availableLayouts = value;
+                    AvailableLayoutsCount.Value = value.Count;
+                }
+            }
+
+            public CurrentLayouts()
+            {
+                AvailableLayoutsCount = new AvailableLayoutsCount();
+                _availableLayouts = new List<LayoutData>();
+                AvailableLayouts = new List<LayoutData>();
+                ActiveLayout = new ActiveLayout();
+            }
+
+        }
+
+        public class AvailableLayoutsCount : ValueProperty
+        {
+            private int _value;
+
+            public int Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+        }
+
+        public class ActiveLayout : ValueProperty
+        {
+            string _value;
+
+            public string Value
+            {
+                get
+                {
+                    return _value;
+                }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
+
+        }
+
+
+        public class LayoutData
+        {
+            [JsonProperty("LocalInstanceId")]
+            public string StringId { get; set; }
+            public LayoutName LayoutName { get; set; }
+        }
+
+        public class LayoutName
+        {
+            public string Value;
         }
 
     }
 
-    public class ActiveLayout : ValueProperty
-    {
-        string _Value;
-
-        public string Value
-        {
-            get
-            {
-                return _Value;
-            }
-            set
-            {
-                _Value = value;
-                OnValueChanged();
-            }
-        }
-
-    }
-
-
-    public class LayoutData
-    {
-        public string id { get; set; }
-        public LayoutName LayoutName { get; set; }
-    }
-
-    public class LayoutName
-    {
-        public string Value;
-    }
 
 
 }

@@ -1,4 +1,6 @@
-﻿namespace epi_videoCodec_ciscoExtended
+﻿using Newtonsoft.Json;
+
+namespace epi_videoCodec_ciscoExtended
 {
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
@@ -7,108 +9,125 @@
     {
         public class CauseValue
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CauseType
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CauseString
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class OrigCallDirection
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
-        public class RemoteURI
+        public class RemoteUri
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class DisplayName
         {
-            public string id { get; set; }
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CallId
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CauseCode
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CauseOrigin
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class Protocol
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class Duration
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CallType
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class CallRate
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class Encryption
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
-        public class RequestedURI
+        public class RequestedUri
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
         public class PeopleCountAverage
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public string Value { get; set; }
         }
 
-        public class CallDisconnect
+        public class CallDisconnect : ValueProperty
         {
-            public string id { get; set; }
+            private string _id;
+            [JsonProperty("id")]
+            public string Id { get { return _id; } set { _id = value; OnValueChanged(); } }
             public CauseValue CauseValue { get; set; }
             public CauseType CauseType { get; set; }
             public CauseString CauseString { get; set; }
             public OrigCallDirection OrigCallDirection { get; set; }
-            public RemoteURI RemoteURI { get; set; }
+            public RemoteUri RemoteUri { get; set; }
             public DisplayName DisplayName { get; set; }
             public CallId CallId { get; set; }
             public CauseCode CauseCode { get; set; }
@@ -118,43 +137,80 @@
             public CallType CallType { get; set; }
             public CallRate CallRate { get; set; }
             public Encryption Encryption { get; set; }
-            public RequestedURI RequestedURI { get; set; }
+            public RequestedUri RequestedUri { get; set; }
             public PeopleCountAverage PeopleCountAverage { get; set; }
         }
         public class UserInterface
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public Presentation Presentation { get; set; }
+
+            public UserInterface()
+            {
+                Presentation = new Presentation();
+            }
         }
         public class Presentation
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public ExternalSource ExternalSource { get; set; }
+
+            public Presentation()
+            {
+                ExternalSource = new ExternalSource();
+            }
         }
         public class ExternalSource
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public Selected Selected { get; set; }
+
+            public ExternalSource()
+            {
+                Selected = new Selected();
+            }
         }
         public class Selected
         {
-            public string id { get; set; }
+            [JsonProperty("id")]
+            public string Id { get; set; }
             public SourceIdentifier SourceIdentifier { get; set; }
+
+            public Selected()
+            {
+                SourceIdentifier = new SourceIdentifier();
+            }
         }
-        public class SourceIdentifier
+        public class SourceIdentifier : ValueProperty
         {
-            public string id { get; set; }
-            public string Value { get; set; }
+            private string _value;
+            [JsonProperty("id")]
+            public string Id { get; set; }
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
         }
         public class Event
         {
             public CallDisconnect CallDisconnect { get; set; }
             public UserInterface UserInterface { get; set; }
+
+            public Event()
+            {
+                CallDisconnect = new CallDisconnect();
+                UserInterface = new UserInterface();
+            }
         }
 
         public class RootObject
         {
             public Event Event { get; set; }
+
+            public RootObject()
+            {
+                Event = new Event();
+            }
         }
     }
 }
