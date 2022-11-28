@@ -1,0 +1,8 @@
+# files to be ignored in addition to base .gitignore
+SPlsWork*
+
+# files to be included, i.e. excluded from base .gitignore
+
+# Keeping the Crestron archive in the repo as a tidy way of including dependencies 
+# without cluttering the repo or requiring links to dependency repo.
+!*_compiled.zip

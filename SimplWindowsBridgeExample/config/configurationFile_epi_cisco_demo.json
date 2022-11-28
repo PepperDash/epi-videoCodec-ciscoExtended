@@ -1,0 +1,124 @@
+{
+    "system": {
+        "rooms": [
+            {
+                "name": "epi-videoCodec-ciscoExtended SIMPL demo",
+                "key": "room1",
+                "properties": {}
+            }
+        ],
+        "devices": [],
+        "info": {
+            "lastModifiedDate": "2022-11-22T13:22:09.195Z"
+        }
+    },
+    "system_url": "",
+    "template_url": "",
+    "template": {
+        "rooms": [
+            {
+                "key": "room1",
+                "type": "dmpsroom",
+                "name": "Small Meeting Room",
+                "properties": {
+                    "description": "",
+                    "helpMessage": "The cake is a lie"
+                }
+            }
+        ],
+        "devices": [
+            {
+                "uid": 0,
+                "name": "cp3",
+                "key": "processor",
+                "type": "CP3",
+                "group": "processor",
+                "properties":  {}
+            },
+            {
+                "name": "Video Codec 1",
+                "key": "Codec-1",
+                "type": "ciscoRoomOS",
+                "uid": 1,
+                "properties": {
+                    "control": {
+                        "endOfLineString": "\n",
+                        "deviceReadyResponsePattern": "",
+                        "method": "Ssh",
+                        "tcpSshProperties": {
+                            "address": "192.168.20.6",
+                            "port": 22,
+                            "autoReconnect": true,
+                            "AutoReconnectIntervalMs": 10000,
+                            "username": "admin",
+                            "password": "tandberg"
+                        }
+                    }
+                },
+                "group": "videoCodec"
+            },        
+            {
+                "uid": 20,
+                "key": "eisc-vc",
+                "type": "eiscApiAdvanced",
+                "group":"api",
+                "name": "EISC VC Bridge",
+                "properties": {
+                    "control":{
+                        "tcpSshProperties":{
+                            "address":"127.0.0.2",
+                            "port":0
+                        },
+                        "ipId":"4F"
+                    },
+                    "devices": [
+                        {
+                          "deviceKey":"Codec-1",
+                          "joinStart":1                    
+                        }
+                    ] 
+                }
+            },        
+            {
+                "uid": 21,
+                "key": "eisc-vc-comms",
+                "type": "eiscapi",
+                "group":"api",
+                "name": "EISC VC Bridge",
+                "properties": {
+                    "control":{
+                        "tcpSshProperties":{
+                            "address":"127.0.0.2",
+                            "port":0
+                        },
+                        "ipId":"4E"
+                    },
+                    "devices": [
+                        {
+                          "deviceKey":"Codec-1-ssh",
+                          "joinStart":1                   
+                        },
+                        {
+                          "deviceKey":"Codec-1-comMonitor",
+                          "joinStart":21                   
+                        },
+                        {
+                          "deviceKey":"Codec-1[osd]",
+                          "joinStart":101                   
+                        }
+                    ] 
+                }
+            }
+        ],
+        "info": {
+            "comment": "eisc-vc-comms not tested separate because eiscapiadvanced is not supported by the devices",
+            "lastUid": 1,
+            "lastModifiedDate": "2022-11-22T13:55:06.550Z",
+            "systemType": "huddle",
+            "processorType": "cp3",
+            "requiredControlSofwareVersion": ""
+        },
+        "tieLines": [],
+        "sourceLists": {}
+    }
+}
