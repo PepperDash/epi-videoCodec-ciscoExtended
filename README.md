@@ -232,9 +232,9 @@ For renaming instructions in particular, see the XML `remarks` tags on class def
 >
 > 
 ``` javascript
-"key": "TesiraDsp-1",
+"key": "Codec-1",
     "name": "Video Codec 1",
-    "type": "Codec-1",
+    "type": "ciscoRoomOS",
     "group": "videoCodec",
     "properties": {
         "control": {
@@ -282,3 +282,19 @@ For renaming instructions in particular, see the XML `remarks` tags on class def
 ```
 
 ***
+
+#### Helful info
+in a terminal you can send a string directly to the device, here is an example command using "Codec-1-ssh" as the device port name
+```
+devjson:1 {"deviceKey":"Codec-1-ssh","methodName":"SendText", "params": ["xStatus SystemUnit\n"]}
+````
+
+see what methods you can call on the port by sending the following command
+```
+devmethods Codec-1-ssh
+```
+
+To see commands send and received you can turn on debugging for the port (1: Rx, 2:Txm 3:Both)
+```
+setdevicestreamdebug Codec-1-ssh 1
+```
