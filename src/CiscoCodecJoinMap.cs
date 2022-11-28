@@ -545,6 +545,21 @@ namespace epi_videoCodec_ciscoExtended
 
         #region Serials
 
+        [JoinName("WidgetEventData")]
+        public JoinDataComplete WidgetEventData = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 321,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Receive/update widget in Cisco Extension editor format, e.g., \"/blinds /pressed /increment\", \"/blinds /closed\"",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+
         [JoinName("CommandToDevice")]
         public JoinDataComplete CommandToDevice = new JoinDataComplete(
             new JoinData

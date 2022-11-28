@@ -105,6 +105,7 @@
   <ItemGroup>
     <Compile Include="DoNotDisturbHandler.cs" />
     <Compile Include="MessageProcessor.cs" />
+    <Compile Include="UIExtensionsHandler.cs" />
     <Compile Include="WebexPinRequestHandler.cs" />
     <Compile Include="BookingsDataClasses.cs" />
     <Compile Include="CallHistoryDataClasses.cs" />

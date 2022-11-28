@@ -73,6 +73,12 @@ namespace epi_videoCodec_ciscoExtended
         public int JoinableCooldownSeconds { get; set; }
 
 
+        /// <summary>
+        /// These are key-value pairs, uint id, string type
+        /// They are used to pass back UI Extension Widget events
+        /// </summary>
+        [JsonProperty("Widgets")]
+        public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
         public CiscoCodecConfig()
         {
@@ -107,5 +113,23 @@ namespace epi_videoCodec_ciscoExtended
         public int CameraNumber { get; set; }
         public string Name { get; set; }
         public int SourceId { get; set; }
+    }
+
+    public class WidgetConfig
+    {
+        [JsonProperty("enabled")]
+        public bool Enabled { get; set; }
+
+        [JsonProperty("label")]
+        public string Label { get; set; } // e.g. "blinds"
+
+        [JsonProperty("value")]
+        public string Value { get; set; } // e.g. "increment"
+
+        [JsonProperty("type")]
+        public string Type { get; set; } // e.g. "Pressed"
+
+        [JsonProperty("bridgeIndex")]
+        public uint? BridgeIndex { get; set; }
     }
 }
