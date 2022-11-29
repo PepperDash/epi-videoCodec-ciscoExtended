@@ -3,7 +3,16 @@
 ## License
 
 Provided under MIT license
+## Overview
 
+> The Cisco RoomOS plugin provides device control over the Cisco Webex family of video conference codecs with regards
+> to the most commonly used and requested attriute and control types.
+>
+> It implements all available essentials interfaces relevant to a device of this type, including but not limited to 
+>  `VideoCodecBase`. Interfaces supported can be found by viewing the declaration of the `CiscoCodec` class in `CiscoRoomOsCodec.cs`.
+> 
+> Additionally, every component implements `IKeyed` and all devices are added to the `DeviceManager` unpon instantiation.
+> 
 ## Cloning Instructions
 
 After forking this repository into your own GitHub space, you can create a new repository using this one as the template.  Then you must install the necessary dependencies as indicated below.
@@ -212,6 +221,80 @@ For renaming instructions in particular, see the XML `remarks` tags on class def
 | 304         | 1         | H323 ID of device                                                                                    | Serial              | ToSIMPL      |
 | 305         | 1         | SIP URI of device                                                                                    | Serial              | ToSIMPL      |
 | 311         | 1         | WebexSendPin                                                                                         | DigitalSerial       | FromSIMPL    |
+| 321         | 1         | WidgetEventData                                                                                         | Serial       | ToSIMPL    |
 | 356         | 1         | Selected Directory Entry Name                                                                        | Serial              | ToSIMPL      |
 | 357         | 1         | Selected Directory Entry Number                                                                      | Serial              | ToSIMPL      |
 | 358         | 1         | Selected Directory Folder Name                                                                       | Serial              | ToSIMPL      |
+
+#### Config Notes
+
+> This configuration matches a standard essentials device configuration at the base level, with only the type being different.  This may have the type **```ciscoRoomOS```**, as defined in ```CiscoCodecFactory```.
+>
+> 
+``` javascript
+"key": "Codec-1",
+    "name": "Video Codec 1",
+    "type": "ciscoRoomOS",
+    "group": "videoCodec",
+    "properties": {
+        "control": {
+            "endOfLineString": "\n",
+            "deviceReadyResponsePattern": "",
+            "method": "Ssh",
+            "tcpSshProperties": {
+                "address": "10.0.0.1",
+                "port": 22,
+                "autoReconnect": true,
+                "AutoReconnectIntervalMs": 10000,
+                "username": "admin",
+                "password": "tandberg"
+            }
+        }
+    }
+}
+```
+
+> An example bridge configuration is as follows
+>
+> 
+``` javascript
+"uid": 20,
+    "key": "eisc-vc",
+    "type": "eiscApiAdvanced",
+    "group":"api",
+    "name": "EISC VC Bridge",
+    "properties": {
+        "control":{
+            "tcpSshProperties":{
+                "address":"127.0.0.2",
+                "port":0
+            },
+            "ipId":"4F"
+        },
+        "devices": [
+            {
+                "deviceKey":"Codec-1",
+                "joinStart":1                    
+            }
+        ] 
+    }
+}
+```
+
+***
+
+#### Helful info
+in a terminal you can send a string directly to the device, here is an example command using "Codec-1-ssh" as the device port name
+```
+devjson:1 {"deviceKey":"Codec-1-ssh","methodName":"SendText", "params": ["xStatus SystemUnit\n"]}
+````
+
+see what methods you can call on the port by sending the following command
+```
+devmethods Codec-1-ssh
+```
+
+To see commands send and received you can turn on debugging for the port (1: Rx, 2:Txm 3:Both)
+```
+setdevicestreamdebug Codec-1-ssh 1
+```

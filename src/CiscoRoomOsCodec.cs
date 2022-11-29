@@ -118,6 +118,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
         public readonly DoNotDisturbHandler DoNotDisturbHandler;
+        public readonly UIExtensionsHandler UIExtensionsHandler;
 
         private Meeting _currentMeeting;
 
@@ -577,6 +578,7 @@ namespace epi_videoCodec_ciscoExtended
             _receiveQueue = new GenericQueue(Key + "-queue", 500); 
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
+            UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
 
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
@@ -1875,6 +1877,16 @@ ConnectorID: {2}"
                 {
                     //For Future Use
                 };
+
+            // triggered when CodecEvents.Event.UserInterface.Extensions is updated
+            /*
+             * CodecEvents.Event.UserInterface.Extensions.ValueChangedAction +=
+                () =>
+                {
+                    var act_ = CodecEvents.Event.UserInterface.Extensions.Action;
+                    Debug.Console(1, this, "UserInterface.Extensions.ValueChangedAction: /{0} /{1} /{2}", act_.Type, act_.Id, act_.Value);
+                };
+             * */
         }
 
         private void RegisterAutoAnswer()
@@ -2375,38 +2387,92 @@ ConnectorID: {2}"
 
         private void ParseUserInterfaceEvent(CiscoCodecEvents.UserInterface userInterfaceObject)
         {
+            Debug.Console(2, this, "ParseUserInterfaceEvent");
             if (userInterfaceObject == null) return;
-            Debug.Console(2, this, "*** Got an External SourceValueProperty Selection {0} {1}",
-                userInterfaceObject,
-                userInterfaceObject,
-                userInterfaceObject.Presentation.ExternalSource.Selected
-                    .SourceIdentifier.Value);
 
-            if (RunRouteAction != null && !_externalSourceChangeRequested)
+            if (userInterfaceObject.Presentation != null)
             {
-                RunRouteAction(
+                //var _userInterfaceObject = userInterfaceObject.SelectToken("Presentation.ExternalSource.Selected.SourceIdentifier");
+
+                Debug.Console(2, this, "*** Got an External SourceValueProperty Selection {0} {1}",
+                    userInterfaceObject,
                     userInterfaceObject.Presentation.ExternalSource.Selected
-                        .SourceIdentifier.Value, null);
+                        .SourceIdentifier.Value);
+
+                var val_ = JsonConvert.SerializeObject(userInterfaceObject);
+                //Debug.Console(1, this, "userInterfaceObject val: {0}", val_);
+
+                if (RunRouteAction != null && !_externalSourceChangeRequested)
+                {
+                    RunRouteAction(
+                        userInterfaceObject.Presentation.ExternalSource.Selected
+                            .SourceIdentifier.Value, null);
+                }
+
+                _externalSourceChangeRequested = false;
             }
 
-            _externalSourceChangeRequested = false;
+            if (userInterfaceObject.Extensions != null)
+            {
+                //Debug.Console(2, this, "Extensions Event");
+                try
+                {
+                    var val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions);
+                    //Debug.Console(1, this, "Extensions val: {0}", val_);
+                    Debug.Console(2, this, "*** Got an Extensions Event {0}",
+                        userInterfaceObject.Extensions);
+                    
+                    if (userInterfaceObject.Extensions.Widget != null &&
+                        userInterfaceObject.Extensions.Widget.WidgetAction != null &&
+                        userInterfaceObject.Extensions.Widget.WidgetAction.Type != null)
+                    {
+                        Debug.Console(2, this, "*** Got an Extensions Widget Action {0}",
+                            userInterfaceObject.Extensions.Widget);
+                        val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions.Widget);
+                        //Debug.Console(1, this, "Widget val: {0}", val_);
+                        UIExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.Widget);
+                    }
 
+                    if (userInterfaceObject.Extensions.WidgetEvent != null &&
+                        userInterfaceObject.Extensions.WidgetEvent.Id != null)
+                    {
+                        Debug.Console(2, this, "*** Got an Extensions Widget Event {0}",
+                            userInterfaceObject.Extensions.WidgetEvent);
+                        val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions.WidgetEvent);
+                        Debug.Console(1, this, "WidgetEvent val: {0}", val_);
+                        UIExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.WidgetEvent);
+                    }
+
+                }
+                catch (Exception e)
+                {
+                    Debug.Console(2, this, "Exception: ParseUserInterfaceEvent.Extensions - {0}", e.Message);
+                } 
+                
+            }
         }
 
         private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
         {
+            var token_string = String.Empty;
             try
             {
-                var token = JTokenValidInToken(jToken, tokenSelector);
+                //Debug.Console(2, this, "PopulateObjectWithToken: {0}", tokenSelector);
+                var token = JTokenValidInToken(jToken, tokenSelector); // JObject
                 if (token == null) return;
-
-                JsonConvert.PopulateObject(token.ToString(), target);
+                token_string = token.ToString();
+                JsonConvert.PopulateObject(token_string, target); 
+                //Debug.Console(2, this, "PopulateObject complete");
             }
             catch (Exception e)
             {
                 Debug.Console(2, this, "Exception: PopulateObjectWithToken - {0}", e.Message);
+                Debug.Console(2, this, "Token Type: {0}", jToken.GetType()); // Newtonsoft.Json.Linq.JObject
                 Debug.Console(2, this, "Token = {0}", jToken.ToString());
                 Debug.Console(2, this, "Selector = {0}", tokenSelector);
+                Debug.Console(2, this, "target Type: {0}", target.GetType()); // epi_videoCodec_ciscoExtended.CiscoCodecEvents+UserInterface
+                Debug.Console(1, this, "target serialized val: {0}", JsonConvert.SerializeObject(target));
+                Debug.Console(2, this, "string to PopulateObject: {0}", token_string);
             }
         }
 
@@ -2525,6 +2591,7 @@ ConnectorID: {2}"
             Debug.Console(0, this, "Sending Feedback");
 
             SendText(BuildFeedbackRegistrationExpression());
+            UIExtensionsHandler.RegisterFeedback();
 
         }
 
@@ -2560,6 +2627,7 @@ ConnectorID: {2}"
 
             WebexPinRequestHandler.ParseAuthenticationRequest(conferenceToken);
             DoNotDisturbHandler.ParseStatus(conferenceToken);
+            //UIExtensionsHandler.ParseStatus(conferenceToken); // not a conference token, an Event token
         }
 
 
@@ -2697,9 +2765,10 @@ ConnectorID: {2}"
 
             try
             {
-                var codecEvent = new CiscoCodecEvents.Event();
+                var codecEvent = new CiscoCodecEvents.EventObject();
                 var bookingsEvent = eventToken.SelectToken("Bookings");
-                var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
+                //var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
+                var userInterfaceEvent = eventToken.SelectToken("UserInterface");
                 var conferenceEvent = eventToken.SelectToken("Conference");
 
                 if (codecEvent.CallDisconnect != null)
@@ -2714,10 +2783,10 @@ ConnectorID: {2}"
                 }
                 if (userInterfaceEvent != null)
                 {
-                    Debug.Console(2, this, "Parse UserInterface");
-
+                    Debug.Console(2, this, "userInterfaceEvent - PopulateObjectWithToken");
                     PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
 
+                    Debug.Console(2, this, "userInterfaceEvent - ParseUserInterfaceEvent"); 
                     ParseUserInterfaceEvent(codecEvent.UserInterface);
                 }
                 if (conferenceEvent != null)
@@ -3646,7 +3715,7 @@ ConnectorID: {2}"
         /// Evaluates an event received from the codec
         /// </summary>
         /// <param name="eventReceived"></param>
-        private void EvalutateDisconnectEvent(CiscoCodecEvents.Event eventReceived)
+        private void EvalutateDisconnectEvent(CiscoCodecEvents.EventObject eventReceived)
         {
             if (eventReceived == null || eventReceived.CallDisconnect == null || eventReceived.CallDisconnect.CallId == null) return;
             var tempActiveCall =
@@ -4188,6 +4257,8 @@ ConnectorID: {2}"
             LinkCiscoCodecToApi(trilist, joinMap);
 
             WebexPinRequestHandler.LinkToApi(trilist, joinMap);
+
+            UIExtensionsHandler.LinkToApi(trilist, joinMap);
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
@@ -5417,6 +5488,11 @@ ConnectorID: {2}"
         public BoolFeedback DoNotDisturbModeIsOnFeedback
         {
             get { return DoNotDisturbHandler.DoNotDisturbModeIsOnFeedback; }
+        }
+
+        public StringFeedback WidgetEventFeedback
+        {
+            get { return UIExtensionsHandler.WidgetEventFeedback; }
         }
 
         #region IHasPhoneDialing Members

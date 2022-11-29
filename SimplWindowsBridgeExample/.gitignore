@@ -1,0 +1,40 @@
+# files to be ignored in addition to base .gitignore
+#Crestron files
+*.um2
+*.bak
+*.mdb
+*.c3p
+*.h
+*.lpz
+*.clz
+*.vtz
+*.sig
+*.dll
+*.hash
+*.ASV
+*.sm2
+*.smft
+*.sgd_
+*.sgd2
+*.xml
+*.cl
+*.ini
+*.ush
+*.bin
+*.cdm
+*.rcv
+*.dip
+*.smft
+*.ced
+\obj
+\bin
+SPlsWork*
+
+# files to be included, i.e. excluded from base .gitignore
+
+# Keeping the Crestron archive in the repo as a tidy way of including dependencies 
+# without cluttering the repo or requiring links to dependency repo.
+!*_compiled.zip
+
+# Keep Cisco config files 
+!*roomcontrolconfig.xml

@@ -1,0 +1,31 @@
+<Extensions>
+  <Version>1.9</Version>
+  <Panel>
+    <Order>1</Order>
+    <PanelId>blinds_panel</PanelId>
+    <Origin>local</Origin>
+    <Location>HomeScreenAndCallControls</Location>
+    <Icon>Blinds</Icon>
+    <Color>#FFB400</Color>
+    <Name>Blinds</Name>
+    <ActivityType>Custom</ActivityType>
+    <Page>
+      <Name>Blinds</Name>
+      <Row>
+        <Name>Blockout blinds</Name>
+        <Widget>
+          <WidgetId>blinds</WidgetId>
+          <Type>Spinner</Type>
+          <Options>size=2</Options>
+        </Widget>
+        <Widget>
+          <WidgetId>blinds_stop</WidgetId>
+          <Type>Button</Type>
+          <Options>size=1;icon=end</Options>
+        </Widget>
+      </Row>
+      <PageId>blinds_page</PageId>
+      <Options/>
+    </Page>
+  </Panel>
+</Extensions>
