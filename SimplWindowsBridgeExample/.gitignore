@@ -35,3 +35,6 @@ SPlsWork*
 # Keeping the Crestron archive in the repo as a tidy way of including dependencies 
 # without cluttering the repo or requiring links to dependency repo.
 !*_compiled.zip
+
+# Keep Cisco config files 
+!*roomcontrolconfig.xml
