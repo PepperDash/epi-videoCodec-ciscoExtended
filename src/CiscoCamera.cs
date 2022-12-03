@@ -115,6 +115,11 @@ namespace epi_videoCodec_ciscoExtended
         public uint CameraId { get; private set; }
 
         /// <summary>
+        /// The ID of the camera on the codec
+        /// </summary>
+        public uint SourceId { get; private set; }
+
+        /// <summary>
         /// Valid range 1-15
         /// </summary>
         protected uint PanSpeed { get; private set; }
@@ -155,11 +160,18 @@ namespace epi_videoCodec_ciscoExtended
             ParentCodec = codec;
 
             CameraId = id;
+            SourceId = id;
 
             // Set default speeds
             PanSpeed = 7;
             TiltSpeed = 7;
             ZoomSpeed = 7;
+        }
+
+        public CiscoCamera(string key, string name, CiscoCodec codec, uint id, uint sourceId)
+            : this(key, name, codec, id)
+        {
+            SourceId = sourceId;
         }
 
 
