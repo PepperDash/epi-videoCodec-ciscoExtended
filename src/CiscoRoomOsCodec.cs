@@ -793,7 +793,7 @@ namespace epi_videoCodec_ciscoExtended
         
         void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
         {
-            Debug.Console(0, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
+            Debug.Console(1, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
             if (args.InfoChangeType == eCodecInfoChangeType.Firmware)
             {
                 Debug.Console(0, this, "Got Firmware Event!!!!!!");
@@ -815,7 +815,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
             {
-                Debug.Console(0, this, "Got Serial Event!!!!!!");
+                Debug.Console(1, this, "Got Serial Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.SerialNumber))
                 {
@@ -825,7 +825,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.Network)
             {
-                Debug.Console(0, this, "Got Network Event!!!!!!");
+                Debug.Console(1, this, "Got Network Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.IpAddress))
                 {
@@ -1001,7 +1001,7 @@ namespace epi_videoCodec_ciscoExtended
             
             CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
             {
-                Debug.Console(0, this, "CurrentLayout = \"{0}\"", CurrentLayout);
+                Debug.Console(1, this, "CurrentLayout = \"{0}\"", CurrentLayout);
                 OnCurrentLayoutChanged(CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value);
             };   
 
@@ -1506,7 +1506,20 @@ ConnectorID: {2}"
 
             if (!_syncState.InitialSyncComplete)
             {
-                switch (response.Trim().ToLower()) // remove the whitespace
+                if (response.Trim().IndexOf("*s SystemUnit", StringComparison.OrdinalIgnoreCase) > -1)
+                {
+                    // we got something here so we're connected
+                    _syncState.LoginMessageReceived();
+
+                    if (_loginMessageReceivedTimer != null)
+                        _loginMessageReceivedTimer.Stop();
+
+                    //SendText("echo off");
+                    SendText("xPreferences outputmode json");
+                    return;
+                }
+
+                switch (response.Trim().ToLower()) // remove the whitespaceSource
                 {
                     case "*r login successful":
                         {
@@ -4428,7 +4441,7 @@ ConnectorID: {2}"
 
             CodecInfoChanged += (sender, args) =>
             {
-                Debug.Console(0, "CodecInfoChanged in Link To Api - Type : {0}", args.InfoChangeType.ToString());
+                Debug.Console(1, "CodecInfoChanged in Link To Api - Type : {0}", args.InfoChangeType.ToString());
 
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
@@ -4534,7 +4547,7 @@ ConnectorID: {2}"
             const string boilerplate1 = "Available for ";
             const string boilerplate2 = "Next meeting in ";
 
-            Debug.Console(0, this, "Checking Meetings");
+            Debug.Console(1, this, "Checking Meetings");
 
 
             _currentMeetings =
@@ -4546,7 +4559,7 @@ ConnectorID: {2}"
 
             if (_currentMeetings.Count == 0)
             {
-                Debug.Console(0, this, "no Meetings");
+                Debug.Console(1, this, "no Meetings");
                 trilist.SetBool(joinMap.CodecAvailable.JoinNumber, true);
                 trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, false);
                 trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, false);
@@ -4585,9 +4598,9 @@ ConnectorID: {2}"
 
             if (upcomingMeeting != null)
             {
-                Debug.Console(0, this, "Upcoming Meeting Not Null");
-                Debug.Console(0, this, "Upcoming Meeting StartTime = {0}", upcomingMeeting.StartTime.ToString());
-                Debug.Console(0, this, "Upcoming Meeting EndTime = {0}", upcomingMeeting.EndTime.ToString());
+                Debug.Console(1, this, "Upcoming Meeting Not Null");
+                Debug.Console(1, this, "Upcoming Meeting StartTime = {0}", upcomingMeeting.StartTime.ToString());
+                Debug.Console(1, this, "Upcoming Meeting EndTime = {0}", upcomingMeeting.EndTime.ToString());
                 var timeRemainingAvailable = upcomingMeeting.StartTime - currentTime;
                 hoursRemainingAvailable = timeRemainingAvailable.Hours;
                 minutesRemainingAvailable = timeRemainingAvailable.Minutes;
@@ -5149,13 +5162,14 @@ ConnectorID: {2}"
                     var camId = uint.Parse(item.CameraId);
                     var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == camId);
                     var name = string.Format("Camera {0}", camId);
+                    var sourceId = (camInfo != null && camInfo.SourceId > 0) ? (uint)camInfo.SourceId : camId;
                     if (camInfo != null)
                     {
                         name = camInfo.Name;
                     }
 
                     var key = string.Format("{0}-camera{1}", Key, camId);
-                    var camera = new CiscoCamera(key, name, this, camId);
+                    var camera = new CiscoCamera(key, name, this, camId, sourceId);
 
                     if (cam.Capabilities != null)
                     {
@@ -5239,7 +5253,7 @@ ConnectorID: {2}"
             var ciscoCam = camera as CiscoCamera;
             if (ciscoCam != null)
             {
-                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.CameraId));
+                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.SourceId));
             }
         }
 
@@ -5700,7 +5714,7 @@ ConnectorID: {2}"
             _codec = codec;
             _codec.CodecInfoChanged += (sender, args) =>
             {
-                Debug.Console(0, "CodecInfoChanged in CiscoCodecInfo - Type : {0}", args.InfoChangeType.ToString());
+                Debug.Console(1, "CodecInfoChanged in CiscoCodecInfo - Type : {0}", args.InfoChangeType.ToString());
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
                 {
@@ -5750,3 +5764,4 @@ ConnectorID: {2}"
 
 
 
+                
