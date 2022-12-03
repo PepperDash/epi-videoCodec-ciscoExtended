@@ -20,8 +20,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
+        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(500);
+        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(500);
 
         public string Key { get; private set; }
 
@@ -66,11 +66,10 @@ namespace epi_videoCodec_ciscoExtended
             if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
             {
                 Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Unable to enqueue command:{0}", query);
+                // We're full here so we need to dump the queue and log that we missed this
             }
-            else
-            {
-                Schedule();
-            }
+
+            Schedule();
         }
 
         public void LoginMessageReceived()
@@ -219,7 +218,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private void ProcessMessages()
         {
-            const int throughput = 6;
+            const int throughput = 10;
             for (var i = 0; i < throughput; ++i)
             {
                 Action sys;
