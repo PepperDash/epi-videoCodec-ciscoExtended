@@ -5149,13 +5149,14 @@ ConnectorID: {2}"
                     var camId = uint.Parse(item.CameraId);
                     var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == camId);
                     var name = string.Format("Camera {0}", camId);
+                    var sourceId = (camInfo != null && camInfo.SourceId > 0) ? (uint)camInfo.SourceId : camId;
                     if (camInfo != null)
                     {
                         name = camInfo.Name;
                     }
 
                     var key = string.Format("{0}-camera{1}", Key, camId);
-                    var camera = new CiscoCamera(key, name, this, camId);
+                    var camera = new CiscoCamera(key, name, this, camId, sourceId);
 
                     if (cam.Capabilities != null)
                     {
@@ -5239,7 +5240,7 @@ ConnectorID: {2}"
             var ciscoCam = camera as CiscoCamera;
             if (ciscoCam != null)
             {
-                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.CameraId));
+                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.SourceId));
             }
         }
 
