@@ -67,10 +67,8 @@ namespace epi_videoCodec_ciscoExtended
             {
                 Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Unable to enqueue command:{0}", query);
             }
-            else
-            {
-                Schedule();
-            }
+
+            Schedule();
         }
 
         public void LoginMessageReceived()
@@ -78,7 +76,10 @@ namespace epi_videoCodec_ciscoExtended
             _systemActions.Enqueue(() =>
             {
                 if (!LoginMessageWasReceived)
+                {
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
+                    _parent.SendText("xPreferences outputmode json");
+                }
                     
                 LoginMessageWasReceived = true;
                 CheckSyncStatus();
@@ -207,13 +208,17 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     Debug.Console(1, this, "Error processing command actions:{0}", ex);
                 }
-                finally
+
+                try
                 {
                     Interlocked.Exchange(ref _isProcessing, Idle);
+                    if (_systemActions.Count > 0 || (_commandActions.Count > 0 && InitialSyncComplete))
+                        Schedule();
                 }
-
-                if (_systemActions.Count > 0 || (_commandActions.Count > 0 && InitialSyncComplete))
-                    Schedule();
+                catch (Exception ex)
+                {
+                    Debug.Console(1, this, "Error rescheduling:{0}", ex);
+                }
             });
         }
 
@@ -225,7 +230,14 @@ namespace epi_videoCodec_ciscoExtended
                 Action sys;
                 if (_systemActions.TryToDequeue(out sys))
                 {
-                    sys();
+                    try
+                    {
+                        sys();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.Console(1, this, "Error processing sys action:{0}", ex);
+                    }
                     continue;
                 }
 
@@ -234,7 +246,16 @@ namespace epi_videoCodec_ciscoExtended
 
                 Action cmd;
                 if (_commandActions.TryToDequeue(out cmd))
-                    cmd();
+                {
+                    try
+                    {
+                        cmd();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.Console(1, this, "Error processing usr action:{0}", ex);
+                    }
+                }
             }
         }
     }
