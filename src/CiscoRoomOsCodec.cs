@@ -1476,7 +1476,7 @@ ConnectorID: {2}"
                 if (!_syncState.InitialSyncComplete)
                 {
                     var data = response.Trim().ToLower();
-                    if (data.Contains("*r login successful") || data.Contains("*s systemunit"))
+                    if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
                     {
                         _syncState.LoginMessageReceived();
 

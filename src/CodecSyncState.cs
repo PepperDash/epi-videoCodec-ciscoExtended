@@ -78,10 +78,14 @@ namespace epi_videoCodec_ciscoExtended
                 if (!LoginMessageWasReceived)
                 {
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
+                    LoginMessageWasReceived = true;
+                }
+
+                if (!JsonResponseModeSet)
+                {
                     _parent.SendText("xPreferences outputmode json");
                 }
                     
-                LoginMessageWasReceived = true;
                 CheckSyncStatus();
             });
 
