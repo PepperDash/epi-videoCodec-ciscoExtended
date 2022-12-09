@@ -118,7 +118,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
         public readonly DoNotDisturbHandler DoNotDisturbHandler;
-        public readonly UIExtensionsHandler UIExtensionsHandler;
+        public readonly UiExtensionsHandler UIExtensionsHandler;
 
         private Meeting _currentMeeting;
 
@@ -578,7 +578,7 @@ namespace epi_videoCodec_ciscoExtended
             _receiveQueue = new GenericQueue(Key + "-queue", 500); 
             WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
-            UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
+            UIExtensionsHandler = new UiExtensionsHandler(this, comm, _receiveQueue);
 
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
@@ -5492,7 +5492,7 @@ ConnectorID: {2}"
 
         public StringFeedback WidgetEventFeedback
         {
-            get { return UIExtensionsHandler.WidgetEventFeedback; }
+            get { return UIExtensionsHandler.WidgetEventStringFeedback; }
         }
 
         #region IHasPhoneDialing Members

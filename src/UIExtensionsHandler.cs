@@ -14,91 +14,135 @@
 //-----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
+using Feedback = PepperDash.Essentials.Core.Feedback;
 
 namespace epi_videoCodec_ciscoExtended
 {
 
-    public class UIExtensionsHandler
+    public class UiExtensionsHandler
     {        
         private readonly IKeyed _parent;
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
-        private string _widgetEventData = String.Empty;
-        public StringFeedback WidgetEventFeedback { get; private set; }
+        private string _widgetEventStringData = String.Empty;
 
-        public UIExtensionsHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
+        private ushort WidgetEventIntData
+        {
+            get
+            {
+                try
+                {
+                    return ushort.Parse(_widgetEventStringData);
+                }
+                catch (FormatException)
+                {
+                    return 0;
+                }
+                catch (OverflowException)
+                {
+                    return 0;
+                }
+            }
+        }
+
+        private bool WidgetEventBoolData
+        {
+            get { return _widgetEventStringData.ToLower() == "true" || _widgetEventStringData.ToLower() == "on"; }
+        }
+
+        public StringFeedback WidgetEventStringFeedback { get; private set; }
+        public IntFeedback WidgetEventIntFeedback { get; private set; }
+        public BoolFeedback WidgetEventBoolFeedback { get; private set; }
+        public FeedbackCollection<PepperDash.Essentials.Core.Feedback> WidgetEventFeedback { get; private set; } 
+
+        public UiExtensionsHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
             _handler = handler;
-            WidgetEventFeedback = new StringFeedback(() => _widgetEventData);
-            WidgetEventFeedback.OutputChange +=
-                (sender, args) => Debug.Console(1, parent, "WidgetEventFeedback Event: {0}", _widgetEventData);
+            WidgetEventStringFeedback = new StringFeedback(() => _widgetEventStringData);
+            WidgetEventIntFeedback = new IntFeedback(() => WidgetEventIntData);
+            WidgetEventBoolFeedback = new BoolFeedback(() => WidgetEventBoolData);
+            WidgetEventStringFeedback.OutputChange +=
+                (sender, args) => Debug.Console(1, parent, "WidgetEventFeedback Event: {0}", _widgetEventStringData);
+            WidgetEventFeedback = new FeedbackCollection<Feedback>
+            {
+                WidgetEventStringFeedback, WidgetEventIntFeedback, WidgetEventBoolFeedback
+            };
         }
 
         public void ParseStatus(CiscoCodecEvents.Widget val)
         {
-            Debug.Console(1, _parent, "Widget Action: {0}", val.ToString());
-            if (val.WidgetAction != null && val.WidgetAction.Type != null)
+            //Removes Inspection Notice - Keeping for future use and constructor consistency
+            if (_handler == null) { /*stuff*/}
+            if (val.WidgetAction == null || val.WidgetAction.Type == null) return;
+            var serializedVal = JsonConvert.SerializeObject(val);
+            Debug.Console(1, _parent, "Widget val: {0}", serializedVal);
+
+            var action = val.WidgetAction;
+
+            _widgetEventStringData = JsonConvert.SerializeObject(action);
+            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventStringData);
+            foreach (var item in WidgetEventFeedback)
             {
-                var val_ = JsonConvert.SerializeObject(val);
-                Debug.Console(1, _parent, "Widget val: {0}", val_);
-
-                var action_ = val.WidgetAction;
-
-                _widgetEventData = JsonConvert.SerializeObject(action_);
-                Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);
-                WidgetEventFeedback.FireUpdate();
+                var feedback = item;
+                feedback.FireUpdate();
             }
         }
         public void ParseStatus(CiscoCodecEvents.UiEvent val)
         {
             Debug.Console(1, _parent, "WidgetEvent: {0}", val.ToString());
-            var val_ = JsonConvert.SerializeObject(val);
-            Debug.Console(1, _parent, "WidgetEvent val: {0}", val_);
+            var serializedVal = JsonConvert.SerializeObject(val);
+            Debug.Console(1, _parent, "WidgetEvent val: {0}", serializedVal);
             
-            var action_ = new CiscoCodecEvents.WidgetAction();
+            var action = new CiscoCodecEvents.WidgetAction();
             if (val.Pressed != null)
             {
-                action_.Type = "Pressed";
-                action_.Value = val.Pressed.Signal.Value;
+                action.Type = "Pressed";
+                action.Value = val.Pressed.Signal.Value;
             }
             else if (val.Released != null)
             {
-                action_.Type = "Released";
-                action_.Value = val.Released.Signal.Value;
+                action.Type = "Released";
+                action.Value = val.Released.Signal.Value;
             }
             else if (val.Clicked != null)
             {
-                action_.Type = "Clicked";
-                action_.Value = val.Clicked.Signal.Value;
+                action.Type = "Clicked";
+                action.Value = val.Clicked.Signal.Value;
+            }
+            else if (val.Changed != null)
+            {
+                action.Type = "Changed";
+                action.Value = val.Changed.Signal.Value;
             }
             else
             {
                 Debug.Console(1, _parent, "WidgetEvent exiting, no event Type");
                 return;
             }
-            action_.Id = String.Empty;
-            var arr_ = action_.Value.Split(':'); // "tv_menu:menu";
-            if(arr_.Length > 1)
+            action.Id = String.Empty;
+            var arr = action.Value.Split(':'); // "tv_menu:menu";
+            if(arr.Length > 1)
             {
-                action_.Value = arr_[0]; // "tv_menu"
-                action_.Id = arr_[1]; // "menu"
-                _widgetEventData = String.Format("/{0} /{1} /{2}", action_.Value, action_.Type, action_.Id); // e.g. "/blinds_stop /pressed"
+                action.Value = arr[0]; // "tv_menu"
+                action.Id = arr[1]; // "menu"
+                _widgetEventStringData = String.Format("/{0} /{1} /{2}", action.Value, action.Type, action.Id); // e.g. "/blinds_stop /pressed"
             }
             else
-                _widgetEventData = String.Format("/{0} /{1}", action_.Value, action_.Type); // e.g. "/blinds /pressed /increment"
-            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);            
-            WidgetEventFeedback.FireUpdate();
+                _widgetEventStringData = String.Format("/{0} /{1}", action.Value, action.Type); // e.g. "/blinds /pressed /increment"
+            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventStringData);
+            foreach (var item in WidgetEventFeedback)
+            {
+                var feedback = item;
+                feedback.FireUpdate();
+            }
         }
 
         public void RegisterFeedback()
@@ -116,23 +160,24 @@ namespace epi_videoCodec_ciscoExtended
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
             trilist.SetStringSigAction(joinMap.WidgetEventData.JoinNumber, UpdateWidget); // from SIMPL
-            WidgetEventFeedback.LinkInputSig(trilist.StringInput[joinMap.WidgetEventData.JoinNumber]); // to SIMPL
+            WidgetEventStringFeedback.LinkInputSig(trilist.StringInput[joinMap.WidgetEventData.JoinNumber]); // to SIMPL
+            WidgetEventBoolFeedback.LinkInputSig(trilist.BooleanInput[joinMap.WidgetEventData.JoinNumber]); // to SIMPL
+            WidgetEventIntFeedback.LinkInputSig(trilist.UShortInput[joinMap.WidgetEventData.JoinNumber]); // to SIMPL
         }
 
-        public void UpdateWidget(string val) // "/blinds /open"
+        public void UpdateWidget(string data) // "/blinds /open"
         {
-            var arr_ = val.Split('/');
-            if (arr_.Length == 3)
-            {
-                var id_ = arr_[1].Trim();
-                var val_ = arr_[2].Trim();
-                UpdateWidget<string>(id_, val_);
-            }
+            var arr = data.Split('/');
+            if (arr.Length != 3) return;
+            var id = arr[1].Trim();
+            var val = arr[2].Trim();
+            if (val == null) throw new ArgumentNullException("val");
+            UpdateWidget(id, val);
         }
 
-        public void UpdateWidget<T>(string WidgetId, T Value)
+        public void UpdateWidget<T>(string widgetId, T value)
         {
-            var command = String.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"\r\n", WidgetId, Value);
+            var command = String.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"\r\n", widgetId, value);
             _coms.SendText(command);
         }
     }

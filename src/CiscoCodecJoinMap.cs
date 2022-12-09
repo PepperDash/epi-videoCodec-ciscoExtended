@@ -556,7 +556,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 Description = "Receive/update widget in Cisco Extension editor format, e.g., \"/blinds /pressed /increment\", \"/blinds /closed\"",
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
-                JoinType = eJoinType.Serial
+                JoinType = eJoinType.DigitalAnalogSerial
             });
 
 

@@ -223,6 +223,8 @@ namespace epi_videoCodec_ciscoExtended
             public UiEventType Released { get; set; }
             [JsonProperty("Clicked")]
             public UiEventType Clicked { get; set; }
+            [JsonProperty("Changed")]
+            public UiEventType Changed { get; set; }
 
             public UiEvent()
             {
