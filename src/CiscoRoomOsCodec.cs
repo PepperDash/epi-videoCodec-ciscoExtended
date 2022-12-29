@@ -2,17 +2,13 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
-using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem.Tokens;
 using PepperDash.Core.Intersystem;
@@ -122,6 +118,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private Meeting _currentMeeting;
 
+        private bool _standbyIsOn;
         private bool _presentationActive;
 
         private readonly bool _phonebookAutoPopulate;
@@ -298,7 +295,7 @@ namespace epi_videoCodec_ciscoExtended
 
         protected override Func<bool> StandbyIsOnFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Standby.State.BoolValue; }
+            get { return () => _standbyIsOn; }
         }
 
         /// <summary>
@@ -2517,6 +2514,21 @@ ConnectorID: {2}"
                 return;
             }
             JsonConvert.PopulateObject(statusToken.ToString(), status);
+
+            var standbyToken = statusToken.SelectToken("Standby");
+            if (standbyToken != null)
+            {
+                var currentStandbyStatusToken = (string) standbyToken.SelectToken("State.Value");
+                if (!String.IsNullOrEmpty(currentStandbyStatusToken))
+                {
+                    _standbyIsOn =
+                        currentStandbyStatusToken.Equals("standby", StringComparison.OrdinalIgnoreCase)
+                        || currentStandbyStatusToken.Equals("on", StringComparison.OrdinalIgnoreCase);
+
+                    StandbyIsOnFeedback.FireUpdate();
+                    return;
+                }
+            }
 
             if (systemUnitToken != null)
             {
