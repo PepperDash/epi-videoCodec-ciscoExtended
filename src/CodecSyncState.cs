@@ -1,5 +1,6 @@
 ﻿using System;
 using Crestron.SimplSharp;
+using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
 
 
@@ -22,6 +23,9 @@ namespace epi_videoCodec_ciscoExtended
 
         private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
         private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
+
+        private Thread _worker;
+        private readonly CEvent _waitHandle = new CEvent();
 
         public string Key { get; private set; }
 
@@ -56,6 +60,15 @@ namespace epi_videoCodec_ciscoExtended
         {
             Key = key;
             _parent = parent;
+
+            CrestronEnvironment.ProgramStatusEventHandler += type =>
+                                                             {
+                                                                 if (type != eProgramStatusEventType.Stopping) 
+                                                                     return;
+
+                                                                 Interlocked.Exchange(ref _isProcessing, Idle);
+                                                                 _waitHandle.Set();
+                                                             };
         }
 
         public void AddCommandToQueue(string query)
@@ -196,40 +209,14 @@ namespace epi_videoCodec_ciscoExtended
                 Processing,
                 Idle) ==
                 Idle)
-                RunAsync();
+                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key +":Codec Sync State" };
+
+            _waitHandle.Set();
         }
 
-        private void RunAsync()
+        private object RunSyncState(object o)
         {
-            CrestronInvoke.BeginInvoke(_ =>
-            {
-                try
-                {
-                    Debug.Console(1, this, "Processing actions SYS:{0} COMMANDS:{1}", _systemActions.Count, _commandActions.Count);
-                    ProcessMessages();
-                }
-                catch (Exception ex)
-                {
-                    Debug.Console(1, this, "Error processing command actions:{0}", ex);
-                }
-
-                try
-                {
-                    Interlocked.Exchange(ref _isProcessing, Idle);
-                    if (_systemActions.Count > 0 || (_commandActions.Count > 0 && InitialSyncComplete))
-                        Schedule();
-                }
-                catch (Exception ex)
-                {
-                    Debug.Console(1, this, "Error rescheduling:{0}", ex);
-                }
-            });
-        }
-
-        private void ProcessMessages()
-        {
-            const int throughput = 6;
-            for (var i = 0; i < throughput; ++i)
+            while (_isProcessing == Processing)
             {
                 Action sys;
                 if (_systemActions.TryToDequeue(out sys))
@@ -245,9 +232,6 @@ namespace epi_videoCodec_ciscoExtended
                     continue;
                 }
 
-                if (!InitialSyncComplete)
-                    break;
-
                 Action cmd;
                 if (_commandActions.TryToDequeue(out cmd))
                 {
@@ -259,8 +243,13 @@ namespace epi_videoCodec_ciscoExtended
                     {
                         Debug.Console(1, this, "Error processing usr action:{0}", ex);
                     }
+                    continue;
                 }
+
+                _waitHandle.Wait();
             }
+
+            return null;
         }
     }
 }
