@@ -2,17 +2,13 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
-using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem.Tokens;
 using PepperDash.Core.Intersystem;
@@ -122,6 +118,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private Meeting _currentMeeting;
 
+        private bool _standbyIsOn;
         private bool _presentationActive;
 
         private readonly bool _phonebookAutoPopulate;
@@ -298,7 +295,7 @@ namespace epi_videoCodec_ciscoExtended
 
         protected override Func<bool> StandbyIsOnFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Standby.State.BoolValue; }
+            get { return () => _standbyIsOn; }
         }
 
         /// <summary>
@@ -1465,78 +1462,76 @@ ConnectorID: {2}"
 
         private void ProcessResponse(string response)
         {
-            if (response.ToLower().Contains("xcommand"))
+            try
             {
-                Debug.Console(1, this, "Received command echo response.  Ignoring");
-                return;
-            }
-
-            if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = true;
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Incoming JSON message...");
-
-                _jsonMessage = new StringBuilder();
-            }
-            else if (response == "}" + Delimiter) // Check for the end of a JSON message
-            {
-                _jsonFeedbackMessageIsIncoming = false;
-
-                _jsonMessage.Append(response);
-
-                if (CommDebuggingIsOn)
-                    Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                // Enqueue the complete message to be deserialized
-
-                DeserializeResponse(_jsonMessage.ToString());
-
-                return;
-            }
-
-            if (_jsonFeedbackMessageIsIncoming)
-            {
-                _jsonMessage.Append(response);
-
-                //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                return;
-            }
-
-            if (!_syncState.InitialSyncComplete)
-            {
-                switch (response.Trim().ToLower()) // remove the whitespace
+                if (response.ToLower().Contains("xcommand"))
                 {
-                    case "*r login successful":
-                        {
-                            _syncState.LoginMessageReceived();
-
-                            if (_loginMessageReceivedTimer != null)
-                                _loginMessageReceivedTimer.Stop();
-
-                            //SendText("echo off");
-                            SendText("xPreferences outputmode json");
-                            break;
-                        }
-                    case "xpreferences outputmode json":
-                        {
-                            if (_syncState.JsonResponseModeSet)
-                                return;
-
-                            _syncState.JsonResponseModeMessageReceived();
-
-                            if (!_syncState.InitialStatusMessageWasReceived)
-                                SendText("xStatus");
-                            break;
-                        }
-                    case "xfeedback register /event/calldisconnect":
-                        {
-                            _syncState.FeedbackRegistered();
-                            break;
-                        }
+                    Debug.Console(1, this, "Received command echo response.  Ignoring");
+                    return;
                 }
+
+                if (!_syncState.InitialSyncComplete)
+                {
+                    var data = response.Trim().ToLower();
+                    if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
+                    {
+                        _syncState.LoginMessageReceived();
+
+                        if (_loginMessageReceivedTimer != null)
+                            _loginMessageReceivedTimer.Stop();
+
+                        //SendText("echo off");
+                    }
+                    else if (data.Contains("xpreferences outputmode json"))
+                    {
+                        if (_syncState.JsonResponseModeSet)
+                            return;
+
+                        _syncState.JsonResponseModeMessageReceived();
+
+                        if (!_syncState.InitialStatusMessageWasReceived)
+                            SendText("xStatus");
+                    }
+                    else if (data.Contains("xfeedback register /event/calldisconnect"))
+                    {
+                        _syncState.FeedbackRegistered();
+                    }
+                }
+
+                if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
+                {
+                    _jsonFeedbackMessageIsIncoming = true;
+
+                    if (CommDebuggingIsOn)
+                        Debug.Console(1, this, "Incoming JSON message...");
+
+                    _jsonMessage = new StringBuilder();
+                }
+                else if (response == "}" + Delimiter) // Check for the end of a JSON message
+                {
+                    _jsonFeedbackMessageIsIncoming = false;
+
+                    _jsonMessage.Append(response);
+
+                    if (CommDebuggingIsOn)
+                        Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
+
+                    // Enqueue the complete message to be deserialized
+
+                    DeserializeResponse(_jsonMessage.ToString());
+
+                    return;
+                }
+
+                if (!_jsonFeedbackMessageIsIncoming) return;
+                _jsonMessage.Append(response);
             }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Swallowing an exception processing a response:{0}", ex);
+            }
+
+            //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
         }
 
 
@@ -2519,6 +2514,21 @@ ConnectorID: {2}"
                 return;
             }
             JsonConvert.PopulateObject(statusToken.ToString(), status);
+
+            var standbyToken = statusToken.SelectToken("Standby");
+            if (standbyToken != null)
+            {
+                var currentStandbyStatusToken = (string) standbyToken.SelectToken("State.Value");
+                if (!String.IsNullOrEmpty(currentStandbyStatusToken))
+                {
+                    _standbyIsOn =
+                        currentStandbyStatusToken.Equals("standby", StringComparison.OrdinalIgnoreCase)
+                        || currentStandbyStatusToken.Equals("on", StringComparison.OrdinalIgnoreCase);
+
+                    StandbyIsOnFeedback.FireUpdate();
+                    return;
+                }
+            }
 
             if (systemUnitToken != null)
             {
@@ -5149,13 +5159,14 @@ ConnectorID: {2}"
                     var camId = uint.Parse(item.CameraId);
                     var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == camId);
                     var name = string.Format("Camera {0}", camId);
+                    var sourceId = (camInfo != null && camInfo.SourceId > 0) ? (uint)camInfo.SourceId : camId;
                     if (camInfo != null)
                     {
                         name = camInfo.Name;
                     }
 
                     var key = string.Format("{0}-camera{1}", Key, camId);
-                    var camera = new CiscoCamera(key, name, this, camId);
+                    var camera = new CiscoCamera(key, name, this, camId, sourceId);
 
                     if (cam.Capabilities != null)
                     {
@@ -5239,7 +5250,7 @@ ConnectorID: {2}"
             var ciscoCam = camera as CiscoCamera;
             if (ciscoCam != null)
             {
-                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.CameraId));
+                EnqueueCommand(string.Format("xCommand Video Input SetMainVideoSource SourceId: {0}", ciscoCam.SourceId));
             }
         }
 

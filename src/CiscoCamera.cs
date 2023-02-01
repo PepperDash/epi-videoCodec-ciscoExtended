@@ -129,6 +129,8 @@ namespace epi_videoCodec_ciscoExtended
         /// </summary>
         protected uint ZoomSpeed { get; private set; }
 
+        public uint SourceId { get; private set; }
+
         private bool isPanning;
 
         private bool isTilting;
@@ -155,6 +157,7 @@ namespace epi_videoCodec_ciscoExtended
             ParentCodec = codec;
 
             CameraId = id;
+            SourceId = id;
 
             // Set default speeds
             PanSpeed = 7;
@@ -162,6 +165,11 @@ namespace epi_videoCodec_ciscoExtended
             ZoomSpeed = 7;
         }
 
+        public CiscoCamera(string key, string name, CiscoCodec codec, uint id, uint sourceId)
+            : this(key, name, codec, id)
+        {
+            SourceId = sourceId;
+        }
 
         //  Takes a string from the camera capabilities value and converts from "ptzf" to enum bitmask
         public void SetCapabilites(string capabilites)
