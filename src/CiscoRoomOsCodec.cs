@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
+using epi_videoCodec_ciscoExtended.State;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -1497,7 +1498,7 @@ ConnectorID: {2}"
                         if (_loginMessageReceivedTimer != null)
                             _loginMessageReceivedTimer.Stop();
 
-                        //SendText("echo off");
+                        SendText("echo off");
                     }
                     else if (data.Contains("xpreferences outputmode json"))
                     {
@@ -1509,10 +1510,11 @@ ConnectorID: {2}"
                         if (!_syncState.InitialStatusMessageWasReceived)
                             SendText("xStatus");
                     }
-                    else if (data.Contains("xfeedback register /event/calldisconnect"))
+                    /*else if (data.Contains("xfeedback register /configuration"))
                     {
                         _syncState.FeedbackRegistered();
-                    }
+                        return;
+                    }*/
                 }
 
                 if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
@@ -2627,7 +2629,7 @@ ConnectorID: {2}"
             if (_syncState.FeedbackWasRegistered) return;
             Debug.Console(0, this, "Sending Feedback");
 
-            SendText(BuildFeedbackRegistrationExpression());
+            Registration.DispatchRegistrations(Communication);
             UIExtensionsHandler.RegisterFeedback();
 
         }
@@ -2686,6 +2688,8 @@ ConnectorID: {2}"
             try
             {
                 if (configurationToken == null) return;
+                _syncState.InitialConfigurationMessageReceived();
+                _syncState.FeedbackRegistered();
                 var configuration = new CiscoCodecConfiguration.Configuration();
                 try
                 {
@@ -2715,9 +2719,9 @@ ConnectorID: {2}"
                     Debug.Console(0, this, "Exception in ParseConfigurationObject.Populate Autoanswer : {0}", e.Message);
                     throw;
                 } 
-                if (_syncState.InitialConfigurationMessageWasReceived) return;
+                /*if (_syncState.InitialConfigurationMessageWasReceived) return;
                 Debug.Console(2, this, "InitialConfig Received");
-                _syncState.InitialConfigurationMessageReceived();
+                _syncState.InitialConfigurationMessageReceived();*/
                 if (!_syncState.InitialSoftwareVersionMessageWasReceived)
                 {
                     SendText("xStatus SystemUnit");
@@ -2973,7 +2977,7 @@ ConnectorID: {2}"
             {
                 return obj["ResultId"].ToString();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Guid.Empty.ToString();
             }
@@ -3640,7 +3644,8 @@ ConnectorID: {2}"
 
                 if (ex is JsonReaderException)
                 {
-                    Debug.Console(1, this, "Received malformed response from codec.");
+                    Debug.Console(0, this, "Received malformed response from codec.");
+                    Debug.Console(0, this, "{0}", response);
 
                     //Communication.Disconnect();
 

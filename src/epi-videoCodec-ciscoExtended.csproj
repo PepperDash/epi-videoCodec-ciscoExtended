@@ -104,6 +104,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DoNotDisturbHandler.cs" />
+    <Compile Include="State\Registration.cs" />
     <Compile Include="MessageProcessor.cs" />
     <Compile Include="UIExtensionsHandler.cs" />
     <Compile Include="WebexPinRequestHandler.cs" />

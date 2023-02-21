@@ -103,6 +103,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public void RegisterFeedback()
         {
+            /* Moved to Registrations class to control the pacing
             // get standard events
             _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Event\r\n");
             // detect pages opened, this is unreliable
@@ -111,6 +112,7 @@ namespace epi_videoCodec_ciscoExtended
             _coms.SendText("xfeedback register /Event/UserInterface/Extensions/PageClosed\r\n");
             // detect changes to the UI Layout file
             _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Widget/LayoutUpdated\r\n");
+             */
         }
 
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
