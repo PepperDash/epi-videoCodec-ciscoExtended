@@ -155,6 +155,7 @@ namespace epi_videoCodec_ciscoExtended
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Inital Codec Software Information received");
 
                 InitialSoftwareVersionMessageWasReceived = true;
+
                 CheckSyncStatus();
             });
 
@@ -196,7 +197,10 @@ namespace epi_videoCodec_ciscoExtended
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
                 Debug.Console(1, this, "Codec Sync Complete");
+
                 InitialSyncComplete = true;
+                _parent.PollSpeakerTrack();
+                _parent.PollPresenterTrack();
             }
             else
                 InitialSyncComplete = false;

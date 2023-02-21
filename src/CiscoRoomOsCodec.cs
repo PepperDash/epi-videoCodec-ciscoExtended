@@ -884,7 +884,11 @@ namespace epi_videoCodec_ciscoExtended
         private void CiscoCodec_CallStatusChange(object sender, CodecCallStatusItemChangeEventArgs e)
         {
             var callPresent = ActiveCalls.Any(call => call.IsActiveCall);
-            if(!EnhancedLayouts) OnAvailableLayoutsChanged(_legacyLayouts);
+            if (!EnhancedLayouts)
+            {
+                Debug.Console(0, this, "Legacy Layouts Triggered");
+                OnAvailableLayoutsChanged(_legacyLayouts);
+            }
             if (callPresent) return;
             OnAvailableLayoutsChanged(new List<CodecCommandWithLabel>());
             OnCurrentLayoutChanged(String.Empty);
@@ -1124,6 +1128,16 @@ namespace epi_videoCodec_ciscoExtended
             }
         }
 
+        public void PollSpeakerTrack()
+        {
+            EnqueueCommand("xStatus Cameras SpeakerTrack");
+        }
+
+        public void PollPresenterTrack()
+        {
+            EnqueueCommand("xStatus Cameras PresenterTrack");
+        }
+
 
 
         /// <summary>
@@ -1292,13 +1306,14 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Status/Video/Selfview" + Delimiter +
                 prefix + "/Status/MediaChannels/Call" + Delimiter +
                 prefix + "/Status/Video/Layout/CurrentLayouts" + Delimiter +
+                prefix + "/Status/Video/Layout/LayoutFamily" + Delimiter +
                 prefix + "/Status/Video/Input/MainVideoMute" + Delimiter +
                 prefix + "/Bookings" + Delimiter +
                 prefix + "/Event/Bookings" + Delimiter +
                 prefix + "/Event/CameraPresetListUpdated" + Delimiter +
+                prefix + "/Event/Conference/Call/AuthenticationResponse" + Delimiter +
                 prefix + "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier" + Delimiter +
-                prefix + "/Event/CallDisconnect" + Delimiter +
-                prefix + "/Event/Conference/Call/AuthenticationResponse" + Delimiter;
+                prefix + "/Event/CallDisconnect" + Delimiter;
             // Keep CallDisconnect last to detect when feedback registration completes correctly
             return feedbackRegistrationExpression;
         }
@@ -1336,6 +1351,7 @@ namespace epi_videoCodec_ciscoExtended
                     "No cameraInfo defined in video codec config.  Attempting to get camera info from codec status data");
                 try
                 {
+
                     var cameraInfo = new List<CameraInfo>();
 
                     Debug.Console(0, this, "Codec reports {0} cameras", CodecStatus.Status.Cameras.CameraList.Count);
@@ -1365,6 +1381,7 @@ ConnectorID: {2}"
                     Debug.Console(0, this, "Successfully got cameraInfo for {0} cameras from codec.", cameraInfo.Count);
 
                     SetUpCameras(cameraInfo);
+
                 }
                 catch (Exception ex)
                 {
@@ -2164,8 +2181,6 @@ ConnectorID: {2}"
                 }
                 if (layoutObject.ActiveLayout == null) return;
             }
-            //UpdateCurrentLayout(layoutObject);
-
         }
 
         private void ParseLayoutToken(JToken layoutToken)
@@ -2494,6 +2509,7 @@ ConnectorID: {2}"
         {
             if (statusToken == null) return;
             var status = new CiscoCodecStatus.Status();
+            var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
             var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
             var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
             var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
@@ -2527,6 +2543,17 @@ ConnectorID: {2}"
 
                     StandbyIsOnFeedback.FireUpdate();
                     return;
+                }
+            }
+            if (legacyLayoutsToken != null && !EnhancedLayouts)
+            {
+                var localValueToken = (string) legacyLayoutsToken.SelectToken("Local.Value");
+                if (!String.IsNullOrEmpty(localValueToken))
+                {
+                    OnAvailableLayoutsChanged(_legacyLayouts);
+                    ComputeLegacyLayout(localValueToken);
+                    CurrentLayout = localValueToken;
+                    OnCurrentLayoutChanged(CurrentLayout);
                 }
             }
 
@@ -3661,13 +3688,22 @@ ConnectorID: {2}"
         /// </summary>
         private void ComputeLegacyLayout()
         {
-            
+
             if (EnhancedLayouts) return;
             _currentLegacyLayout = _legacyLayouts.FirstOrDefault(l => l.Command.ToLower().Equals(CodecStatus.Status.Video.Layout.LayoutFamily.Local.Value.ToLower()));
 
             if (_currentLegacyLayout != null)
                 LocalLayoutFeedback.FireUpdate();
-            
+
+        }
+        private void ComputeLegacyLayout(string layoutName)
+        {
+
+            if (EnhancedLayouts) return;
+            _currentLegacyLayout = _legacyLayouts.FirstOrDefault(l => l.Command.ToLower().Equals(layoutName.ToLower()));
+
+            if (_currentLegacyLayout != null)
+                LocalLayoutFeedback.FireUpdate();
         }
 
 
