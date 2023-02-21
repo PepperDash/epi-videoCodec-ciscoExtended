@@ -1312,7 +1312,8 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Event/Bookings" + Delimiter +
                 prefix + "/Event/CameraPresetListUpdated" + Delimiter +
                 prefix + "/Event/Conference/Call/AuthenticationResponse" + Delimiter +
-                prefix + "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier" + Delimiter;
+                prefix + "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier" + Delimiter +
+                prefix + "/Event/CallDisconnect" + Delimiter;
             // Keep CallDisconnect last to detect when feedback registration completes correctly
             return feedbackRegistrationExpression;
         }
