@@ -98,6 +98,10 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     _parent.SendText("xPreferences outputmode json");
                 }
+
+
+                if (!InitialStatusMessageWasReceived)
+                    _parent.SendText("xStatus");
                     
                 CheckSyncStatus();
             });
