@@ -196,11 +196,13 @@ namespace epi_videoCodec_ciscoExtended
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                Debug.Console(1, this, "Codec Sync Complete");
-
-                InitialSyncComplete = true;
-                _parent.PollSpeakerTrack();
-                _parent.PollPresenterTrack();
+                if (!InitialSyncComplete)
+                {
+                    Debug.Console(1, this, "Codec Sync Complete");
+                    _parent.PollSpeakerTrack();
+                    _parent.PollPresenterTrack();
+                    InitialSyncComplete = true;
+                }
             }
             else
                 InitialSyncComplete = false;
