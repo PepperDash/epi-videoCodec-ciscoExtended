@@ -810,7 +810,6 @@ namespace epi_videoCodec_ciscoExtended
                     DeviceInfo.FirmwareVersion = CodecFirmware.ToString();
                     UpdateDeviceInfo();
                 }
-                _syncState.InitialSoftwareVersionMessageReceived();
             }
             if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
             {
@@ -1272,6 +1271,30 @@ namespace epi_videoCodec_ciscoExtended
 
                 Communication.Connect();
 
+                CommunicationMonitor.IsOnlineFeedback.OutputChange += (sender, args) =>
+                                                                      {
+                                                                          if (args.BoolValue)
+                                                                          {
+                                                                              SendText("echo off");
+                                                                              SendText("xPreferences outputmode json");
+                                                                              SendText("xConfiguration");
+                                                                              SendText("xStatus");
+                                                                              Registration.DispatchRegistrations(
+                                                                                  Communication);
+
+                                                                              _syncState.LoginMessageReceived();
+                                                                              _syncState.JsonResponseModeMessageReceived();
+                                                                              _syncState.InitialStatusMessageReceived();
+                                                                              _syncState.InitialConfigurationMessageReceived();
+                                                                              _syncState.InitialSoftwareVersionMessageReceived();
+                                                                              _syncState.FeedbackRegistered();
+                                                                          }
+                                                                          else
+                                                                          {
+                                                                              _syncState.CodecDisconnected();
+                                                                          }
+                                                                      };
+
                 CommunicationMonitor.Start();
 
             }
@@ -1424,6 +1447,7 @@ ConnectorID: {2}"
         private void socket_ConnectionChange(object sender, GenericSocketStatusChageEventArgs e)
         {
             Debug.Console(1, this, "Socket status change {0}", e.Client.ClientStatus);
+            /*
             if (e.Client.IsConnected)
             {
                 if (!_syncState.LoginMessageWasReceived)
@@ -1445,7 +1469,7 @@ ConnectorID: {2}"
                     BookingsRefreshTimer.Stop();
                     BookingsRefreshTimer = null;
                 }
-            }
+            }*/
         }
 
         private void DisconnectClientAndReconnect()
@@ -1489,6 +1513,7 @@ ConnectorID: {2}"
                     return;
                 }
 
+                /*
                 if (!_syncState.InitialSyncComplete)
                 {
                     var data = response.Trim().ToLower();
@@ -1511,12 +1536,12 @@ ConnectorID: {2}"
                         if (!_syncState.InitialStatusMessageWasReceived)
                             SendText("xStatus");
                     }
-                    /*else if (data.Contains("xfeedback register /configuration"))
+                    else if (data.Contains("xfeedback register /configuration"))
                     {
                         _syncState.FeedbackRegistered();
                         return;
-                    }*/
-                }
+                    }
+                }*/
 
                 if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
                 {
@@ -1842,7 +1867,6 @@ ConnectorID: {2}"
             if (DeviceInfo == null) return;
             DeviceInfo.FirmwareVersion = codecFirmwareString;
             UpdateDeviceInfo();
-            _syncState.InitialSoftwareVersionMessageReceived();
         }
 
 
@@ -2014,7 +2038,6 @@ ConnectorID: {2}"
             if (DeviceInfo == null) return;
             DeviceInfo.FirmwareVersion = codecFirmwareString;
             UpdateDeviceInfo();
-            _syncState.InitialSoftwareVersionMessageReceived();
 
         }
 
@@ -2556,7 +2579,6 @@ ConnectorID: {2}"
                         || currentStandbyStatusToken.Equals("on", StringComparison.OrdinalIgnoreCase);
 
                     StandbyIsOnFeedback.FireUpdate();
-                    return;
                 }
             }
             if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -2629,21 +2651,7 @@ ConnectorID: {2}"
             {
                 Debug.Console(0, this, "");
                 JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
-            }
-            if (_syncState.InitialStatusMessageWasReceived) return;
-            _syncState.InitialStatusMessageReceived();
-
-            if (!_syncState.InitialConfigurationMessageWasReceived)
-            {
-                Debug.Console(0, this, "Sending Configuration");
-                SendText("xConfiguration");
-            }
-            if (_syncState.FeedbackWasRegistered) return;
-            Debug.Console(0, this, "Sending Feedback");
-
-            Registration.DispatchRegistrations(Communication);
-            UIExtensionsHandler.RegisterFeedback();
-
+            }            
         }
 
         private void ParseSelfviewToken(JToken selfviewToken)
@@ -2700,8 +2708,6 @@ ConnectorID: {2}"
             try
             {
                 if (configurationToken == null) return;
-                _syncState.InitialConfigurationMessageReceived();
-                _syncState.FeedbackRegistered();
 
                 var configuration = new CiscoCodecConfiguration.Configuration();
                 try
@@ -2715,7 +2721,6 @@ ConnectorID: {2}"
                 catch (Exception e)
                 {
                     Debug.Console(0, this, "Exception in ParseConfigurationObject.Populate H323 : {0}", e.Message);
-
                 }
 
                 try
@@ -2735,10 +2740,6 @@ ConnectorID: {2}"
                 /*if (_syncState.InitialConfigurationMessageWasReceived) return;
                 Debug.Console(2, this, "InitialConfig Received");
                 _syncState.InitialConfigurationMessageReceived();*/
-                if (!_syncState.InitialSoftwareVersionMessageWasReceived)
-                {
-                    SendText("xStatus SystemUnit");
-                }
 
             }
             catch (Exception e)
