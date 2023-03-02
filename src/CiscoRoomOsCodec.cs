@@ -5152,7 +5152,7 @@ ConnectorID: {2}"
             Cameras = new List<CameraBase>();
 
             var camCount = cameraInfo.Count;
-            Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
+            Debug.Console(1, this, "THERE ARE {0} CAMERAS", camCount);
 
             // Deal with the case of 1 or no reported cameras
             if (camCount <= 1)
@@ -5161,11 +5161,12 @@ ConnectorID: {2}"
 
                 if (camCount > 0)
                 {
+                    var firstCamera = CodecStatus.Status.Cameras.CameraList.FirstOrDefault();
                     // Try to get the capabilities from the codec
-                    if (CodecStatus.Status.Cameras.CameraList[0] != null &&
-                        CodecStatus.Status.Cameras.CameraList[0].Capabilities != null)
+                    if (firstCamera != null &&
+                        firstCamera.Capabilities != null)
                     {
-                        internalCamera.SetCapabilites(CodecStatus.Status.Cameras.CameraList[0].Capabilities.Options.Value);
+                        internalCamera.SetCapabilites(firstCamera.Capabilities.Options.Value);
                     }
                 }
 
