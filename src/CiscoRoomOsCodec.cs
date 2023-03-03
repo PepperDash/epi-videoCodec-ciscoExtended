@@ -1264,37 +1264,61 @@ namespace epi_videoCodec_ciscoExtended
                 if (socket != null)
                 {
                     socket.ConnectionChange += socket_ConnectionChange;
+                    socket.ConnectionChange += (sender, args) =>
+                                               {
+                                                   if (args.Client.IsConnected)
+                                                   {
+                                                       SendText("echo off");
+                                                       SendText("xPreferences outputmode json");
+                                                       SendText("xConfiguration");
+                                                       SendText("xStatus");
+                                                       Registration.DispatchRegistrations(
+                                                           Communication);
+
+                                                       _syncState.LoginMessageReceived();
+                                                       _syncState.JsonResponseModeMessageReceived();
+                                                       _syncState.InitialStatusMessageReceived();
+                                                       _syncState.InitialConfigurationMessageReceived();
+                                                       _syncState.InitialSoftwareVersionMessageReceived();
+                                                       _syncState.FeedbackRegistered();
+                                                   }
+                                                   else
+                                                   {
+                                                       _syncState.CodecDisconnected();
+                                                   }
+                                               };
+                }
+                else
+                {
+                    CommunicationMonitor.IsOnlineFeedback.OutputChange += (sender, args) =>
+                                                                          {
+                                                                              if (args.BoolValue)
+                                                                              {
+                                                                                  SendText("echo off");
+                                                                                  SendText("xPreferences outputmode json");
+                                                                                  SendText("xConfiguration");
+                                                                                  SendText("xStatus");
+                                                                                  Registration.DispatchRegistrations(
+                                                                                      Communication);
+
+                                                                                  _syncState.LoginMessageReceived();
+                                                                                  _syncState.JsonResponseModeMessageReceived();
+                                                                                  _syncState.InitialStatusMessageReceived();
+                                                                                  _syncState.InitialConfigurationMessageReceived();
+                                                                                  _syncState.InitialSoftwareVersionMessageReceived();
+                                                                                  _syncState.FeedbackRegistered();
+                                                                              }
+                                                                              else
+                                                                              {
+                                                                                  _syncState.CodecDisconnected();
+                                                                              }
+                                                                          };
                 }
 
                 if (Communication == null)
                     throw new NullReferenceException("Coms");
 
                 Communication.Connect();
-
-                CommunicationMonitor.IsOnlineFeedback.OutputChange += (sender, args) =>
-                                                                      {
-                                                                          if (args.BoolValue)
-                                                                          {
-                                                                              SendText("echo off");
-                                                                              SendText("xPreferences outputmode json");
-                                                                              SendText("xConfiguration");
-                                                                              SendText("xStatus");
-                                                                              Registration.DispatchRegistrations(
-                                                                                  Communication);
-
-                                                                              _syncState.LoginMessageReceived();
-                                                                              _syncState.JsonResponseModeMessageReceived();
-                                                                              _syncState.InitialStatusMessageReceived();
-                                                                              _syncState.InitialConfigurationMessageReceived();
-                                                                              _syncState.InitialSoftwareVersionMessageReceived();
-                                                                              _syncState.FeedbackRegistered();
-                                                                          }
-                                                                          else
-                                                                          {
-                                                                              _syncState.CodecDisconnected();
-                                                                          }
-                                                                      };
-
                 CommunicationMonitor.Start();
 
             }
