@@ -4431,9 +4431,9 @@ ConnectorID: {2}"
             trilist.SetStringSigAction(joinMap.WebexMeetingRole.JoinNumber, s => WebexMeetingRole = s);
             trilist.SetStringSigAction(joinMap.WebexMeetingPin.JoinNumber, s => WebexMeetingPin = s);
 
-            trilist.SetSigTrueAction(joinMap.ZoomMeetingDial.JoinNumber, DialWebex);
+            trilist.SetSigTrueAction(joinMap.WebexDial.JoinNumber, DialWebex);
 
-            trilist.SetSigTrueAction(joinMap.ZoomMeetingClear.JoinNumber, () =>
+            trilist.SetSigTrueAction(joinMap.WebexDialClear.JoinNumber, () =>
             {
                 WebexMeetingNumber = String.Empty;
                 WebexMeetingRole = String.Empty;
