@@ -636,8 +636,8 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Serial
             });
-        [JoinName("ZoomMeetingDialSip")]
-        public JoinDataComplete ZoomMeetingDialSip = new JoinDataComplete(
+        [JoinName("ZoomMeetingDial")]
+        public JoinDataComplete ZoomMeetingDial = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 401,
@@ -645,20 +645,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Zoom Meeting Dial SIP",
-                JoinCapabilities = eJoinCapabilities.FromSIMPL,
-                JoinType = eJoinType.Digital
-            });
-        [JoinName("ZoomMeetingDialH323")]
-        public JoinDataComplete ZoomMeetingDialH323 = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 402,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "Zoom Meeting Dial H323",
+                Description = "Zoom Meeting Dial",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
@@ -666,7 +653,7 @@ namespace epi_videoCodec_ciscoExtended
         public JoinDataComplete ZoomMeetingClear = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 403,
+                JoinNumber = 402,
                 JoinSpan = 1
             },
             new JoinMetadata
@@ -675,6 +662,74 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
+
+        [JoinName("WebexDial")]
+        public JoinDataComplete WebexDial = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Dial Webex Meeting",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("WebexDialClear")]
+        public JoinDataComplete WebexDialClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Clear Webex Dialer Data",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("WebexMeetingNumber")]
+        public JoinDataComplete WebexMeetingNumber = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Number",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("WebexMeetingPin")]
+        public JoinDataComplete WebexMeetingPin = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Pin",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("WebexMeetingRole")]
+        public JoinDataComplete WebexMeetingRole = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 413,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Role",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+
 
 
 
