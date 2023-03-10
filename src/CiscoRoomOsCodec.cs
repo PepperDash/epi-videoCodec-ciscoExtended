@@ -128,6 +128,14 @@ namespace epi_videoCodec_ciscoExtended
         private CiscoCodecConfig _config;
         private readonly int _joinableCooldownSeconds;
 
+        public string ZoomMeetingId { get; private set; }
+        public string ZoomMeetingPasscode { get; private set; }
+        public string ZoomMeetingCommand { get; private set; }
+        public string ZoomMeetingHostKey { get; private set; }
+        public string ZoomMeetingReservedCode { get; private set; }
+        public string ZoomMeetingDialCode { get; private set; }
+        public string ZoomMeetingIp { get; private set; }
+
         public eCodecPresentationStates PresentationStates;
 
         private bool _externalSourceChangeRequested;
@@ -829,6 +837,42 @@ namespace epi_videoCodec_ciscoExtended
                     DeviceInfo.IpAddress = args.IpAddress;
                 }
             } 
+        }
+
+
+
+        public void DialZoomSipMeeting()
+        {
+            if (ZoomMeetingId.NullIfEmpty() == null)
+            {
+                Debug.Console(0, this, "Error - Unable to dial zoom meeting without Zoom Meeting ID");
+                return;
+            }
+            var dialOptions = String.Format("{0}.{1}.{2}.{3}.{4}.{5}", ZoomMeetingId, ZoomMeetingPasscode, ZoomMeetingCommand, ZoomMeetingHostKey, ZoomMeetingReservedCode, ZoomMeetingDialCode).Trim('.');
+            var dialAddress = ZoomMeetingIp.NullIfEmpty() ?? "zoomcrc.com";
+            var dialString = String.Format("{0}@{1}", dialOptions, dialAddress);
+
+            Dial(dialString);
+        }
+
+        public void DialZoomH323Meeting()
+        {
+            if (ZoomMeetingId.NullIfEmpty() == null)
+            {
+                Debug.Console(0, this, "Error - Unable to dial zoom meeting without Zoom Meeting ID");
+                return;
+            }
+            if (ZoomMeetingIp.NullIfEmpty() == null)
+            {
+                Debug.Console(0, this, "Error - Unable to dial zoom meeting without Zoom Meeting IP");
+                return;
+            }
+
+            var dialString =
+                String.Format("{0}##{1}#{2}#{3}#{4}",ZoomMeetingIp, ZoomMeetingId, ZoomMeetingPasscode, ZoomMeetingCommand,
+                    ZoomMeetingHostKey).Trim('#');
+
+            Dial(dialString);
         }
 
         private void ScheduleTimeCheck(object time)
@@ -4298,6 +4342,7 @@ ConnectorID: {2}"
                 bridge.AddJoinMap(Key, joinMap);
             }
 
+
             LinkVideoCodecToApi(this, trilist, joinMap);
 
             LinkCiscoCodecToApi(trilist, joinMap);
@@ -4305,6 +4350,32 @@ ConnectorID: {2}"
             WebexPinRequestHandler.LinkToApi(trilist, joinMap);
 
             UIExtensionsHandler.LinkToApi(trilist, joinMap);
+        }
+
+        public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+
+            trilist.SetStringSigAction(joinMap.ZoomMeetingId.JoinNumber, s => ZoomMeetingId = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingPasscode.JoinNumber, s => ZoomMeetingPasscode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingCommand.JoinNumber, s => ZoomMeetingCommand = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingHostKey.JoinNumber, s => ZoomMeetingHostKey = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingReservedCode.JoinNumber, s => ZoomMeetingReservedCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingDialCode.JoinNumber, s => ZoomMeetingDialCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingIp.JoinNumber, s => ZoomMeetingIp = s);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingDialSip.JoinNumber, DialZoomSipMeeting);
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingDialH323.JoinNumber, DialZoomH323Meeting);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingClear.JoinNumber, () =>
+            {
+                ZoomMeetingId = String.Empty;
+                ZoomMeetingPasscode = String.Empty;
+                ZoomMeetingCommand = String.Empty;
+                ZoomMeetingHostKey = String.Empty;
+                ZoomMeetingReservedCode = String.Empty;
+                ZoomMeetingDialCode = String.Empty;
+                ZoomMeetingIp = String.Empty;
+            });
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)

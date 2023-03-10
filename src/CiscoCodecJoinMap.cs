@@ -539,6 +539,144 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Analog
             });
 
+        [JoinName("ZoomMeetingID")]
+        public JoinDataComplete ZoomMeetingId = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 401,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting ID for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingPasscode")]
+        public JoinDataComplete ZoomMeetingPasscode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 402,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Passcode for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingCommand")]
+        public JoinDataComplete ZoomMeetingCommand = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 403,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Command for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingHostKey")]
+        public JoinDataComplete ZoomMeetingHostKey = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 404,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Host Key for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingReservedCode")]
+        public JoinDataComplete ZoomMeetingReservedCode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 405,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Reserved Code for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingDialCode")]
+        public JoinDataComplete ZoomMeetingDialCode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 406,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Dial Code for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingIP")]
+        public JoinDataComplete ZoomMeetingIp = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 406,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting IP Address for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("ZoomMeetingDialSip")]
+        public JoinDataComplete ZoomMeetingDialSip = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 401,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Dial SIP",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("ZoomMeetingDialH323")]
+        public JoinDataComplete ZoomMeetingDialH323 = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 402,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Dial H323",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("ZoomMeetingClear")]
+        public JoinDataComplete ZoomMeetingClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 403,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Clear Data",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+
 
         #endregion
 
