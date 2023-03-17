@@ -520,11 +520,6 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Analog
             });
 
-
-
-
-
-
         [JoinName("PresentationSource")]
         public JoinDataComplete PresentationSource = new JoinDataComplete(
             new JoinData
