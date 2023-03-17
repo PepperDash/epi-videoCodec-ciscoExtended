@@ -99,6 +99,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
+        private readonly Version _regressionFirmware = new Version("9.15.3.26");
         public Version CodecFirmware { get; private set; }
 
         private bool EnhancedLayouts
@@ -107,9 +108,21 @@ namespace epi_videoCodec_ciscoExtended
             {
                 if (CodecFirmware == null) return false;
                 var returnValue = CodecFirmware.CompareTo(_enhancedLayoutsFirmware) >= 0;
-                Debug.Console(0, this, "Enhanced Layout Functionality is {0}.", returnValue ? "enabled" : "disabled");
+                Debug.Console(1, this, "Enhanced Layout Functionality is {0}.", returnValue ? "enabled" : "disabled");
                 return (returnValue);
             }
+        }
+
+        private bool IsRegressionFirmware
+        {
+            get
+            {
+                if (CodecFirmware == null) return false;
+                var returnValue = CodecFirmware.CompareTo(_regressionFirmware) >= 0;
+                Debug.Console(1, this, "Currently running {0} firmware.", returnValue ? "current" : "legacy");
+                return (returnValue);
+            }
+
         }
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
@@ -526,6 +539,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public BoolFeedback PresentationSendingLocalRemoteFeedback { get; private set; }
 
+        public BoolFeedback ContentInputActiveFeedback { get; private set; }
+
         /// <summary>
         /// Used to track the current connector used for the presentation source
         /// </summary>
@@ -692,6 +707,7 @@ namespace epi_videoCodec_ciscoExtended
             PresentationSendingLocalOnlyFeedback = new BoolFeedback(() => _presentationLocalOnly);
             PresentationSendingLocalRemoteFeedback = new BoolFeedback(() => _presentationLocalRemote);
             PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
+            ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
 
             Communication = comm;
 
@@ -1928,6 +1944,7 @@ ConnectorID: {2}"
             _presentationSource = (ushort)source;
             Debug.Console(1, this, "PresentationSource = {0}", _presentationSource);
             PresentationSourceFeedback.FireUpdate();
+            ContentInputActiveFeedback.FireUpdate();
             if (_presentationSource == 0)
             {
                 ClearLayouts();
@@ -1940,6 +1957,7 @@ ConnectorID: {2}"
             _presentationSource = ushort.Parse(source);
             Debug.Console(1, this, "PresentationSource = {0}", _presentationSource);
             PresentationSourceFeedback.FireUpdate();
+            ContentInputActiveFeedback.FireUpdate();
             if (_presentationSource == 0)
             {
                 ClearLayouts();
@@ -3753,7 +3771,7 @@ ConnectorID: {2}"
 
         public void CodecPollLayouts()
         {
-            EnqueueCommand("xStatus Video Layout CurrentLayouts");
+            EnqueueCommand(EnhancedLayouts ? "xStatus Video Layout CurrentLayouts" : "xStatus Video Layout LayoutFamily");
         }
 
 
@@ -4515,6 +4533,8 @@ ConnectorID: {2}"
             // Presentation SourceValueProperty
             trilist.SetUShortSigAction(joinMap.PresentationSource.JoinNumber, (u) => SelectPresentationSource(u));
             PresentationSourceFeedback.LinkInputSig(trilist.UShortInput[joinMap.PresentationSource.JoinNumber]);
+            ContentInputActiveFeedback.LinkInputSig(trilist.BooleanInput[joinMap.SourceShareStart.JoinNumber]);
+            ContentInputActiveFeedback.LinkComplementInputSig(trilist.BooleanInput[joinMap.SourceShareEnd.JoinNumber]);
 
             trilist.SetSigTrueAction(joinMap.PresentationLocalOnly.JoinNumber, SetPresentationLocalOnly);
             trilist.SetSigTrueAction(joinMap.PresentationLocalRemote.JoinNumber, SetPresentationLocalRemote);
