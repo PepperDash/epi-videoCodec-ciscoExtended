@@ -1290,29 +1290,29 @@ namespace epi_videoCodec_ciscoExtended
                 }
                 else
                 {
-                    CommunicationMonitor.IsOnlineFeedback.OutputChange += (sender, args) =>
-                                                                          {
-                                                                              if (args.BoolValue)
-                                                                              {
-                                                                                  SendText("echo off");
-                                                                                  SendText("xPreferences outputmode json");
-                                                                                  SendText("xConfiguration");
-                                                                                  SendText("xStatus");
-                                                                                  Registration.DispatchRegistrations(
-                                                                                      Communication);
+                    CommunicationMonitor.StatusChange += (sender, args) =>
+                                                          {
+                                                              Debug.Console(0, this, "Comm Status:{0}", CommunicationMonitor.Status);
+                                                              if (CommunicationMonitor.Status == MonitorStatus.IsOk)
+                                                              {
+                                                                  SendText("echo off");
+                                                                  SendText("xPreferences outputmode json");
+                                                                  SendText("xConfiguration");
+                                                                  SendText("xStatus");
+                                                                  Registration.DispatchRegistrations(Communication);
 
-                                                                                  _syncState.LoginMessageReceived();
-                                                                                  _syncState.JsonResponseModeMessageReceived();
-                                                                                  _syncState.InitialStatusMessageReceived();
-                                                                                  _syncState.InitialConfigurationMessageReceived();
-                                                                                  _syncState.InitialSoftwareVersionMessageReceived();
-                                                                                  _syncState.FeedbackRegistered();
-                                                                              }
-                                                                              else
-                                                                              {
-                                                                                  _syncState.CodecDisconnected();
-                                                                              }
-                                                                          };
+                                                                  _syncState.LoginMessageReceived();
+                                                                  _syncState.JsonResponseModeMessageReceived();
+                                                                  _syncState.InitialStatusMessageReceived();
+                                                                  _syncState.InitialConfigurationMessageReceived();
+                                                                  _syncState.InitialSoftwareVersionMessageReceived();
+                                                                  _syncState.FeedbackRegistered();
+                                                              }
+                                                              else
+                                                              {
+                                                                  _syncState.CodecDisconnected();
+                                                              }
+                                                          };
                 }
 
                 if (Communication == null)
