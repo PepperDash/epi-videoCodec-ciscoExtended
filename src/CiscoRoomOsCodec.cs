@@ -181,6 +181,12 @@ namespace epi_videoCodec_ciscoExtended
 
         public BoolFeedback PresentationActiveFeedback { get; private set; }
 
+        public bool SpeakerTrackAvailability { get; private set; }
+        public bool SpeakerTrackStatus { get; private set; }
+        public bool PresenterTrackAvailability { get; private set; }
+        public bool PresenterTrackStatus { get; private set; }
+        public string PresenterTrackStatusName { get; private set; }
+
 
         private string _currentLayoutBacker;
 
@@ -451,8 +457,8 @@ namespace epi_videoCodec_ciscoExtended
         {
             get
             {
-                return () => CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue
-                             || CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue;
+                return () => PresenterTrackAvailability || SpeakerTrackAvailability;
+                             
             }
         }
 
@@ -460,62 +466,58 @@ namespace epi_videoCodec_ciscoExtended
         {
             get
             {
-                return () => (CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue
-                             && CodecStatus.Status.Cameras.SpeakerTrack.SpeakerTrackStatus.BoolValue)
-                             || (CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue
-                             && CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.BoolValue);
-
+                return () => (SpeakerTrackAvailability && SpeakerTrackStatus) || (PresenterTrackAvailability && PresenterTrackStatus);
             }
         }
 
         protected Func<bool> PresenterTrackAvailableFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue; }
+            get { return () => PresenterTrackAvailability; }
         }
 
         protected Func<bool> SpeakerTrackAvailableFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue; }
+            get { return () => SpeakerTrackAvailability; }
         }
 
         protected Func<bool> SpeakerTrackStatusOnFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.SpeakerTrack.SpeakerTrackStatus.BoolValue; }
+            get { return () => SpeakerTrackStatus; }
         }
 
         protected Func<string> PresenterTrackStatusNameFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue; }
+            get { return () => PresenterTrackStatusName; }
         }
 
         protected Func<bool> PresenterTrackStatusOnFeedbackFunc
         {
             get
             {
-                return () => ((CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.BoolValue)
-                              || (String.IsNullOrEmpty(CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue)));
+                return () => ((PresenterTrackStatus)
+                              || (String.IsNullOrEmpty(PresenterTrackStatusName)));
             }
         }
 
 
         protected Func<bool> PresenterTrackStatusOffFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue.ToLower() == "off"; }
+            get { return () => PresenterTrackStatusName == "off"; }
         }
 
         protected Func<bool> PresenterTrackStatusFollowFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "follow"; }
+            get { return () => PresenterTrackStatusName == "follow"; }
         }
 
         protected Func<bool> PresenterTrackStatusBackgroundFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "background"; }
+            get { return () => PresenterTrackStatusName == "background"; }
         }
 
         protected Func<bool> PresenterTrackStatusPersistentFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "persistent"; }
+            get { return () => PresenterTrackStatusName == "persistent"; }
         }
 
         #endregion
@@ -674,8 +676,10 @@ namespace epi_videoCodec_ciscoExtended
                 PresenterTrackStatusOffFeedback,
                 PresenterTrackStatusFollowFeedback,
                 PresenterTrackStatusBackgroundFeedback,
-                PresenterTrackStatusPersistentFeedback,
+                PresenterTrackStatusPersistentFeedback
             });
+
+           
 
             #endregion
 
@@ -2138,6 +2142,90 @@ ConnectorID: {2}"
 
         }
 
+        private void UpdateCameraAutoModeFeedbacks()
+        {
+            CameraAutoModeIsOnFeedback.FireUpdate();
+            SpeakerTrackStatusOnFeedback.FireUpdate();
+            SpeakerTrackStatusOnFeedback.FireUpdate();
+            PresenterTrackStatusNameFeedback.FireUpdate();
+            PresenterTrackStatusOffFeedback.FireUpdate();
+            PresenterTrackStatusFollowFeedback.FireUpdate();
+            PresenterTrackStatusBackgroundFeedback.FireUpdate();
+            PresenterTrackStatusPersistentFeedback.FireUpdate();
+            CameraAutoModeAvailableFeedback.FireUpdate();
+            PresenterTrackAvailableFeedback.FireUpdate();
+            SpeakerTrackAvailableFeedback.FireUpdate();
+        }
+
+
+        private void ParseSpeakerTrackToken(JToken speakerTrackToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(speakerTrackToken.ToString())) return;
+                var speakerTrackObject = speakerTrackToken as JObject;
+                if (speakerTrackObject == null) return;
+                var availabilityToken = speakerTrackObject.SelectToken("Availability.Value");
+                var statusToken = speakerTrackObject.SelectToken("Status.Value");
+                if (availabilityToken != null)
+                    SpeakerTrackAvailability = availabilityToken.ToString().ToLower() == "available";
+                if (statusToken != null)
+                    SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
+                UpdateCameraAutoModeFeedbacks();
+
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+
+            }
+        }
+        private void ParsePresenterTrackToken(JToken presenterTrackToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(presenterTrackToken.ToString())) return;
+                var presenterTrackObject = presenterTrackToken as JObject;
+                if (presenterTrackObject == null) return;
+                var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
+                var statusToken = presenterTrackObject.SelectToken("Status.Value");
+                if (availabilityToken != null)
+                    PresenterTrackAvailability = availabilityToken.ToString().ToLower() == "available";
+                if (statusToken != null)
+                {
+                    var status = statusToken.ToString().ToLower();
+                    if (!String.IsNullOrEmpty(status))
+                    {
+                        PresenterTrackStatusName = status;
+                        switch (status)
+                        {
+                            case ("follow"):
+                                PresenterTrackStatus = true;
+                                break;
+                            case ("background"):
+                                PresenterTrackStatus = true;
+                                break;
+                            case ("persistent"):
+                                PresenterTrackStatus = true;
+                                break;
+                            default:
+                                PresenterTrackStatus = false;
+                                break;
+                        }
+                    }
+                }
+                UpdateCameraAutoModeFeedbacks();
+            }
+
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+
+            }
+        }
+
         private void ParseNetworkToken(JToken networkToken)
         {
             try
@@ -2533,6 +2621,8 @@ ConnectorID: {2}"
             var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
             var systemUnitToken = statusToken.SelectToken("SystemUnit");
             var cameraToken = statusToken.SelectToken("Cameras");
+            var speakerTrackToken = statusToken.SelectToken("Cameras.SpeakerTrack");
+            var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
             var networkToken = statusToken.SelectToken("Network");
             var sipToken = statusToken.SelectToken("SIP");
             var conferenceToken = statusToken.SelectToken("Conference");
@@ -2583,6 +2673,14 @@ ConnectorID: {2}"
             {
                 //ParseCameraToken(cameraToken);
                 PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
+            }
+            if (speakerTrackToken != null)
+            {
+                ParseSpeakerTrackToken(speakerTrackToken);
+            }
+            if (presenterTrackToken != null)
+            {
+                ParsePresenterTrackToken(presenterTrackToken);
             }
             if (networkToken != null)
             {
