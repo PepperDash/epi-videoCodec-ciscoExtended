@@ -534,6 +534,199 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Analog
             });
 
+        [JoinName("ZoomMeetingID")]
+        public JoinDataComplete ZoomMeetingId = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 401,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting ID for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingPasscode")]
+        public JoinDataComplete ZoomMeetingPasscode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 402,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Passcode for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingCommand")]
+        public JoinDataComplete ZoomMeetingCommand = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 403,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Command for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingHostKey")]
+        public JoinDataComplete ZoomMeetingHostKey = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 404,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Host Key for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingReservedCode")]
+        public JoinDataComplete ZoomMeetingReservedCode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 405,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Reserved Code for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingDialCode")]
+        public JoinDataComplete ZoomMeetingDialCode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 406,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Dial Code for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("ZoomMeetingIP")]
+        public JoinDataComplete ZoomMeetingIp = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 407,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting IP Address for Room Connector",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("ZoomMeetingDial")]
+        public JoinDataComplete ZoomMeetingDial = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 401,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Dial",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("ZoomMeetingClear")]
+        public JoinDataComplete ZoomMeetingClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 402,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Zoom Meeting Clear Data",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexDial")]
+        public JoinDataComplete WebexDial = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Dial Webex Meeting",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("WebexDialClear")]
+        public JoinDataComplete WebexDialClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Clear Webex Dialer Data",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("WebexMeetingNumber")]
+        public JoinDataComplete WebexMeetingNumber = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Number",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("WebexMeetingPin")]
+        public JoinDataComplete WebexMeetingPin = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Pin",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("WebexMeetingRole")]
+        public JoinDataComplete WebexMeetingRole = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 413,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Webex Meeting Role",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+
+
+
 
         #endregion
 

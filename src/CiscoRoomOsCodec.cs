@@ -100,6 +100,7 @@ namespace epi_videoCodec_ciscoExtended
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
         private readonly Version _regressionFirmware = new Version("9.15.3.26");
+        private readonly Version _zoomDialFeatureFirmware = new Version("11.1.0.0");
         public Version CodecFirmware { get; private set; }
 
         private bool EnhancedLayouts
@@ -109,6 +110,7 @@ namespace epi_videoCodec_ciscoExtended
                 if (CodecFirmware == null) return false;
                 var returnValue = CodecFirmware.CompareTo(_enhancedLayoutsFirmware) >= 0;
                 Debug.Console(1, this, "Enhanced Layout Functionality is {0}.", returnValue ? "enabled" : "disabled");
+
                 return (returnValue);
             }
         }
@@ -122,7 +124,16 @@ namespace epi_videoCodec_ciscoExtended
                 Debug.Console(1, this, "Currently running {0} firmware.", returnValue ? "current" : "legacy");
                 return (returnValue);
             }
+        }
 
+        private bool ZoomDialerFirmware
+        {
+            get
+            {
+                var returnValue = FirmwareCompare(_zoomDialFeatureFirmware);
+                Debug.Console(0, this, "Enhanced Zoom Dialer Functionality is {0}.", returnValue ? "enabled" : "disabled");
+                return (returnValue);
+            }
         }
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
@@ -140,6 +151,19 @@ namespace epi_videoCodec_ciscoExtended
         private string _lastSearched;
         private CiscoCodecConfig _config;
         private readonly int _joinableCooldownSeconds;
+
+        public string ZoomMeetingId { get; private set; }
+        public string ZoomMeetingPasscode { get; private set; }
+        public string ZoomMeetingCommand { get; private set; }
+        public string ZoomMeetingHostKey { get; private set; }
+        public string ZoomMeetingReservedCode { get; private set; }
+        public string ZoomMeetingDialCode { get; private set; }
+        public string ZoomMeetingIp { get; private set; }
+
+        public string WebexMeetingNumber { get; private set; }
+        public string WebexMeetingRole { get; private set; }
+        public string WebexMeetingPin { get; private set; }
+
 
         public eCodecPresentationStates PresentationStates;
 
@@ -447,6 +471,14 @@ namespace epi_videoCodec_ciscoExtended
                 Debug.Console(2, "Exception in CheckJTokenInObject - This may be normal : {0}", e.Message);
                 return null;
             }
+
+        }
+
+        private bool FirmwareCompare(Version ver)
+        {
+            if (CodecFirmware == null) return false;
+            var returnValue = CodecFirmware.CompareTo(ver) >= 0;
+            return (returnValue);
 
         }
 
@@ -810,10 +842,10 @@ namespace epi_videoCodec_ciscoExtended
         
         void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
         {
-            Debug.Console(0, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
+            Debug.Console(2, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
             if (args.InfoChangeType == eCodecInfoChangeType.Firmware)
             {
-                Debug.Console(0, this, "Got Firmware Event!!!!!!");
+                Debug.Console(2, this, "Got Firmware Event!!!!!!");
                 if (String.IsNullOrEmpty(args.Firmware)) return;
                 CodecFirmware = new Version(args.Firmware);
                 if (_testedCodecFirmware > CodecFirmware)
@@ -832,7 +864,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
             {
-                Debug.Console(0, this, "Got Serial Event!!!!!!");
+                Debug.Console(2, this, "Got Serial Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.SerialNumber))
                 {
@@ -842,7 +874,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.Network)
             {
-                Debug.Console(0, this, "Got Network Event!!!!!!");
+                Debug.Console(2, this, "Got Network Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.IpAddress))
                 {
@@ -850,6 +882,63 @@ namespace epi_videoCodec_ciscoExtended
                 }
             } 
         }
+
+        public void DialZoom()
+        {
+            if (ZoomMeetingId.NullIfEmpty() == null) return;
+            var zoomDialCommand = ZoomDialerFirmware ? DialZoomEnhanced() : DialZoomLegacy();
+            EnqueueCommand(zoomDialCommand);
+        }
+
+
+        private string DialZoomLegacy()
+        {
+
+            var dialOptions = String.Format("{0}.{1}.{2}.{3}.{4}.{5}", ZoomMeetingId, ZoomMeetingPasscode, ZoomMeetingCommand, ZoomMeetingHostKey, ZoomMeetingReservedCode, ZoomMeetingDialCode).Trim('.');
+            var dialAddress = ZoomMeetingIp.NullIfEmpty() ?? "zoomcrc.com";
+            var dialString = String.Format("{0}@{1}", dialOptions, dialAddress);
+
+            return dialString;
+        }
+
+        public string DialZoomEnhanced()
+        {
+            var zoomMeetingId = ZoomMeetingId.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("MeetingID: \"{0}\"", ZoomMeetingId);
+            var zoomHostKey = ZoomMeetingHostKey.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("HostKey: \"{0}\"", ZoomMeetingHostKey);
+            var zoomPasscode = ZoomMeetingPasscode.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("MeetingPasscode: \"{0}\"", ZoomMeetingPasscode);
+
+            var zoomCmd = String.Format("xCommand Zoom Join {0} {1} {2}", zoomMeetingId, zoomHostKey, zoomPasscode).Trim();
+
+            return zoomCmd;
+
+        }
+
+
+        public void DialWebex()
+        {
+            var webexNumber = WebexMeetingNumber.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Number: \"{0}\"", WebexMeetingNumber);
+            var webexRole = WebexMeetingRole.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Role: {0}", WebexMeetingRole);
+            var webexPin = WebexMeetingPin.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Pin: \"{0}\"", WebexMeetingPin);
+
+            if (webexNumber == null) return;
+
+            var webexCmd = String.Format("xCommand Webex Join DisplayName: \"{0}\" {1} {2} {3}", this.CodecInfo.SipUri, webexNumber, webexRole, webexPin).Trim();
+
+            EnqueueCommand(webexCmd);
+        }
+
 
         private void ScheduleTimeCheck(object time)
         {
@@ -4414,13 +4503,61 @@ ConnectorID: {2}"
                 bridge.AddJoinMap(Key, joinMap);
             }
 
+
             LinkVideoCodecToApi(this, trilist, joinMap);
 
             LinkCiscoCodecToApi(trilist, joinMap);
 
             WebexPinRequestHandler.LinkToApi(trilist, joinMap);
 
+            LinkCiscoCodecWebex(trilist, joinMap);
+
+            LinkCiscoCodecZoomConnector(trilist, joinMap);
+
             UIExtensionsHandler.LinkToApi(trilist, joinMap);
+        }
+
+        public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+
+            trilist.SetStringSigAction(joinMap.ZoomMeetingId.JoinNumber, s => ZoomMeetingId = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingPasscode.JoinNumber, s => ZoomMeetingPasscode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingCommand.JoinNumber, s => ZoomMeetingCommand = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingHostKey.JoinNumber, s => ZoomMeetingHostKey = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingReservedCode.JoinNumber, s => ZoomMeetingReservedCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingDialCode.JoinNumber, s => ZoomMeetingDialCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingIp.JoinNumber, s => ZoomMeetingIp = s);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingDial.JoinNumber, DialZoom);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingClear.JoinNumber, () =>
+            {
+                ZoomMeetingId = String.Empty;
+                ZoomMeetingPasscode = String.Empty;
+                ZoomMeetingCommand = String.Empty;
+                ZoomMeetingHostKey = String.Empty;
+                ZoomMeetingReservedCode = String.Empty;
+                ZoomMeetingDialCode = String.Empty;
+                ZoomMeetingIp = String.Empty;
+            });
+        }
+
+        private void LinkCiscoCodecWebex(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+            trilist.SetStringSigAction(joinMap.WebexMeetingNumber.JoinNumber, s => WebexMeetingNumber = s);
+            trilist.SetStringSigAction(joinMap.WebexMeetingRole.JoinNumber, s => WebexMeetingRole = s);
+            trilist.SetStringSigAction(joinMap.WebexMeetingPin.JoinNumber, s => WebexMeetingPin = s);
+
+            trilist.SetSigTrueAction(joinMap.WebexDial.JoinNumber, DialWebex);
+
+            trilist.SetSigTrueAction(joinMap.WebexDialClear.JoinNumber, () =>
+            {
+                WebexMeetingNumber = String.Empty;
+                WebexMeetingRole = String.Empty;
+                WebexMeetingPin = String.Empty;
+            });
+
+
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
