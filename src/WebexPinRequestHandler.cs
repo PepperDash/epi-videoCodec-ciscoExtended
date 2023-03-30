@@ -197,8 +197,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public void JoinAsGuest()
         {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance);
+            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}\x0D\x0A";
+            var command = String.Format(commandFormat, _authRequestedCallInstance, String.IsNullOrEmpty(_hostPin) ? String.Empty : String.Format(" Pin: {0}#", _hostPin));
             _coms.SendText(command);
         }
 
