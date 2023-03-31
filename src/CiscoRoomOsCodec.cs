@@ -97,6 +97,11 @@ namespace epi_videoCodec_ciscoExtended
 
         private List<Meeting> _currentMeetings;
 
+        private StringBuilder _feedbackListMessage;
+
+        private bool _feedbackListMessageIncoming;
+
+
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
         private readonly Version _regressionFirmware = new Version("9.15.3.26");
@@ -174,6 +179,7 @@ namespace epi_videoCodec_ciscoExtended
         public event EventHandler<DirectoryEventArgs> DirectoryResultReturned;
 
         private CTimer _brandingTimer;
+        private CTimer _registrationCheckTimer;
 
         public CommunicationGather PortGather { get; private set; }
 
@@ -1512,6 +1518,9 @@ ConnectorID: {2}"
 
             // Fire the ready event
             SetIsReady();
+
+            _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
+
         }
 
         public void SetCommDebug(string s)
@@ -1596,6 +1605,29 @@ ConnectorID: {2}"
                     return;
                 }
 
+                if (!response.StartsWith("/") && _feedbackListMessage != null)
+                {
+                    _feedbackListMessageIncoming = false;
+
+                    var feedbackListString = _feedbackListMessage.ToString();
+                    _feedbackListMessage = null;
+
+                    ProcessFeedbackList(feedbackListString);
+
+                }
+
+                if (response.StartsWith("/"))
+                {
+                    _feedbackListMessageIncoming = true;
+                    if (_feedbackListMessage == null) _feedbackListMessage = new StringBuilder();
+                }
+
+                if (_feedbackListMessageIncoming && _feedbackListMessage != null)
+                {
+                    _feedbackListMessage.Append(response);
+                    return;
+                }
+
                 if (!_syncState.InitialSyncComplete)
                 {
                     var data = response.Trim().ToLower();
@@ -1656,9 +1688,21 @@ ConnectorID: {2}"
             {
                 Debug.Console(1, this, "Swallowing an exception processing a response:{0}", ex);
             }
-
-            //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
         }
+
+        private void ProcessFeedbackList(string data)
+        {
+            Debug.Console(1, this, "Feedback List : ");
+            Debug.Console(1, this, data);
+
+            if (data.Split('\n').Count() == BuildFeedbackRegistrationExpression().Split('\n').Count()) return;
+            Debug.Console(0, this, "Codec Feedback Registrations Lost - Registering Feedbacks");
+            ErrorLog.Error(String.Format("[{0}] :: Codec Feedback Registrations Lost - Registering Feedbacks", Key));
+            //var updateRegistrationString = "xFeedback deregisterall" + Delimiter + _cliFeedbackRegistrationExpression;
+
+            EnqueueCommand(BuildFeedbackRegistrationExpression());
+        }
+
 
 
         /*
@@ -1747,6 +1791,18 @@ ConnectorID: {2}"
         {
             _syncState.AddCommandToQueue(command);
         }
+
+        /// <summary>
+        /// Enqueues a command to be sent to the codec.
+        /// </summary>
+        /// <param name="command"></param>
+        private void EnqueueCommand(object command)
+        {
+            var cmd = command as string;
+            if (String.IsNullOrEmpty(cmd)) return;
+            _syncState.AddCommandToQueue(cmd);
+        }
+
 
         /// <summary>
         /// Appends the delimiter and send the command to the codec.
