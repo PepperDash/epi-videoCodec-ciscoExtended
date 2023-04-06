@@ -904,7 +904,8 @@ namespace epi_videoCodec_ciscoExtended
             var dialAddress = ZoomMeetingIp.NullIfEmpty() ?? "zoomcrc.com";
             var dialString = String.Format("{0}@{1}", dialOptions, dialAddress);
 
-            return dialString;
+            Dial(dialString);
+            return String.Empty;
         }
 
         public string DialZoomEnhanced()
@@ -1702,86 +1703,6 @@ ConnectorID: {2}"
 
             EnqueueCommand(BuildFeedbackRegistrationExpression());
         }
-
-
-
-        /*
-        _receiveQueue.PostMessage(() => 
-                {
-                    if (args.Text.ToLower().Contains("xcommand"))
-                    {
-                        Debug.Console(1, this, "Received command echo response.  Ignoring");
-                        return;
-                    }
-
-                    if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = true;
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Incoming JSON message...");
-
-                        _jsonMessage = new StringBuilder();
-                    }
-                    else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = false;
-
-                        _jsonMessage.Append(args.Text);
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                        // Enqueue the complete message to be deserialized
-
-                        DeserializeResponse(_jsonMessage.ToString());
-
-                        return;
-                    }
-
-                    if (_jsonFeedbackMessageIsIncoming)
-                    {
-                        _jsonMessage.Append(args.Text);
-
-                        //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                        return;
-                    }
-
-                    if (!_syncState.InitialSyncComplete)
-                    {
-                        switch (args.Text.Trim().ToLower()) // remove the whitespace
-                        {
-                            case "*r login successful":
-                            {
-                                _syncState.LoginMessageReceived();
-
-                                if (_loginMessageReceivedTimer != null)
-                                    _loginMessageReceivedTimer.Stop();
-
-                                //SendText("echo off");
-                                SendText("xPreferences outputmode json");
-                                break;
-                            }
-                            case "xpreferences outputmode json":
-                            {
-                                if (_syncState.JsonResponseModeSet)
-                                    return;
-
-                                _syncState.JsonResponseModeMessageReceived();
-
-                                if (!_syncState.InitialStatusMessageWasReceived)
-                                    SendText("xStatus");
-                                break;
-                            }
-                            case "xfeedback register /event/calldisconnect":
-                            {
-                                _syncState.FeedbackRegistered();
-                                break;
-                            }
-                        }
-                    }
-                });*/
-        
 
         /// <summary>
         /// Enqueues a command to be sent to the codec.
