@@ -97,9 +97,15 @@ namespace epi_videoCodec_ciscoExtended
 
         private List<Meeting> _currentMeetings;
 
+        private StringBuilder _feedbackListMessage;
+
+        private bool _feedbackListMessageIncoming;
+
+
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
         private readonly Version _regressionFirmware = new Version("9.15.3.26");
+        private readonly Version _zoomDialFeatureFirmware = new Version("11.1.0.0");
         public Version CodecFirmware { get; private set; }
 
         private bool EnhancedLayouts
@@ -109,6 +115,7 @@ namespace epi_videoCodec_ciscoExtended
                 if (CodecFirmware == null) return false;
                 var returnValue = CodecFirmware.CompareTo(_enhancedLayoutsFirmware) >= 0;
                 Debug.Console(1, this, "Enhanced Layout Functionality is {0}.", returnValue ? "enabled" : "disabled");
+
                 return (returnValue);
             }
         }
@@ -122,7 +129,16 @@ namespace epi_videoCodec_ciscoExtended
                 Debug.Console(1, this, "Currently running {0} firmware.", returnValue ? "current" : "legacy");
                 return (returnValue);
             }
+        }
 
+        private bool ZoomDialerFirmware
+        {
+            get
+            {
+                var returnValue = FirmwareCompare(_zoomDialFeatureFirmware);
+                Debug.Console(0, this, "Enhanced Zoom Dialer Functionality is {0}.", returnValue ? "enabled" : "disabled");
+                return (returnValue);
+            }
         }
 
         public readonly WebexPinRequestHandler WebexPinRequestHandler;
@@ -141,6 +157,19 @@ namespace epi_videoCodec_ciscoExtended
         private CiscoCodecConfig _config;
         private readonly int _joinableCooldownSeconds;
 
+        public string ZoomMeetingId { get; private set; }
+        public string ZoomMeetingPasscode { get; private set; }
+        public string ZoomMeetingCommand { get; private set; }
+        public string ZoomMeetingHostKey { get; private set; }
+        public string ZoomMeetingReservedCode { get; private set; }
+        public string ZoomMeetingDialCode { get; private set; }
+        public string ZoomMeetingIp { get; private set; }
+
+        public string WebexMeetingNumber { get; private set; }
+        public string WebexMeetingRole { get; private set; }
+        public string WebexMeetingPin { get; private set; }
+
+
         public eCodecPresentationStates PresentationStates;
 
         private bool _externalSourceChangeRequested;
@@ -150,6 +179,7 @@ namespace epi_videoCodec_ciscoExtended
         public event EventHandler<DirectoryEventArgs> DirectoryResultReturned;
 
         private CTimer _brandingTimer;
+        private CTimer _registrationCheckTimer;
 
         public CommunicationGather PortGather { get; private set; }
 
@@ -180,6 +210,12 @@ namespace epi_videoCodec_ciscoExtended
         public StringFeedback LocalLayoutFeedback { get; private set; }
 
         public BoolFeedback PresentationActiveFeedback { get; private set; }
+
+        public bool SpeakerTrackAvailability { get; private set; }
+        public bool SpeakerTrackStatus { get; private set; }
+        public bool PresenterTrackAvailability { get; private set; }
+        public bool PresenterTrackStatus { get; private set; }
+        public string PresenterTrackStatusName { get; private set; }
 
 
         private string _currentLayoutBacker;
@@ -444,6 +480,14 @@ namespace epi_videoCodec_ciscoExtended
 
         }
 
+        private bool FirmwareCompare(Version ver)
+        {
+            if (CodecFirmware == null) return false;
+            var returnValue = CodecFirmware.CompareTo(ver) >= 0;
+            return (returnValue);
+
+        }
+
         #region CameraAutoTrackingFeedbackFunc
 
 
@@ -451,8 +495,8 @@ namespace epi_videoCodec_ciscoExtended
         {
             get
             {
-                return () => CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue
-                             || CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue;
+                return () => PresenterTrackAvailability || SpeakerTrackAvailability;
+                             
             }
         }
 
@@ -460,62 +504,58 @@ namespace epi_videoCodec_ciscoExtended
         {
             get
             {
-                return () => (CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue
-                             && CodecStatus.Status.Cameras.SpeakerTrack.SpeakerTrackStatus.BoolValue)
-                             || (CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue
-                             && CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.BoolValue);
-
+                return () => (SpeakerTrackAvailability && SpeakerTrackStatus) || (PresenterTrackAvailability && PresenterTrackStatus);
             }
         }
 
         protected Func<bool> PresenterTrackAvailableFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue; }
+            get { return () => PresenterTrackAvailability; }
         }
 
         protected Func<bool> SpeakerTrackAvailableFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.SpeakerTrack.Availability.BoolValue; }
+            get { return () => SpeakerTrackAvailability; }
         }
 
         protected Func<bool> SpeakerTrackStatusOnFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.SpeakerTrack.SpeakerTrackStatus.BoolValue; }
+            get { return () => SpeakerTrackStatus; }
         }
 
         protected Func<string> PresenterTrackStatusNameFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue; }
+            get { return () => PresenterTrackStatusName; }
         }
 
         protected Func<bool> PresenterTrackStatusOnFeedbackFunc
         {
             get
             {
-                return () => ((CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.BoolValue)
-                              || (String.IsNullOrEmpty(CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue)));
+                return () => ((PresenterTrackStatus)
+                              || (String.IsNullOrEmpty(PresenterTrackStatusName)));
             }
         }
 
 
         protected Func<bool> PresenterTrackStatusOffFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.StringValue.ToLower() == "off"; }
+            get { return () => PresenterTrackStatusName == "off"; }
         }
 
         protected Func<bool> PresenterTrackStatusFollowFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "follow"; }
+            get { return () => PresenterTrackStatusName == "follow"; }
         }
 
         protected Func<bool> PresenterTrackStatusBackgroundFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "background"; }
+            get { return () => PresenterTrackStatusName == "background"; }
         }
 
         protected Func<bool> PresenterTrackStatusPersistentFeedbackFunc
         {
-            get { return () => CodecStatus.Status.Cameras.PresenterTrack.PresenterTrackStatus.Value.ToLower() == "persistent"; }
+            get { return () => PresenterTrackStatusName == "persistent"; }
         }
 
         #endregion
@@ -674,8 +714,10 @@ namespace epi_videoCodec_ciscoExtended
                 PresenterTrackStatusOffFeedback,
                 PresenterTrackStatusFollowFeedback,
                 PresenterTrackStatusBackgroundFeedback,
-                PresenterTrackStatusPersistentFeedback,
+                PresenterTrackStatusPersistentFeedback
             });
+
+           
 
             #endregion
 
@@ -806,10 +848,10 @@ namespace epi_videoCodec_ciscoExtended
         
         void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
         {
-            Debug.Console(0, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
+            Debug.Console(2, "CodecInfoChanged in Main method - Type : {0}", args.InfoChangeType.ToString());
             if (args.InfoChangeType == eCodecInfoChangeType.Firmware)
             {
-                Debug.Console(0, this, "Got Firmware Event!!!!!!");
+                Debug.Console(2, this, "Got Firmware Event!!!!!!");
                 if (String.IsNullOrEmpty(args.Firmware)) return;
                 CodecFirmware = new Version(args.Firmware);
                 if (_testedCodecFirmware > CodecFirmware)
@@ -828,7 +870,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
             {
-                Debug.Console(0, this, "Got Serial Event!!!!!!");
+                Debug.Console(2, this, "Got Serial Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.SerialNumber))
                 {
@@ -838,7 +880,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.Network)
             {
-                Debug.Console(0, this, "Got Network Event!!!!!!");
+                Debug.Console(2, this, "Got Network Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.IpAddress))
                 {
@@ -846,6 +888,64 @@ namespace epi_videoCodec_ciscoExtended
                 }
             } 
         }
+
+        public void DialZoom()
+        {
+            if (ZoomMeetingId.NullIfEmpty() == null) return;
+            var zoomDialCommand = ZoomDialerFirmware ? DialZoomEnhanced() : DialZoomLegacy();
+            EnqueueCommand(zoomDialCommand);
+        }
+
+
+        private string DialZoomLegacy()
+        {
+
+            var dialOptions = String.Format("{0}.{1}.{2}.{3}.{4}.{5}", ZoomMeetingId, ZoomMeetingPasscode, ZoomMeetingCommand, ZoomMeetingHostKey, ZoomMeetingReservedCode, ZoomMeetingDialCode).Trim('.');
+            var dialAddress = ZoomMeetingIp.NullIfEmpty() ?? "zoomcrc.com";
+            var dialString = String.Format("{0}@{1}", dialOptions, dialAddress);
+
+            Dial(dialString);
+            return String.Empty;
+        }
+
+        public string DialZoomEnhanced()
+        {
+            var zoomMeetingId = ZoomMeetingId.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("MeetingID: \"{0}\"", ZoomMeetingId);
+            var zoomHostKey = ZoomMeetingHostKey.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("HostKey: \"{0}\"", ZoomMeetingHostKey);
+            var zoomPasscode = ZoomMeetingPasscode.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("MeetingPasscode: \"{0}\"", ZoomMeetingPasscode);
+
+            var zoomCmd = String.Format("xCommand Zoom Join {0} {1} {2}", zoomMeetingId, zoomHostKey, zoomPasscode).Trim();
+
+            return zoomCmd;
+
+        }
+
+
+        public void DialWebex()
+        {
+            var webexNumber = WebexMeetingNumber.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Number: \"{0}\"", WebexMeetingNumber);
+            var webexRole = WebexMeetingRole.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Role: {0}", WebexMeetingRole);
+            var webexPin = WebexMeetingPin.NullIfEmpty() == null
+                ? String.Empty
+                : String.Format("Pin: \"{0}\"", WebexMeetingPin);
+
+            if (webexNumber == null) return;
+
+            var webexCmd = String.Format("xCommand Webex Join DisplayName: \"{0}\" {1} {2} {3}", this.CodecInfo.SipUri, webexNumber, webexRole, webexPin).Trim();
+
+            EnqueueCommand(webexCmd);
+        }
+
 
         private void ScheduleTimeCheck(object time)
         {
@@ -1419,6 +1519,9 @@ ConnectorID: {2}"
 
             // Fire the ready event
             SetIsReady();
+
+            _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
+
         }
 
         public void SetCommDebug(string s)
@@ -1503,6 +1606,29 @@ ConnectorID: {2}"
                     return;
                 }
 
+                if (!response.StartsWith("/") && _feedbackListMessage != null)
+                {
+                    _feedbackListMessageIncoming = false;
+
+                    var feedbackListString = _feedbackListMessage.ToString();
+                    _feedbackListMessage = null;
+
+                    ProcessFeedbackList(feedbackListString);
+
+                }
+
+                if (response.StartsWith("/"))
+                {
+                    _feedbackListMessageIncoming = true;
+                    if (_feedbackListMessage == null) _feedbackListMessage = new StringBuilder();
+                }
+
+                if (_feedbackListMessageIncoming && _feedbackListMessage != null)
+                {
+                    _feedbackListMessage.Append(response);
+                    return;
+                }
+
                 if (!_syncState.InitialSyncComplete)
                 {
                     var data = response.Trim().ToLower();
@@ -1563,88 +1689,20 @@ ConnectorID: {2}"
             {
                 Debug.Console(1, this, "Swallowing an exception processing a response:{0}", ex);
             }
-
-            //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
         }
 
+        private void ProcessFeedbackList(string data)
+        {
+            Debug.Console(1, this, "Feedback List : ");
+            Debug.Console(1, this, data);
 
-        /*
-        _receiveQueue.PostMessage(() => 
-                {
-                    if (args.Text.ToLower().Contains("xcommand"))
-                    {
-                        Debug.Console(1, this, "Received command echo response.  Ignoring");
-                        return;
-                    }
+            if (data.Split('\n').Count() == BuildFeedbackRegistrationExpression().Split('\n').Count()) return;
+            Debug.Console(0, this, "Codec Feedback Registrations Lost - Registering Feedbacks");
+            ErrorLog.Error(String.Format("[{0}] :: Codec Feedback Registrations Lost - Registering Feedbacks", Key));
+            //var updateRegistrationString = "xFeedback deregisterall" + Delimiter + _cliFeedbackRegistrationExpression;
 
-                    if (args.Text == "{" + Delimiter) // Check for the beginning of a new JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = true;
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Incoming JSON message...");
-
-                        _jsonMessage = new StringBuilder();
-                    }
-                    else if (args.Text == "}" + Delimiter) // Check for the end of a JSON message
-                    {
-                        _jsonFeedbackMessageIsIncoming = false;
-
-                        _jsonMessage.Append(args.Text);
-
-                        if (CommDebuggingIsOn)
-                            Debug.Console(1, this, "Complete JSON Received:\n{0}", _jsonMessage.ToString());
-
-                        // Enqueue the complete message to be deserialized
-
-                        DeserializeResponse(_jsonMessage.ToString());
-
-                        return;
-                    }
-
-                    if (_jsonFeedbackMessageIsIncoming)
-                    {
-                        _jsonMessage.Append(args.Text);
-
-                        //Debug.Console(1, this, "Building JSON:\n{0}", JsonMessage.ToString());
-                        return;
-                    }
-
-                    if (!_syncState.InitialSyncComplete)
-                    {
-                        switch (args.Text.Trim().ToLower()) // remove the whitespace
-                        {
-                            case "*r login successful":
-                            {
-                                _syncState.LoginMessageReceived();
-
-                                if (_loginMessageReceivedTimer != null)
-                                    _loginMessageReceivedTimer.Stop();
-
-                                //SendText("echo off");
-                                SendText("xPreferences outputmode json");
-                                break;
-                            }
-                            case "xpreferences outputmode json":
-                            {
-                                if (_syncState.JsonResponseModeSet)
-                                    return;
-
-                                _syncState.JsonResponseModeMessageReceived();
-
-                                if (!_syncState.InitialStatusMessageWasReceived)
-                                    SendText("xStatus");
-                                break;
-                            }
-                            case "xfeedback register /event/calldisconnect":
-                            {
-                                _syncState.FeedbackRegistered();
-                                break;
-                            }
-                        }
-                    }
-                });*/
-        
+            EnqueueCommand(BuildFeedbackRegistrationExpression());
+        }
 
         /// <summary>
         /// Enqueues a command to be sent to the codec.
@@ -1654,6 +1712,18 @@ ConnectorID: {2}"
         {
             _syncState.AddCommandToQueue(command);
         }
+
+        /// <summary>
+        /// Enqueues a command to be sent to the codec.
+        /// </summary>
+        /// <param name="command"></param>
+        private void EnqueueCommand(object command)
+        {
+            var cmd = command as string;
+            if (String.IsNullOrEmpty(cmd)) return;
+            _syncState.AddCommandToQueue(cmd);
+        }
+
 
         /// <summary>
         /// Appends the delimiter and send the command to the codec.
@@ -2138,6 +2208,90 @@ ConnectorID: {2}"
 
         }
 
+        private void UpdateCameraAutoModeFeedbacks()
+        {
+            CameraAutoModeIsOnFeedback.FireUpdate();
+            SpeakerTrackStatusOnFeedback.FireUpdate();
+            SpeakerTrackStatusOnFeedback.FireUpdate();
+            PresenterTrackStatusNameFeedback.FireUpdate();
+            PresenterTrackStatusOffFeedback.FireUpdate();
+            PresenterTrackStatusFollowFeedback.FireUpdate();
+            PresenterTrackStatusBackgroundFeedback.FireUpdate();
+            PresenterTrackStatusPersistentFeedback.FireUpdate();
+            CameraAutoModeAvailableFeedback.FireUpdate();
+            PresenterTrackAvailableFeedback.FireUpdate();
+            SpeakerTrackAvailableFeedback.FireUpdate();
+        }
+
+
+        private void ParseSpeakerTrackToken(JToken speakerTrackToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(speakerTrackToken.ToString())) return;
+                var speakerTrackObject = speakerTrackToken as JObject;
+                if (speakerTrackObject == null) return;
+                var availabilityToken = speakerTrackObject.SelectToken("Availability.Value");
+                var statusToken = speakerTrackObject.SelectToken("Status.Value");
+                if (availabilityToken != null)
+                    SpeakerTrackAvailability = availabilityToken.ToString().ToLower() == "available";
+                if (statusToken != null)
+                    SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
+                UpdateCameraAutoModeFeedbacks();
+
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+
+            }
+        }
+        private void ParsePresenterTrackToken(JToken presenterTrackToken)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(presenterTrackToken.ToString())) return;
+                var presenterTrackObject = presenterTrackToken as JObject;
+                if (presenterTrackObject == null) return;
+                var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
+                var statusToken = presenterTrackObject.SelectToken("Status.Value");
+                if (availabilityToken != null)
+                    PresenterTrackAvailability = availabilityToken.ToString().ToLower() == "available";
+                if (statusToken != null)
+                {
+                    var status = statusToken.ToString().ToLower();
+                    if (!String.IsNullOrEmpty(status))
+                    {
+                        PresenterTrackStatusName = status;
+                        switch (status)
+                        {
+                            case ("follow"):
+                                PresenterTrackStatus = true;
+                                break;
+                            case ("background"):
+                                PresenterTrackStatus = true;
+                                break;
+                            case ("persistent"):
+                                PresenterTrackStatus = true;
+                                break;
+                            default:
+                                PresenterTrackStatus = false;
+                                break;
+                        }
+                    }
+                }
+                UpdateCameraAutoModeFeedbacks();
+            }
+
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
+                Debug.Console(0, this, "{0}", e.Message);
+
+            }
+        }
+
         private void ParseNetworkToken(JToken networkToken)
         {
             try
@@ -2533,6 +2687,8 @@ ConnectorID: {2}"
             var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
             var systemUnitToken = statusToken.SelectToken("SystemUnit");
             var cameraToken = statusToken.SelectToken("Cameras");
+            var speakerTrackToken = statusToken.SelectToken("Cameras.SpeakerTrack");
+            var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
             var networkToken = statusToken.SelectToken("Network");
             var sipToken = statusToken.SelectToken("SIP");
             var conferenceToken = statusToken.SelectToken("Conference");
@@ -2583,6 +2739,14 @@ ConnectorID: {2}"
             {
                 //ParseCameraToken(cameraToken);
                 PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
+            }
+            if (speakerTrackToken != null)
+            {
+                ParseSpeakerTrackToken(speakerTrackToken);
+            }
+            if (presenterTrackToken != null)
+            {
+                ParsePresenterTrackToken(presenterTrackToken);
             }
             if (networkToken != null)
             {
@@ -4316,13 +4480,61 @@ ConnectorID: {2}"
                 bridge.AddJoinMap(Key, joinMap);
             }
 
+
             LinkVideoCodecToApi(this, trilist, joinMap);
 
             LinkCiscoCodecToApi(trilist, joinMap);
 
             WebexPinRequestHandler.LinkToApi(trilist, joinMap);
 
+            LinkCiscoCodecWebex(trilist, joinMap);
+
+            LinkCiscoCodecZoomConnector(trilist, joinMap);
+
             UIExtensionsHandler.LinkToApi(trilist, joinMap);
+        }
+
+        public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+
+            trilist.SetStringSigAction(joinMap.ZoomMeetingId.JoinNumber, s => ZoomMeetingId = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingPasscode.JoinNumber, s => ZoomMeetingPasscode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingCommand.JoinNumber, s => ZoomMeetingCommand = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingHostKey.JoinNumber, s => ZoomMeetingHostKey = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingReservedCode.JoinNumber, s => ZoomMeetingReservedCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingDialCode.JoinNumber, s => ZoomMeetingDialCode = s);
+            trilist.SetStringSigAction(joinMap.ZoomMeetingIp.JoinNumber, s => ZoomMeetingIp = s);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingDial.JoinNumber, DialZoom);
+
+            trilist.SetSigTrueAction(joinMap.ZoomMeetingClear.JoinNumber, () =>
+            {
+                ZoomMeetingId = String.Empty;
+                ZoomMeetingPasscode = String.Empty;
+                ZoomMeetingCommand = String.Empty;
+                ZoomMeetingHostKey = String.Empty;
+                ZoomMeetingReservedCode = String.Empty;
+                ZoomMeetingDialCode = String.Empty;
+                ZoomMeetingIp = String.Empty;
+            });
+        }
+
+        private void LinkCiscoCodecWebex(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+            trilist.SetStringSigAction(joinMap.WebexMeetingNumber.JoinNumber, s => WebexMeetingNumber = s);
+            trilist.SetStringSigAction(joinMap.WebexMeetingRole.JoinNumber, s => WebexMeetingRole = s);
+            trilist.SetStringSigAction(joinMap.WebexMeetingPin.JoinNumber, s => WebexMeetingPin = s);
+
+            trilist.SetSigTrueAction(joinMap.WebexDial.JoinNumber, DialWebex);
+
+            trilist.SetSigTrueAction(joinMap.WebexDialClear.JoinNumber, () =>
+            {
+                WebexMeetingNumber = String.Empty;
+                WebexMeetingRole = String.Empty;
+                WebexMeetingPin = String.Empty;
+            });
+
+
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
