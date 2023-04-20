@@ -912,13 +912,48 @@ namespace epi_videoCodec_ciscoExtended
         {
             [JsonProperty("Video")]
             public ChannelVideo ChannelVideo;
+            [JsonProperty("Audio")]
+            public ChannelAudio ChannelAudio;
+
+            public Direction Direction;
             public Type Type { get; set; }
+
+            public Channel()
+            {
+                ChannelVideo = new ChannelVideo();
+                ChannelAudio = new ChannelAudio();
+                Direction = new Direction();
+                Type = new Type();
+            }
         }
 
         public class ChannelVideo
         {
             public Protocol Protocol;
+            public ChannelRole ChannelRole;
 
+            public ChannelVideo()
+            {
+                Protocol = new Protocol();
+                ChannelRole = new ChannelRole();
+            }
+        }
+
+        public class ChannelAudio
+        {
+            public Protocol Protocol;
+            public ChannelRole ChannelRole;
+
+            public ChannelAudio()
+            {
+                Protocol = new Protocol();
+                ChannelRole = new ChannelRole();
+            }
+        }
+
+        public class ChannelRole
+        {
+            public string Value { get; set; }
         }
 
 

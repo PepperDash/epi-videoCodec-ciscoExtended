@@ -209,83 +209,88 @@ namespace epi_videoCodec_ciscoExtended
         /// <returns></returns>
         public static List<DirectoryItem> GetRootContactsFromSearchResult(PhonebookSearchResult result)
         {
-            var rootContacts = new List<DirectoryItem>();
+            try
+            {
+                var rootContacts = new List<DirectoryItem>();
 
-            if (result.Contact.Count == 0)
-            {
-                return null;
-            }
-            else if (result.Contact.Count > 0)
-            {
-                if (Debug.Level > 0)
+                if (result.Contact.Count == 0)
+                {
+                    return null;
+                }
+                else if (result.Contact.Count > 0)
+                {
                     Debug.Console(1, "Root Contacts:\n");
 
-                foreach (Contact c in result.Contact)
-                {
-                    var contact = new DirectoryContact();
-
-                    if (string.IsNullOrEmpty(c.FolderId.Value))
+                    foreach (Contact c in result.Contact)
                     {
-                        contact.Name = c.Name.Value;
-                        contact.ContactId = c.ContactId.Value;
+                        var contact = new DirectoryContact();
 
-                        if (!string.IsNullOrEmpty(c.Title.Value))
-                            contact.Title = c.Title.Value;
-
-                        if (Debug.Level > 0)
-                            Debug.Console(1, "{0}\nContact Methods:", contact.Name);
-
-                        foreach (ContactMethod m in c.ContactMethod)
+                        if (string.IsNullOrEmpty(c.FolderId.Value))
                         {
+                            contact.Name = c.Name.Value;
+                            contact.ContactId = c.ContactId.Value;
 
-                            var tempContactMethod = new PepperDash.Essentials.Devices.Common.Codec.ContactMethod();
+                            if (!string.IsNullOrEmpty(c.Title.Value))
+                                contact.Title = c.Title.Value;
 
-                            eContactMethodCallType callType = eContactMethodCallType.Unknown;
-                            if (!string.IsNullOrEmpty(m.CallType.Value))
+                                Debug.Console(1, "{0}\nContact Methods:", contact.Name);
+
+                            foreach (ContactMethod m in c.ContactMethod)
                             {
+
+                                var tempContactMethod = new PepperDash.Essentials.Devices.Common.Codec.ContactMethod();
+
+                                eContactMethodCallType callType = eContactMethodCallType.Unknown;
                                 if (!string.IsNullOrEmpty(m.CallType.Value))
                                 {
-                                    if (m.CallType.Value.ToLower() == "audio")
-                                        callType = eContactMethodCallType.Audio;
-                                    else if (m.CallType.Value.ToLower() == "video")
-                                        callType = eContactMethodCallType.Video;
+                                    if (!string.IsNullOrEmpty(m.CallType.Value))
+                                    {
+                                        if (m.CallType.Value.ToLower() == "audio")
+                                            callType = eContactMethodCallType.Audio;
+                                        else if (m.CallType.Value.ToLower() == "video")
+                                            callType = eContactMethodCallType.Video;
 
-                                    tempContactMethod.CallType = callType;
+                                        tempContactMethod.CallType = callType;
+                                    }
                                 }
+
+                                eContactMethodDevice device = eContactMethodDevice.Unknown;
+                                if (!string.IsNullOrEmpty(m.Device.Value))
+                                {
+
+                                    if (m.Device.Value.ToLower() == "mobile")
+                                        device = eContactMethodDevice.Mobile;
+                                    else if (m.Device.Value.ToLower() == "telephone")
+                                        device = eContactMethodDevice.Telephone;
+                                    else if (m.Device.Value.ToLower() == "video")
+                                        device = eContactMethodDevice.Video;
+                                    else if (m.Device.Value.ToLower() == "other")
+                                        device = eContactMethodDevice.Other;
+
+                                    tempContactMethod.Device = device;
+                                }
+
+                                    Debug.Console(1, "Number: {0}", m.Number.Value);
+
+                                tempContactMethod.Number = m.Number.Value;
+                                tempContactMethod.ContactMethodId = m.ContactMethodId.Value;
+
+                                contact.ContactMethods.Add(tempContactMethod);
                             }
-
-                            eContactMethodDevice device = eContactMethodDevice.Unknown;
-                            if (!string.IsNullOrEmpty(m.Device.Value))
-                            {
-
-                                if (m.Device.Value.ToLower() == "mobile")
-                                    device = eContactMethodDevice.Mobile;
-                                else if (m.Device.Value.ToLower() == "telephone")
-                                    device = eContactMethodDevice.Telephone;
-                                else if (m.Device.Value.ToLower() == "video")
-                                    device = eContactMethodDevice.Video;
-                                else if (m.Device.Value.ToLower() == "other")
-                                    device = eContactMethodDevice.Other;
-
-                                tempContactMethod.Device = device;
-                            }
-
-                            if (Debug.Level > 0)
-                                Debug.Console(1, "Number: {0}", m.Number.Value);
-
-                            tempContactMethod.Number = m.Number.Value;
-                            tempContactMethod.ContactMethodId = m.ContactMethodId.Value;
-
-                            contact.ContactMethods.Add(tempContactMethod);
+                            rootContacts.Add(contact);
                         }
-                        rootContacts.Add(contact);
                     }
                 }
+
+                rootContacts.OrderBy(f => f.Name);
+
+                return rootContacts;
             }
-
-            rootContacts.OrderBy(f => f.Name);
-
-            return rootContacts;
+            catch (Exception ex)
+            { 
+                Debug.Console(0, "Exception in CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult : {0}", ex.Message);
+                return null;
+            }
         }
 
 

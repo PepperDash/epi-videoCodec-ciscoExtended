@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
+using Crestron.SimplSharpPro.Diagnostics;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -101,6 +102,24 @@ namespace epi_videoCodec_ciscoExtended
 
         private bool _feedbackListMessageIncoming;
 
+        private bool _IsInPresentation;
+
+        private MediaChannelStatus _incomingPresentation;
+
+        [Flags]
+        public enum MediaChannelStatus
+        {
+            Unknown = 0,
+            None = 1,
+            Outgoing = 2,
+            Incoming = 4,
+            Video = 8,
+            Audio = 16,
+            Main = 32,
+            Presentation = 64,
+            OutgoingPresentation = 66,
+            IncomingPresentation = 68
+        }
 
         private readonly Version _testedCodecFirmware = new Version("10.11.5.2");
         private readonly Version _enhancedLayoutsFirmware = new Version("9.15.10.8");
@@ -632,6 +651,19 @@ namespace epi_videoCodec_ciscoExtended
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
             UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
 
+            CrestronEnvironment.ProgramStatusEventHandler += a =>
+            {
+                if (a != eProgramStatusEventType.Stopping) return;
+                EndGracefully();
+            };
+
+            CrestronEnvironment.SystemEventHandler += a =>
+            {
+                if (a != eSystemEventType.Rebooting) return;
+                EndGracefully();
+            };
+
+
             var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
 
             _scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -845,6 +877,37 @@ namespace epi_videoCodec_ciscoExtended
             CodecInfoChanged += CiscoCodec_CodecInfoChanged;
 
         }
+
+
+        private void EndGracefully()
+        {
+            if (BookingsRefreshTimer != null)
+            {
+                BookingsRefreshTimer.Stop();
+                BookingsRefreshTimer.Dispose();
+            }
+            if (PhonebookRefreshTimer != null)
+            {
+                PhonebookRefreshTimer.Stop();
+                PhonebookRefreshTimer.Dispose();
+            }
+            if (_loginMessageReceivedTimer != null)
+            {
+                _loginMessageReceivedTimer.Stop();
+                _loginMessageReceivedTimer.Dispose();
+            }
+            if (_retryConnectionTimer != null)
+            {
+                _retryConnectionTimer.Stop();
+                _retryConnectionTimer.Dispose();
+            }
+            if (_scheduleCheckTimer != null)
+            {
+                _scheduleCheckTimer.Stop();
+                _scheduleCheckTimer.Dispose();
+            }
+ 
+        }
         
         void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
         {
@@ -870,7 +933,6 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
             {
-                Debug.Console(2, this, "Got Serial Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.SerialNumber))
                 {
@@ -880,7 +942,6 @@ namespace epi_videoCodec_ciscoExtended
             }
             if (args.InfoChangeType == eCodecInfoChangeType.Network)
             {
-                Debug.Console(2, this, "Got Network Event!!!!!!");
 
                 if (!String.IsNullOrEmpty(args.IpAddress))
                 {
@@ -1355,6 +1416,8 @@ namespace epi_videoCodec_ciscoExtended
 
         private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
         {
+            Debug.Console(0, this, "PhonebookSyncState_InitialSyncCompleted");
+            if (DirectoryRoot == null) return;
             OnDirectoryResultReturned(DirectoryRoot);
         }
 
@@ -1443,6 +1506,7 @@ namespace epi_videoCodec_ciscoExtended
         private void SyncState_InitialSyncCompleted(object sender, EventArgs e)
         {
             Debug.Console(0, this, "InitialSyncComplete - There are {0} Active Calls", ActiveCalls.Count);
+            SearchDirectory("");
             if (ActiveCalls.Count < 1)
             {
                 OnCallStatusChange(new CodecActiveCallItem()
@@ -1775,13 +1839,11 @@ ConnectorID: {2}"
 
             var layoutArray = layout as JArray;
             if (layoutArray == null) return;
-            var layoutData = new List<CodecCommandWithLabel>();
-            foreach (var o in layoutArray.Children<JObject>())
-            {
-                var name = o.SelectToken("LayoutName.Value").ToString();
-                if (String.IsNullOrEmpty(name)) continue;
-                layoutData.Add(new CodecCommandWithLabel(name, name));
-            }
+            var layoutData = (from o in layoutArray.Children<JObject>()
+                select o.SelectToken("LayoutName.Value").ToString()
+                into name
+                where !String.IsNullOrEmpty(name)
+                select new CodecCommandWithLabel(name, name)).ToList();
 
 
             AvailableLayouts = layoutData;
@@ -2357,7 +2419,12 @@ ConnectorID: {2}"
 
         private void ParseLayoutToken(JToken layoutToken)
         {
-            if (_presentationLocalOnly || _presentationSource == 0) return;
+            //if ((_presentationLocalOnly || _presentationSource == 0) && (_incomingPresentation == IncomingPresentationStatus.False)) return;
+            if (!_IsInPresentation)
+            {
+                ClearLayouts();
+                return;
+            }
             Debug.Console(0, this, "Parsing Layout Token");
             if (String.IsNullOrEmpty(layoutToken.ToString())) return;
             UpdateCurrentLayout(layoutToken.SelectToken("ActiveLayout.Value"));
@@ -2367,7 +2434,7 @@ ConnectorID: {2}"
 
         private void ParseCallObjectList(ICollection<CiscoCodecStatus.Call> calls, ICollection<CiscoCodecStatus.MediaChannelCall> mediaChannelsCalls )
         {
-            Debug.Console(0, this, "ParseCallObjectList Started");
+            Debug.Console(1, this, "ParseCallObjectList Started");
             //[]TODO Major Refactor Required
             if (calls.Count <= 0) return;
             if (calls.Count == 1 && !_presentationActive)
@@ -2390,6 +2457,7 @@ ConnectorID: {2}"
                 {
                     Debug.Console(0, this, "Iterating Through newCalls = {0}", t.CallIdString);
                     t.CallType.Value = CheckCallType(t.CallIdString, mediaChannelsCalls);
+                    _incomingPresentation = CheckIncomingPresentation(t.CallIdString, mediaChannelsCalls);
                 }
 
             }
@@ -2405,6 +2473,8 @@ ConnectorID: {2}"
                 if (mediaChannelsCalls != null)
                 {
                     CheckCallType(c.CallIdString, mediaChannelsCalls);
+                    _incomingPresentation = CheckIncomingPresentation(c.CallIdString, mediaChannelsCalls);
+
                 }
 
                 var tempActiveCall = ActiveCalls.FirstOrDefault(x => x.Id.Equals(call.CallIdString));
@@ -2811,7 +2881,6 @@ ConnectorID: {2}"
 
             SendText(BuildFeedbackRegistrationExpression());
             UIExtensionsHandler.RegisterFeedback();
-
         }
 
         private void ParseSelfviewToken(JToken selfviewToken)
@@ -2832,15 +2901,23 @@ ConnectorID: {2}"
                 var sourceToken = JTokenValidInToken(conferenceToken, "Presentation.LocalInstance[0].Source.Value");
                 var sendingModeToken = JTokenValidInToken(conferenceToken,
                     "Presentation.LocalInstance[0].SendingMode.Value");
+                var modeToken = JTokenValidInToken(conferenceToken, "Presentation.Mode.Value");
                 if (sourceToken != null)
                 {
-                    Debug.Console(0, this, "sourceToken = {0}", sourceToken.ToString());
+                    Debug.Console(2, this, "sourceToken = {0}", sourceToken.ToString());
                     SetPresentationSource(sourceToken.ToString());
                 }
                 if (sendingModeToken != null)
                 {
-                    Debug.Console(0, this, "sendingModeToken = {0}", sendingModeToken.ToString());
+                    Debug.Console(2, this, "sendingModeToken = {0}", sendingModeToken.ToString());
                     SetPresentationMode(sendingModeToken.ToString());
+                }
+                if (modeToken != null)
+                {
+                    Debug.Console(0, this, "modeToken = {0}", modeToken.ToString());
+                    if (String.IsNullOrEmpty(modeToken.ToString())) return;
+                    _IsInPresentation = (modeToken.ToString().ToLower() != "off");
+                    CodecPollLayouts();
                 }
             }
 
@@ -2916,68 +2993,98 @@ ConnectorID: {2}"
         private void ParsePhonebookDirectoryResponseTypical(
             CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject, string resultId)
         {
-            while (_searches.Count > 0)
+            try
             {
-                if (resultId != _searches.Dequeue())
-                    continue;
 
-                var directoryResults = new CodecDirectory();
+                while (_searches.Count > 0)
+                {
+                    var expectedResultId = _searches.Dequeue();
+                    Debug.Console(0, this, "Expected = {0} ; Parsed = {1}", expectedResultId, resultId);
+                    if (resultId != expectedResultId)
+                        continue;
 
-                if (
-                    phonebookSearchResultResponseObject.ResultInfo
-                        .TotalRows.Value != "0")
-                    directoryResults =
-                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-                            phonebookSearchResultResponseObject);
+                    var directoryResults = new CodecDirectory();
 
-                PrintDirectory(directoryResults);
+                    if (
+                        phonebookSearchResultResponseObject.ResultInfo
+                            .TotalRows.Value != "0")
+                        directoryResults =
+                            CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+                                phonebookSearchResultResponseObject);
 
-                DirectoryBrowseHistory.Add(directoryResults);
+                    PrintDirectory(directoryResults);
 
-                OnDirectoryResultReturned(directoryResults);
-                _searchInProgress = false;
-                DirectorySearchInProgress.FireUpdate();
+                    DirectoryBrowseHistory.Add(directoryResults);
+
+                    OnDirectoryResultReturned(directoryResults);
+                    _searchInProgress = false;
+                    DirectorySearchInProgress.FireUpdate();
+                }
+
+            }
+            catch (Exception ex)
+            {
+                
+                Debug.Console(0, this, "Exception in ParsePhonebookDirectoryResponseTypical : {0}", ex.Message);
             }
         }
 
         private void ParsePhonebookDirectoryFolders(
             CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+
         {
-            PhonebookSyncState.InitialPhonebookFoldersReceived();
-
-            PhonebookSyncState.SetPhonebookHasFolders(
-                phonebookSearchResultResponseObject.Folder.Count >
-                0);
-
-            if (PhonebookSyncState.PhonebookHasFolders)
+            try
             {
-                DirectoryRoot.AddFoldersToDirectory(
-                    CiscoCodecExtendedPhonebook.GetRootFoldersFromSearchResult(
-                        phonebookSearchResultResponseObject));
+                PhonebookSyncState.InitialPhonebookFoldersReceived();
+
+                PhonebookSyncState.SetPhonebookHasFolders(
+                    phonebookSearchResultResponseObject.Folder.Count >
+                    0);
+
+                if (PhonebookSyncState.PhonebookHasFolders)
+                {
+                    DirectoryRoot.AddFoldersToDirectory(
+                        CiscoCodecExtendedPhonebook.GetRootFoldersFromSearchResult(
+                            phonebookSearchResultResponseObject));
+                }
+
+                // Get the number of contacts in the phonebook
+                GetPhonebookContacts();
+
             }
+            catch (Exception ex)
+            {
 
-            // Get the number of contacts in the phonebook
-            GetPhonebookContacts();
-
+                Debug.Console(0, this, "Exception in ParsePhonebookDirectoryFolders : {0}", ex.Message);
+            }
         }
 
         private void ParsePhonebookNumberOfContacts(
             CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
         {
-            PhonebookSyncState.SetNumberOfContacts(
-    Int32.Parse(
-        phonebookSearchResultResponseObject.ResultInfo
-            .TotalRows.Value));
+            try
+            {
+                if (PhonebookSyncState == null) return;
+                PhonebookSyncState.SetNumberOfContacts(
+                    Int32.Parse(
+                        phonebookSearchResultResponseObject.ResultInfo
+                            .TotalRows.Value));
+                if (DirectoryRoot == null) return;
+                DirectoryRoot.AddContactsToDirectory(
+                    CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult(
+                        phonebookSearchResultResponseObject));
+                PhonebookSyncState.PhonebookRootEntriesReceived();
+                PrintDirectory(DirectoryRoot);
+            }
+            catch (Exception ex)
+            {
 
-            DirectoryRoot.AddContactsToDirectory(
-                CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult(
-                    phonebookSearchResultResponseObject));
-
-            PhonebookSyncState.PhonebookRootEntriesReceived();
-
-            PrintDirectory(DirectoryRoot);
-
+                Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex.Message);
+                if (ex.InnerException == null) return;
+                Debug.Console(0, this, "Inner Exception in ParsePhonebookNumberOfContacts : {0}", ex.InnerException.Message);
+            }
         }
+
         private void ParseEventObject(JToken eventToken)
         {
             if (eventToken == null) return;
@@ -3010,7 +3117,7 @@ ConnectorID: {2}"
                 }
                 if (conferenceEvent != null)
                 {
-                    Debug.Console(0, this, "Parse conference event token {0}", conferenceEvent);
+                    Debug.Console(2, this, "Parse conference event token {0}", conferenceEvent);
                     WebexPinRequestHandler.ParseAuthenticationResponse(conferenceEvent);
                 }
 
@@ -3032,24 +3139,33 @@ ConnectorID: {2}"
 
         private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken, string resultId)
         {
-            Debug.Console(2, this, "Parse Phonebook Search Result Response");
-            var phonebookSearchResultResponseObject = new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
-            PopulateObjectWithToken(phonebookSearchResultResponseToken, "PhonebookSearchResult",
-                phonebookSearchResultResponseObject);
-            
+            try
+            {
+                Debug.Console(2, this, "Parse Phonebook Search Result Response");
+                var phonebookSearchResultResponseObject = new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
+                PopulateObjectWithToken(phonebookSearchResultResponseToken, "PhonebookSearchResult",
+                    phonebookSearchResultResponseObject);
 
-            if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
-            {
-                ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
-                // Check if the phonebook has any folders
-                return;
-            }
-            if (!PhonebookSyncState.NumberOfContactsWasReceived)
-            {
-                ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
-            }
-            if (PhonebookSyncState.InitialSyncComplete)
+
+                if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
+                {
+                    ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
+                    // Check if the phonebook has any folders
+                    return;
+                }
+                if (!PhonebookSyncState.NumberOfContactsWasReceived)
+                {
+                    ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
+                    PhonebookSyncState.PhonebookRootEntriesReceived();
+                }
                 ParsePhonebookDirectoryResponseTypical(phonebookSearchResultResponseObject, resultId);
+
+            }
+            catch (Exception ex)
+            {
+                
+                Debug.Console(0, this, "Exception in ParsPhonebookSearchResultResponse : {0}", ex.Message);
+            }
         }
 
         private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
@@ -3174,6 +3290,8 @@ ConnectorID: {2}"
                         var obj = JObject.Load(jReader);
 
                         var resultId = ParseResultId(obj);
+
+                        Debug.Console(2, this, "Deserialize Response - Parsed ResultID = {0}", resultId);
                         ParseStatusObject(JTokenValidInObject(obj, "Status"));
                         ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
                         ParseEventObject(JTokenValidInObject(obj, "Event"));
@@ -3841,6 +3959,44 @@ ConnectorID: {2}"
             return videoChannels.All(v => v.ChannelVideo.Protocol.Value.ToLower() == "off") ? "Audio" : "Video";
         }
 
+        private MediaChannelStatus CheckIncomingPresentation(string id, IEnumerable<CiscoCodecStatus.MediaChannelCall> calls)
+        {
+            Debug.Console(0, this, "Parsing For Incoming Presentation");
+            var mediaChannelStatus = MediaChannelStatus.Unknown;
+            var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
+            if (currentCall == null)
+            {
+                Debug.Console(0, this, "NO CURRENT CALL");
+                return mediaChannelStatus | MediaChannelStatus.None;
+            }
+            Debug.Console(0, this, JsonConvert.SerializeObject(currentCall));
+            var incomingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "incoming");
+            if(incomingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Incoming;
+            var outgoingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "outgoing");
+            if (outgoingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Outgoing;
+
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "presentation")
+                    ? mediaChannelStatus | MediaChannelStatus.Presentation
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "main")
+                    ? mediaChannelStatus | MediaChannelStatus.Main
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelVideo.Protocol.Value))
+                    ? mediaChannelStatus | MediaChannelStatus.Video
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelAudio.Protocol.Value))
+                    ? mediaChannelStatus | MediaChannelStatus.Audio
+                    : mediaChannelStatus;
+
+            Debug.Console(0, this, "Parsed MediaChannelStatus = {0}", mediaChannelStatus);
+
+            return mediaChannelStatus;
+        }
+
 
         /// <summary>
         /// Call when directory results are updated
@@ -3848,13 +4004,19 @@ ConnectorID: {2}"
         /// <param name="result"></param>
         private void OnDirectoryResultReturned(CodecDirectory result)
         {
+            if (result == null)
+            {
+                Debug.Console(0, this, "OnDirectoryResultReturned - result is null");
+                return;
+            }
+            Debug.Console(0, this, "OnDirectoryResultReturned");
             CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
 
             // This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
             var handler = DirectoryResultReturned;
             if (handler != null)
             {
-                Debug.Console(2, this, "Directory result returned");
+                Debug.Console(0, this, "Directory result returned");
                 handler(this, new DirectoryEventArgs()
                 {
                     Directory = result,
@@ -4162,25 +4324,23 @@ ConnectorID: {2}"
         /// <param name="directory"></param>
         private void PrintDirectory(CodecDirectory directory)
         {
-            if (Debug.Level > 0)
+            Debug.Console(0, this, "Attempting to Print Directory");
+            if (directory == null) return;
+            Debug.Console(0, this, "Directory Results:\n");
+
+            foreach (var item in directory.CurrentDirectoryResults)
             {
-                Debug.Console(1, this, "Directory Results:\n");
-
-                foreach (DirectoryItem item in directory.CurrentDirectoryResults)
+                if (item is DirectoryFolder)
                 {
-                    if (item is DirectoryFolder)
-                    {
-                        Debug.Console(1, this, "[+] {0}", item.Name);
-                    }
-                    else if (item is DirectoryContact)
-                    {
-                        Debug.Console(1, this, "{0}", item.Name);
-                    }
+                    Debug.Console(1, this, "[+] {0}", item.Name);
                 }
-                Debug.Console(1, this, "Directory is on Root Level: {0}",
-                    !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue);
+                else if (item is DirectoryContact)
+                {
+                    Debug.Console(1, this, "{0}", item.Name);
+                }
             }
-
+            Debug.Console(1, this, "Directory is on Root Level: {0}",
+                !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue);
         }
 
         /// <summary>
@@ -4704,7 +4864,6 @@ ConnectorID: {2}"
 
             CodecInfoChanged += (sender, args) =>
             {
-                Debug.Console(0, "CodecInfoChanged in Link To Api - Type : {0}", args.InfoChangeType.ToString());
 
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
@@ -5979,7 +6138,6 @@ ConnectorID: {2}"
             _codec = codec;
             _codec.CodecInfoChanged += (sender, args) =>
             {
-                Debug.Console(0, "CodecInfoChanged in CiscoCodecInfo - Type : {0}", args.InfoChangeType.ToString());
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
                 {
