@@ -1469,6 +1469,7 @@ namespace epi_videoCodec_ciscoExtended
             var feedbackRegistrationExpression =
                 prefix + "/Configuration" + Delimiter +
                 prefix + "/Status/Audio" + Delimiter +
+                prefix + "/Status/Audio/Microphones/Mute" + Delimiter +
                 prefix + "/Status/Call" + Delimiter +
                 prefix + "/Status/Conference/Presentation" + Delimiter +
                 prefix + "/Status/Conference/Call/AuthenticationRequest" + Delimiter +
