@@ -1606,7 +1606,7 @@ ConnectorID: {2}"
                     return;
                 }
 
-                if (!response.StartsWith("/") && _feedbackListMessage != null)
+                if (!response.StartsWith("/") && _feedbackListMessage != null && _feedbackListMessageIncoming)
                 {
                     _feedbackListMessageIncoming = false;
 
@@ -1696,7 +1696,7 @@ ConnectorID: {2}"
             Debug.Console(1, this, "Feedback List : ");
             Debug.Console(1, this, data);
 
-            if (data.Split('\n').Count() == BuildFeedbackRegistrationExpression().Split('\n').Count()) return;
+            if (data.Split('\n').Count() >= BuildFeedbackRegistrationExpression().Split('\n').Count()) return;
             Debug.Console(0, this, "Codec Feedback Registrations Lost - Registering Feedbacks");
             ErrorLog.Error(String.Format("[{0}] :: Codec Feedback Registrations Lost - Registering Feedbacks", Key));
             //var updateRegistrationString = "xFeedback deregisterall" + Delimiter + _cliFeedbackRegistrationExpression;
