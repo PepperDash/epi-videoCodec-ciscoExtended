@@ -815,7 +815,19 @@ namespace epi_videoCodec_ciscoExtended
 
             PortGather = new CommunicationGather(Communication, Delimiter) {IncludeDelimiter = true};
             PortGather.LineReceived += Port_LineReceived;
-
+            Communication.TextReceived += (sender, args) =>
+                                          {
+                                              if (args.Text.ToLower().Contains("login:"))
+                                              {
+                                                  Debug.Console(0, this, "Sending login username");
+                                                  Communication.SendText((_config.Username ?? string.Empty) + Delimiter);
+                                              }
+                                              else if (args.Text.ToLower().Contains("password:"))
+                                              {
+                                                  Debug.Console(0, this, "Sending login password");
+                                                  Communication.SendText((_config.Password ?? string.Empty) + Delimiter);
+                                              }
+                                          };
 
             CallHistory = new CodecCallHistory();
 
@@ -1679,7 +1691,6 @@ ConnectorID: {2}"
                     _feedbackListMessage = null;
 
                     ProcessFeedbackList(feedbackListString);
-
                 }
 
                 if (response.StartsWith("/"))
