@@ -581,6 +581,7 @@ namespace epi_videoCodec_ciscoExtended
 
 
         private CodecSyncState _syncState;
+        private readonly CiscoPriorityProcessingQueue _processingQueue;
 
         public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
 
@@ -827,11 +828,13 @@ namespace epi_videoCodec_ciscoExtended
                                                   Debug.Console(0, this, "Sending login password");
                                                   Communication.SendText((_config.Password ?? string.Empty) + Delimiter);
                                               }
-                                          };
+                     
+                                         };
 
+            _processingQueue = new CiscoPriorityProcessingQueue(this, PortGather, _syncState);
+            _processingQueue.ResponseReceived += (sender, args) => DeserializeResponse(args.Payload);
+            _processingQueue.FeedbackResponseReceived += (sender, args) => ProcessFeedbackList(args.Payload);
             CallHistory = new CodecCallHistory();
-
-
 
             if (props.Favorites != null)
             {
@@ -1502,6 +1505,10 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Status/Video/Input/MainVideoMute" + Delimiter +
                 prefix + "/Bookings" + Delimiter +
                 prefix + "/Event/Bookings" + Delimiter +
+                prefix + "/Event/UserInterface/Extensions/Event" + Delimiter +
+                prefix + "/Event/UserInterface/Extensions/PageOpened" + Delimiter +
+                prefix + "/Event/UserInterface/Extensions/PageClosed" + Delimiter +
+                prefix + "/Event/UserInterface/Extensions/Widget/LayoutUpdated" + Delimiter +
                 prefix + "/Event/CameraPresetListUpdated" + Delimiter +
                 prefix + "/Event/Conference/Call/AuthenticationResponse" + Delimiter +
                 prefix + "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier" + Delimiter +
@@ -1669,10 +1676,12 @@ ConnectorID: {2}"
                 if (!_jsonFeedbackMessageIsIncoming)
                     Debug.Console(1, this, "RX: '{0}'", ComTextHelper.GetDebugText(args.Text));
             }
-            var message = new ProcessStringMessage(args.Text, ProcessResponse);
-            _receiveQueue.Enqueue(message);
+
+            //var message = new ProcessStringMessage(args.Text, ProcessResponse);
+            //_receiveQueue.Enqueue(message);
         }
 
+        /*
         private void ProcessResponse(string response)
         {
             try
@@ -1729,6 +1738,8 @@ ConnectorID: {2}"
                     }
                     else if (data.Contains("xfeedback register /event/calldisconnect"))
                     {
+
+                        Debug.Console(0, this, "Feedback registered response");
                         _syncState.FeedbackRegistered();
                     }
                 }
@@ -1765,7 +1776,7 @@ ConnectorID: {2}"
             {
                 Debug.Console(1, this, "Swallowing an exception processing a response:{0}", ex);
             }
-        }
+        }*/
 
         private void ProcessFeedbackList(string data)
         {
@@ -1777,7 +1788,12 @@ ConnectorID: {2}"
             ErrorLog.Error(String.Format("[{0}] :: Codec Feedback Registrations Lost - Registering Feedbacks", Key));
             //var updateRegistrationString = "xFeedback deregisterall" + Delimiter + _cliFeedbackRegistrationExpression;
 
-            EnqueueCommand(BuildFeedbackRegistrationExpression());
+            SendText(BuildFeedbackRegistrationExpression());
+        }
+
+        public void SendFeedbackRegistrations()
+        {
+            SendText(BuildFeedbackRegistrationExpression());
         }
 
         /// <summary>
@@ -1786,7 +1802,7 @@ ConnectorID: {2}"
         /// <param name="command"></param>
         public void EnqueueCommand(string command)
         {
-            _syncState.AddCommandToQueue(command);
+            _processingQueue.Enqueue(command);
         }
 
         /// <summary>
@@ -1797,7 +1813,7 @@ ConnectorID: {2}"
         {
             var cmd = command as string;
             if (String.IsNullOrEmpty(cmd)) return;
-            _syncState.AddCommandToQueue(cmd);
+            _processingQueue.Enqueue(cmd);
         }
 
 
@@ -2762,6 +2778,7 @@ ConnectorID: {2}"
         private void ParseStatusObject(JToken statusToken)
         {
             if (statusToken == null) return;
+          
             var status = new CiscoCodecStatus.Status();
             var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
             var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
@@ -2882,17 +2899,6 @@ ConnectorID: {2}"
             }
             if (_syncState.InitialStatusMessageWasReceived) return;
             _syncState.InitialStatusMessageReceived();
-
-            if (!_syncState.InitialConfigurationMessageWasReceived)
-            {
-                Debug.Console(0, this, "Sending Configuration");
-                SendText("xConfiguration");
-            }
-            if (_syncState.FeedbackWasRegistered) return;
-            Debug.Console(0, this, "Sending Feedback");
-
-            SendText(BuildFeedbackRegistrationExpression());
-            UIExtensionsHandler.RegisterFeedback();
         }
 
         private void ParseSelfviewToken(JToken selfviewToken)

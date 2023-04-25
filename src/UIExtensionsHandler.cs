@@ -101,18 +101,6 @@ namespace epi_videoCodec_ciscoExtended
             WidgetEventFeedback.FireUpdate();
         }
 
-        public void RegisterFeedback()
-        {
-            // get standard events
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Event\r\n");
-            // detect pages opened, this is unreliable
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/PageOpened\r\n");
-            // detect pages closed, this doesn't work
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/PageClosed\r\n");
-            // detect changes to the UI Layout file
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Widget/LayoutUpdated\r\n");
-        }
-
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
             trilist.SetStringSigAction(joinMap.WidgetEventData.JoinNumber, UpdateWidget); // from SIMPL

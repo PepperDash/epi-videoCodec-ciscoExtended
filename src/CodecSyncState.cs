@@ -13,19 +13,10 @@ namespace epi_videoCodec_ciscoExtended
     {
         bool _initialSyncComplete;
 
-        private const int Idle = 0;
-        private const int Processing = 1;
-        private int _isProcessing;
-
         private readonly CiscoCodec _parent;
+        private readonly CCriticalSection _lock = new CCriticalSection();
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
-
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
-
-        private Thread _worker;
-        private readonly CEvent _waitHandle = new CEvent();
 
         public string Key { get; private set; }
 
@@ -60,33 +51,12 @@ namespace epi_videoCodec_ciscoExtended
         {
             Key = key;
             _parent = parent;
-
-            CrestronEnvironment.ProgramStatusEventHandler += type =>
-                                                             {
-                                                                 if (type != eProgramStatusEventType.Stopping) 
-                                                                     return;
-
-                                                                 Interlocked.Exchange(ref _isProcessing, Idle);
-                                                                 _waitHandle.Set();
-                                                             };
-        }
-
-        public void AddCommandToQueue(string query)
-        {
-            if (string.IsNullOrEmpty(query))
-                return;
-
-            if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
-            {
-                Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Unable to enqueue command:{0}", query);
-            }
-
-            Schedule();
         }
 
         public void LoginMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!LoginMessageWasReceived)
                 {
@@ -98,58 +68,104 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     _parent.SendText("xPreferences outputmode json");
                 }
-                    
-                CheckSyncStatus();
-            });
 
-            Schedule();
+                CheckSyncStatus();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
+
+            //Schedule();
         }
 
         public void JsonResponseModeMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!JsonResponseModeSet)
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Json Response Mode Message Received.");
 
                 JsonResponseModeSet = true;
                 CheckSyncStatus();
-            });
-
-            Schedule();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         public void InitialStatusMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!InitialStatusMessageWasReceived)
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Status Message Received.");
 
                 InitialStatusMessageWasReceived = true;
                 CheckSyncStatus();
-            });
 
-            Schedule();
+                if (!InitialConfigurationMessageWasReceived)
+                {
+                    Debug.Console(0, this, "Sending Configuration");
+                    _parent.SendText("xConfiguration");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         public void InitialConfigurationMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!InitialConfigurationMessageWasReceived)
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Configuration DiagnosticsMessage Received.");
-                    
+
                 InitialConfigurationMessageWasReceived = true;
                 CheckSyncStatus();
-            });
 
-            Schedule();
+
+                if (FeedbackWasRegistered) return;
+                Debug.Console(0, this, "Sending Feedback");
+
+                _parent.SendFeedbackRegistrations();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         public void InitialSoftwareVersionMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Inital Codec Software Information received");
@@ -157,38 +173,62 @@ namespace epi_videoCodec_ciscoExtended
                 InitialSoftwareVersionMessageWasReceived = true;
 
                 CheckSyncStatus();
-            });
-
-            Schedule();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         public void FeedbackRegistered()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 if (!FeedbackWasRegistered)
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Feedback Registration Successful.");
 
                 FeedbackWasRegistered = true;
                 CheckSyncStatus();
-            });
-
-            Schedule();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         public void CodecDisconnected()
         {
-            _systemActions.Enqueue(() =>
+            _lock.Enter();
+            try
             {
                 LoginMessageWasReceived = false;
                 JsonResponseModeSet = false;
                 InitialConfigurationMessageWasReceived = false;
                 InitialStatusMessageWasReceived = false;
                 FeedbackWasRegistered = false;
-                InitialSyncComplete = false;
-            });
-
-            Schedule();
+                InitialSoftwareVersionMessageWasReceived = false;
+                CheckSyncStatus();
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Ex:{0}", ex);
+                throw;
+            }
+            finally
+            {
+                _lock.Leave();
+            }
         }
 
         void CheckSyncStatus()
@@ -204,56 +244,6 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
                 InitialSyncComplete = false;
-        }
-
-        private void Schedule()
-        {
-            if (Interlocked.CompareExchange(
-                ref _isProcessing,
-                Processing,
-                Idle) ==
-                Idle)
-                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key +":Codec Sync State" };
-
-            _waitHandle.Set();
-        }
-
-        private object RunSyncState(object o)
-        {
-            while (_isProcessing == Processing)
-            {
-                Action sys;
-                if (_systemActions.TryToDequeue(out sys))
-                {
-                    try
-                    {
-                        sys();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.Console(1, this, "Error processing sys action:{0}", ex);
-                    }
-                    continue;
-                }
-
-                Action cmd;
-                if (_commandActions.TryToDequeue(out cmd))
-                {
-                    try
-                    {
-                        cmd();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.Console(1, this, "Error processing usr action:{0}", ex);
-                    }
-                    continue;
-                }
-
-                _waitHandle.Wait();
-            }
-
-            return null;
         }
     }
 }
