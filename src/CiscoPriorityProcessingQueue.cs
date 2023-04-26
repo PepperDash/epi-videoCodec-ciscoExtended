@@ -89,6 +89,7 @@ namespace epi_videoCodec_ciscoExtended
                 if (_jsonFeedbackMessageIsIncoming || _feedbackListMessageIncoming)
                 {
                     _waitHandle.Wait();
+                    continue;
                 }
 
                 if (_syncState.InitialSyncComplete && _tx.TryToDequeue(out message))
@@ -175,7 +176,6 @@ namespace epi_videoCodec_ciscoExtended
                     _jsonMessage.Append(response);
 
                     // Enqueue the complete message to be deserialized
-
                     //DeserializeResponse(_jsonMessage.ToString());
                     OnResponseReceived(new CiscoPriorityProcessingQueueEventArgs { Payload = _jsonMessage.ToString() });
                     return;
@@ -192,7 +192,14 @@ namespace epi_videoCodec_ciscoExtended
 
         private void SendText(string text)
         {
-            _parent.SendText(text);
+            try
+            {
+                _parent.SendText(text);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, this, "Error:{0}", ex);
+            }
         }
 
         public string Key
