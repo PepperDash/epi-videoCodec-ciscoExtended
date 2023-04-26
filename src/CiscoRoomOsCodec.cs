@@ -1789,7 +1789,7 @@ ConnectorID: {2}"
             ErrorLog.Error(String.Format("[{0}] :: Codec Feedback Registrations Lost - Registering Feedbacks", Key));
             //var updateRegistrationString = "xFeedback deregisterall" + Delimiter + _cliFeedbackRegistrationExpression;
 
-            SendText(BuildFeedbackRegistrationExpression());
+            EnqueueCommand(BuildFeedbackRegistrationExpression());
         }
 
         public void SendFeedbackRegistrations()
