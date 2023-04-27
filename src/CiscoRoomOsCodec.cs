@@ -3329,7 +3329,6 @@ ConnectorID: {2}"
                     }
                 }
 
-                _syncState.JsonResponseModeMessageReceived();
                 #region status
                 /*
                 if (response.IndexOf("\"Status\":{") > -1 || response.IndexOf("\"Status\": {") > -1)

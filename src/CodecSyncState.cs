@@ -30,6 +30,9 @@ namespace epi_videoCodec_ciscoExtended
                     var handler = InitialSyncCompleted;
                     if (handler != null)
                         handler(this, new EventArgs());
+
+                    _parent.PollSpeakerTrack();
+                    _parent.PollPresenterTrack();
                 }
                 _initialSyncComplete = value;
             }
@@ -60,9 +63,10 @@ namespace epi_videoCodec_ciscoExtended
             {
                 if (!LoginMessageWasReceived)
                 {
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
                     LoginMessageWasReceived = true;
                 }
+
+                Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
 
                 if (!JsonResponseModeSet)
                 {
@@ -90,7 +94,9 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 if (!JsonResponseModeSet)
+                {
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Json Response Mode Message Received.");
+                }
 
                 JsonResponseModeSet = true;
                 CheckSyncStatus();
@@ -112,7 +118,9 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 if (!InitialStatusMessageWasReceived)
+                {
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Status Message Received.");
+                }
 
                 InitialStatusMessageWasReceived = true;
                 CheckSyncStatus();
@@ -140,7 +148,12 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 if (!InitialConfigurationMessageWasReceived)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Configuration DiagnosticsMessage Received.");
+                {
+                    Debug.Console(1,
+                                  this,
+                                  Debug.ErrorLogLevel.Notice,
+                                  "Initial Codec Configuration DiagnosticsMessage Received.");
+                }
 
                 InitialConfigurationMessageWasReceived = true;
                 CheckSyncStatus();
@@ -168,8 +181,10 @@ namespace epi_videoCodec_ciscoExtended
             try
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
+                {
                     Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Inital Codec Software Information received");
-
+                }
+                  
                 InitialSoftwareVersionMessageWasReceived = true;
 
                 CheckSyncStatus();
@@ -237,10 +252,7 @@ namespace epi_videoCodec_ciscoExtended
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
                 Debug.Console(1, this, "Codec Sync Complete");
-
                 InitialSyncComplete = true;
-                _parent.PollSpeakerTrack();
-                _parent.PollPresenterTrack();
             }
             else
                 InitialSyncComplete = false;
