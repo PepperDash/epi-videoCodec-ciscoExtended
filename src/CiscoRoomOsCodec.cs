@@ -829,6 +829,14 @@ namespace epi_videoCodec_ciscoExtended
                                                   Debug.Console(0, this, "Sending login password");
                                                   Communication.SendText((_config.Password ?? string.Empty) + Delimiter);
                                               }
+                                              else if (args.Text.ToLower().Contains("** end"))
+                                              {
+                                                  if (_syncState.InitialSyncComplete)
+                                                  {
+                                                      Debug.Console(0, this, "We lost JSON Output mode, restarting");
+                                                      _syncState.CodecDisconnected();
+                                                  }
+                                              }
                      
                                          };
 
