@@ -141,7 +141,7 @@ namespace epi_videoCodec_ciscoExtended
             public ResultInfo ResultInfo { get; set; }
             public List<Folder> Folder { get; set; }
             public List<Contact> Contact { get; set; }
-            public string ResultId { get; set; }
+            public Reason Reason { get; set; }
 
             public PhonebookSearchResult()
             {
@@ -149,6 +149,11 @@ namespace epi_videoCodec_ciscoExtended
                 Contact = new List<Contact>();
                 ResultInfo = new ResultInfo();
             }
+        }
+
+        public class Reason
+        {
+            public string Value { get; set; }
         }
 
         public class CommandResponse

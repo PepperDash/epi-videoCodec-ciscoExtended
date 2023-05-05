@@ -795,7 +795,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r";
 
-                CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 30000, 120000, 300000,
+                CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 90000, 120000, 300000,
                     pollString);
             }
 
@@ -1492,7 +1492,8 @@ namespace epi_videoCodec_ciscoExtended
 
             var feedbackRegistrationExpression =
                 prefix + "/Configuration" + Delimiter +
-                prefix + "/Status/Audio" + Delimiter +
+                prefix + "/Status/Audio/Volume" + Delimiter +
+                prefix + "/Status/Audio/VolumeMute" + Delimiter +
                 prefix + "/Status/Audio/Microphones/Mute" + Delimiter +
                 prefix + "/Status/Call" + Delimiter +
                 prefix + "/Status/Conference/Presentation" + Delimiter +
@@ -1504,11 +1505,18 @@ namespace epi_videoCodec_ciscoExtended
                 prefix + "/Status/Cameras/PresenterTrack" + Delimiter +
                 prefix + "/Status/Cameras/PresenterTrack/Status" + Delimiter +
                 prefix + "/Status/Cameras/PresenterTrack/Availability" + Delimiter +
-                prefix + "/Status/RoomAnalytics" + Delimiter +
+                prefix + "/Status/RoomAnalytics/PeoplePresence" + Delimiter +
+                prefix + "/Status/RoomAnalytics/PeopleCount" + Delimiter +
                 prefix + "/Status/RoomPreset" + Delimiter +
                 prefix + "/Status/Standby" + Delimiter +
                 prefix + "/Status/Video/Selfview" + Delimiter +
-                prefix + "/Status/MediaChannels/Call" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Direction" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Type" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Video/ChannelRole" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Video/Protocol" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Audio/ChannelRole" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Audio/Protocol" + Delimiter +
+                prefix + "/Status/MediaChannels/Call/Channel/Audio/Mute" + Delimiter +
                 prefix + "/Status/Video/Layout/CurrentLayouts" + Delimiter +
                 prefix + "/Status/Video/Layout/LayoutFamily" + Delimiter +
                 prefix + "/Status/Video/Input/MainVideoMute" + Delimiter +
@@ -1636,8 +1644,19 @@ ConnectorID: {2}"
             Debug.Console(1, this, "Socket status change {0}", e.Client.ClientStatus);
             if (e.Client.IsConnected)
             {
-                if (!_syncState.LoginMessageWasReceived)
-                    _loginMessageReceivedTimer = new CTimer(o => DisconnectClientAndReconnect(), 5000);
+                if (_loginMessageReceivedTimer != null)
+                {
+                    _loginMessageReceivedTimer.Stop();
+                    _loginMessageReceivedTimer.Dispose();
+                }
+                
+                _loginMessageReceivedTimer = new CTimer(o =>
+                                                        {
+                                                            if (!_syncState.LoginMessageWasReceived)
+                                                                DisconnectClientAndReconnect();
+                                                        }, 5000);
+
+                SendText("xStatus SystemUnit");
             }
             else
             {
@@ -3029,23 +3048,25 @@ ConnectorID: {2}"
         }
 
         private void ParsePhonebookDirectoryResponseTypical(
-            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject, string resultId)
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject, int resultId)
         {
             try
             {
-
-                while (_searches.Count > 0)
+                Action<CiscoCodecExtendedPhonebook.PhonebookSearchResult> action;
+                if (resultId == _latestSearchId && _searches.TryGetValue(resultId, out action))
                 {
-                    var expectedResultId = _searches.Dequeue();
-                    Debug.Console(0, this, "Expected = {0} ; Parsed = {1}", expectedResultId, resultId);
-                    if (resultId != expectedResultId)
-                        continue;
-
+                    Debug.Console(0, this, "Parsing a tagged search result:{0}", resultId);
+                    action(phonebookSearchResultResponseObject);
+                }
+                else if (resultId == 0)
+                {
+                    Debug.Console(0, this, "Parsing an untagged search result:{0}", resultId);
+                    
                     var directoryResults = new CodecDirectory();
 
                     if (
                         phonebookSearchResultResponseObject.ResultInfo
-                            .TotalRows.Value != "0")
+                                                           .TotalRows.Value != "0")
                         directoryResults =
                             CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
                                 phonebookSearchResultResponseObject);
@@ -3055,15 +3076,70 @@ ConnectorID: {2}"
                     DirectoryBrowseHistory.Add(directoryResults);
 
                     OnDirectoryResultReturned(directoryResults);
-                    _searchInProgress = false;
-                    DirectorySearchInProgress.FireUpdate();
                 }
-
+                else
+                {
+                    Debug.Console(0, this, "Discarding an old search result... Result ID:{0}", resultId);
+                }
             }
             catch (Exception ex)
             {
+                Debug.Console(0, this, "Exception in ParsePhonebookDirectoryResponseTypical : {0}", ex);
+            }
+            finally
+            {
+                if (_searches.ContainsKey(resultId))
+                {
+                    _searches.Remove(resultId);
+                }
+            }
+        }
+
+        private void ParsePhonebookDirectoryResponseTypical(
+            CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject)
+        {
+            try
+            {
+                var status = phonebookSearchResultResponseObject.Status ?? string.Empty;
+                if (!string.IsNullOrEmpty(status) && status == "Error")
+                {
+                    var reason = (phonebookSearchResultResponseObject.Reason ??
+                                 new CiscoCodecExtendedPhonebook.Reason { Value = "Unknown Reason" }).Value
+                                 ?? "Unknown Reason";
+
+                    Debug.Console(
+                        0,
+                        this,
+                        Debug.ErrorLogLevel.Notice,
+                        "Error in phonebook response:{0}",
+                        reason);
+
+                    throw new Exception(reason);
+                }
+
+                var directoryResults = new CodecDirectory();
                 
-                Debug.Console(0, this, "Exception in ParsePhonebookDirectoryResponseTypical : {0}", ex.Message);
+                if (
+                    phonebookSearchResultResponseObject.ResultInfo
+                                                       .TotalRows.Value != "0")
+                    directoryResults =
+                        CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+                            phonebookSearchResultResponseObject);
+
+                PrintDirectory(directoryResults);
+
+                DirectoryBrowseHistory.Add(directoryResults);
+
+                OnDirectoryResultReturned(directoryResults);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParsePhonebookDirectoryResponseTypical : {0}", ex);
+            }
+            finally
+            {
+                _searchInProgress = false;
+                DirectorySearchInProgress.FireUpdate();
             }
         }
 
@@ -3116,6 +3192,8 @@ ConnectorID: {2}"
             }
             catch (Exception ex)
             {
+                if (PhonebookSyncState != null)
+                    PhonebookSyncState.SetNumberOfContacts(0);
 
                 Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex.Message);
                 if (ex.InnerException == null) return;
@@ -3172,10 +3250,10 @@ ConnectorID: {2}"
             if (callHistoryResponseToken == null) return;
             var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
             PopulateObjectWithToken(callHistoryResponseToken, "CallHistoryRecentsResult", codecCallHistory);
-            CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
+            CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry ?? new List<CiscoCallHistory.Entry>());
         }
 
-        private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken, string resultId)
+        private void ParsePhonebookSearchResultResponse(JToken phonebookSearchResultResponseToken, int resultId)
         {
             try
             {
@@ -3206,7 +3284,7 @@ ConnectorID: {2}"
             }
         }
 
-        private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
+        private void ParseCommandResponseObject(JToken commandResponseToken, int resultId)
         {
             if (commandResponseToken == null) return;
             var callHistoryRecentsResultResponse = commandResponseToken.SelectToken("CallHistoryRecentsResult");
@@ -3303,15 +3381,15 @@ ConnectorID: {2}"
             BookingsRefreshTimer.Reset(90000, 90000);
         }
 
-        private static string ParseResultId(JObject obj)
+        private static int ParseResultId(JObject obj)
         {
             try
             {
-                return obj["ResultId"].ToString();
+                return obj["ResultId"].Value<int>();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return Guid.Empty.ToString();
+                return default(int);
             }
         }
 
@@ -3328,8 +3406,6 @@ ConnectorID: {2}"
                         var obj = JObject.Load(jReader);
 
                         var resultId = ParseResultId(obj);
-
-                        Debug.Console(2, this, "Deserialize Response - Parsed ResultID = {0}", resultId);
                         ParseStatusObject(JTokenValidInObject(obj, "Status"));
                         ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
                         ParseEventObject(JTokenValidInObject(obj, "Event"));
@@ -4280,8 +4356,11 @@ ConnectorID: {2}"
                 _phonebookResultsLimit));
         }
 
-        private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
+        //private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
+        private readonly Dictionary<int, Action<CiscoCodecExtendedPhonebook.PhonebookSearchResult>> _searches = 
+            new Dictionary<int, Action<CiscoCodecExtendedPhonebook.PhonebookSearchResult>>(); 
         private bool _searchInProgress;
+        private int _latestSearchId;
  
         /// <summary>
         /// Searches the codec phonebook for all contacts matching the search string
@@ -4297,12 +4376,15 @@ ConnectorID: {2}"
             if (!_phonebookAutoPopulate && searchString == _lastSearched && !_phonebookInitialSearch) return;
 
             _searchInProgress = !String.IsNullOrEmpty(searchString);
-            var tag = Guid.NewGuid();
-            _searches.Enqueue(tag.ToString());
+
+            var searchId = Interlocked.Increment(ref _latestSearchId);
+            _searches.Add(searchId, ParsePhonebookDirectoryResponseTypical);
+
             EnqueueCommand(
                 string.Format(
                     "xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
-                    searchString, _phonebookMode, _phonebookResultsLimit, tag));
+                    searchString, _phonebookMode, _phonebookResultsLimit, searchId));
+
             _lastSearched = searchString;
             _phonebookInitialSearch = false;
             DirectorySearchInProgress.FireUpdate();

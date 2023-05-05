@@ -154,9 +154,6 @@ namespace epi_videoCodec_ciscoExtended
                             return;
 
                         _syncState.JsonResponseModeMessageReceived();
-
-                        if (!_syncState.InitialStatusMessageWasReceived)
-                            SendText("xStatus");
                     }
                     else if (data.Contains("xfeedback register /event/calldisconnect"))
                     {

@@ -100,6 +100,12 @@ namespace epi_videoCodec_ciscoExtended
 
                 JsonResponseModeSet = true;
                 CheckSyncStatus();
+
+                if (!InitialStatusMessageWasReceived)
+                {
+                    Debug.Console(0, this, "Sending Status query");
+                    _parent.SendText("xStatus");
+                }
             }
             catch (Exception ex)
             {
@@ -127,7 +133,7 @@ namespace epi_videoCodec_ciscoExtended
 
                 if (!InitialConfigurationMessageWasReceived)
                 {
-                    Debug.Console(0, this, "Sending Configuration");
+                    Debug.Console(0, this, "Sending Configuration query");
                     _parent.SendText("xConfiguration");
                 }
             }
