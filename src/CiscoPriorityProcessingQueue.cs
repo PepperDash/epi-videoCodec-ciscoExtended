@@ -63,7 +63,10 @@ namespace epi_videoCodec_ciscoExtended
                                     };
 
             _syncState.InitialSyncCompleted += (sender, args) => _waitHandle.Set();
-            CrestronInvoke.BeginInvoke(Run);
+            new Thread(Run, this)
+            {
+                Priority = Thread.eThreadPriority.LowestPriority
+            };
         }
 
         public void Enqueue(string payload)
@@ -75,7 +78,7 @@ namespace epi_videoCodec_ciscoExtended
             _waitHandle.Set();
         }
 
-        private void Run(object _)
+        private object Run(object _)
         {
             while (_shouldProcess)
             {
@@ -101,6 +104,8 @@ namespace epi_videoCodec_ciscoExtended
                     _waitHandle.Wait();
                 }
             }
+
+            return default(int);
         }
 
         private void ProcessIncoming(string response)
