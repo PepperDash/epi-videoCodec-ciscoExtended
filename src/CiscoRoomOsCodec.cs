@@ -155,7 +155,7 @@ namespace epi_videoCodec_ciscoExtended
             get
             {
                 var returnValue = FirmwareCompare(_zoomDialFeatureFirmware);
-                Debug.Console(0, this, "Enhanced Zoom Dialer Functionality is {0}.", returnValue ? "enabled" : "disabled");
+                Debug.Console(2, this, "Enhanced Zoom Dialer Functionality is {0}.", returnValue ? "enabled" : "disabled");
                 return (returnValue);
             }
         }
@@ -1087,7 +1087,7 @@ namespace epi_videoCodec_ciscoExtended
             var callPresent = ActiveCalls.Any(call => call.IsActiveCall);
             if (!EnhancedLayouts)
             {
-                Debug.Console(0, this, "Legacy Layouts Triggered");
+                Debug.Console(2, this, "Legacy Layouts Triggered");
                 OnAvailableLayoutsChanged(_legacyLayouts);
             }
             if (callPresent) return;
@@ -1203,7 +1203,7 @@ namespace epi_videoCodec_ciscoExtended
             
             CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
             {
-                Debug.Console(0, this, "CurrentLayout = \"{0}\"", CurrentLayout);
+                Debug.Console(2, this, "CurrentLayout = \"{0}\"", CurrentLayout);
                 OnCurrentLayoutChanged(CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value);
             };   
 
@@ -1862,7 +1862,7 @@ ConnectorID: {2}"
 
         private void UpdateLayoutList()
         {
-            Debug.Console(0, this, "Update Layout List");
+            Debug.Console(2, this, "Update Layout List");
             var layoutData = new List<CodecCommandWithLabel>();
             if (CodecStatus.Status.Video.Layout.CurrentLayouts.AvailableLayouts != null)
             {
@@ -1876,7 +1876,7 @@ ConnectorID: {2}"
 
         private void UpdateLayoutList(CiscoCodecStatus.CurrentLayouts layout)
         {
-            Debug.Console(0, this, "Update Layout List");
+            Debug.Console(2, this, "Update Layout List");
             var layoutData = new List<CodecCommandWithLabel>();
             if (CodecStatus.Status.Video.Layout.CurrentLayouts.AvailableLayouts != null)
             {
@@ -1890,7 +1890,7 @@ ConnectorID: {2}"
 
         private void UpdateLayoutList(JToken layout)
         {
-            Debug.Console(0, this, "Update Layout List");
+            Debug.Console(2, this, "Update Layout List");
 
             if (layout == null) return;
 
@@ -1911,7 +1911,7 @@ ConnectorID: {2}"
         private void UpdateCurrentLayout(JToken layout)
         {
             if (layout == null) return;
-            Debug.Console(0, this, "Update Current Layout");
+            Debug.Console(2, this, "Update Current Layout");
             CurrentLayout = layout.ToString();
             if (CurrentLayout == String.Empty)
             {
@@ -2474,7 +2474,7 @@ ConnectorID: {2}"
 
         private void ParseLayoutObject(CiscoCodecStatus.CurrentLayouts layoutObject)
         {
-            Debug.Console(0, this, "parsing Layout Object");
+            Debug.Console(2, this, "parsing Layout Object");
             if (layoutObject != null)
             {
                 if (layoutObject.AvailableLayouts != null)
@@ -2493,7 +2493,7 @@ ConnectorID: {2}"
                 ClearLayouts();
                 return;
             }
-            Debug.Console(0, this, "Parsing Layout Token");
+            Debug.Console(2, this, "Parsing Layout Token");
             if (String.IsNullOrEmpty(layoutToken.ToString())) return;
             UpdateCurrentLayout(layoutToken.SelectToken("ActiveLayout.Value"));
             UpdateLayoutList(layoutToken.SelectToken("AvailableLayouts"));
@@ -2520,10 +2520,10 @@ ConnectorID: {2}"
             var tempMediaChannelsCalls = new List<CiscoCodecStatus.MediaChannelCall>();
             if (mediaChannelsCalls != null)
             {
-                Debug.Console(0, this, "MediaChanneslCalls is not null");
+                Debug.Console(2, this, "MediaChanneslCalls is not null");
                 foreach (var t in newCalls)
                 {
-                    Debug.Console(0, this, "Iterating Through newCalls = {0}", t.CallIdString);
+                    Debug.Console(2, this, "Iterating Through newCalls = {0}", t.CallIdString);
                     t.CallType.Value = CheckCallType(t.CallIdString, mediaChannelsCalls);
                     _incomingPresentation = CheckIncomingPresentation(t.CallIdString, mediaChannelsCalls);
                 }
@@ -2533,7 +2533,7 @@ ConnectorID: {2}"
             // Iterate through the call objects in the response
             foreach (var c in newCalls)
             {
-                Debug.Console(0, this, "Iterating through newCalls - {0}", c.CallIdString);
+                Debug.Console(2, this, "Iterating through newCalls - {0}", c.CallIdString);
                 var call = c;
 
                 var currentCallType = String.Empty;
@@ -2549,13 +2549,13 @@ ConnectorID: {2}"
 
                 if (tempActiveCall != null)
                 {
-                    Debug.Console(0, this, "TempActive Call Not Null");
+                    Debug.Console(2, this, "TempActive Call Not Null");
                     var changeDetected = false;
 
                     if (call.CallStatus != null)
                         if (!string.IsNullOrEmpty(call.CallStatus.Value))
                         {
-                            Debug.Console(0, this, "Call Status = {0}", call.CallStatus.Value);
+                            Debug.Console(2, this, "Call Status = {0}", call.CallStatus.Value);
                             tempActiveCall.Status =
                                 CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value);
                             tempActiveCall.IsOnHold = tempActiveCall.Status == eCodecCallStatus.OnHold;
@@ -2614,7 +2614,7 @@ ConnectorID: {2}"
                     if (!changeDetected) continue;
 
                     SetSelfViewMode();
-                    Debug.Console(0, this, "On Call ID {1} Status Change - Status == {0}", tempActiveCall.Status, tempActiveCall.Id);
+                    Debug.Console(2, this, "On Call ID {1} Status Change - Status == {0}", tempActiveCall.Status, tempActiveCall.Id);
                     OnCallStatusChange(tempActiveCall);
                     ListCalls();
                     CodecPollLayouts();
@@ -2913,8 +2913,8 @@ ConnectorID: {2}"
             }
             if (callToken != null)
             {
-                Debug.Console(0, this, "callToken : ");
-                Debug.Console(0, this, "{0}", callToken.ToString());
+                Debug.Console(2, this, "callToken : ");
+                Debug.Console(2, this, "{0}", callToken.ToString());
                 //if(mediaChannelsToken)
                 var mediaChannelCalls = mediaChannelsToken == null ? null : status.MediaChannels.MediaChannelCalls;
                 ParseCallObjectList(status.Calls, mediaChannelCalls);
@@ -2934,7 +2934,7 @@ ConnectorID: {2}"
             }
             else
             {
-                Debug.Console(0, this, "");
+                Debug.Console(2, this, "");
                 JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
             }
             if (_syncState.InitialStatusMessageWasReceived) return;
@@ -2972,7 +2972,7 @@ ConnectorID: {2}"
                 }
                 if (modeToken != null)
                 {
-                    Debug.Console(0, this, "modeToken = {0}", modeToken.ToString());
+                    Debug.Console(2, this, "modeToken = {0}", modeToken.ToString());
                     if (String.IsNullOrEmpty(modeToken.ToString())) return;
                     _IsInPresentation = (modeToken.ToString().ToLower() != "off");
                     CodecPollLayouts();
@@ -3056,12 +3056,12 @@ ConnectorID: {2}"
                 Action<CiscoCodecExtendedPhonebook.PhonebookSearchResult> action;
                 if (resultId == _latestSearchId && _searches.TryGetValue(resultId, out action))
                 {
-                    Debug.Console(0, this, "Parsing a tagged search result:{0}", resultId);
+                    Debug.Console(2, this, "Parsing a tagged search result:{0}", resultId);
                     action(phonebookSearchResultResponseObject);
                 }
                 else if (resultId == 0)
                 {
-                    Debug.Console(0, this, "Parsing an untagged search result:{0}", resultId);
+                    Debug.Console(2, this, "Parsing an untagged search result:{0}", resultId);
                     
                     var directoryResults = new CodecDirectory();
 
@@ -3080,7 +3080,7 @@ ConnectorID: {2}"
                 }
                 else
                 {
-                    Debug.Console(0, this, "Discarding an old search result... Result ID:{0}", resultId);
+                    Debug.Console(2, this, "Discarding an old search result... Result ID:{0}", resultId);
                 }
             }
             catch (Exception ex)
@@ -3315,26 +3315,26 @@ ConnectorID: {2}"
             }
             if (callHistoryRecentsResultResponse != null)
             {
-                Debug.Console(0, this, "CallHistoryRecents Event");
+                Debug.Console(2, this, "CallHistoryRecents Event");
                 ParseCallHistoryResponseToken(commandResponseToken);
                 return;
             }
             if (callHistoryDeleteEntryResultResponse != null)
             {
-                Debug.Console(0, this, "CallHistoryDelete Event");
+                Debug.Console(2, this, "CallHistoryDelete Event");
                 GetCallHistory();
                 return;
             }
             if (bookingsListResultResponse != null)
             {
-                Debug.Console(0, this, "CallHistory Result");
+                Debug.Console(2, this, "CallHistory Result");
                 ParseBookingsListResultToken(commandResponseToken);
                 return;
 
             }
             if (phonebookSearchResultResponse != null)
             {
-                Debug.Console(0, this, "Phonebook Search Result");
+                Debug.Console(2, this, "Phonebook Search Result");
                 ParsePhonebookSearchResultResponse(commandResponseToken, resultId);
                 return;
 
@@ -3343,7 +3343,7 @@ ConnectorID: {2}"
             {
                 if (presentationStatus.ToString().ToLower() == "ok")
                 {
-                    Debug.Console(0, this, "PresentationStatus Event");
+                    Debug.Console(2, this, "PresentationStatus Event");
 
                     _presentationSource = 0;
                     ClearLayouts();
@@ -4076,15 +4076,15 @@ ConnectorID: {2}"
 
         private MediaChannelStatus CheckIncomingPresentation(string id, IEnumerable<CiscoCodecStatus.MediaChannelCall> calls)
         {
-            Debug.Console(0, this, "Parsing For Incoming Presentation");
+            Debug.Console(2, this, "Parsing For Incoming Presentation");
             var mediaChannelStatus = MediaChannelStatus.Unknown;
             var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
             if (currentCall == null)
             {
-                Debug.Console(0, this, "NO CURRENT CALL");
+                Debug.Console(2, this, "NO CURRENT CALL");
                 return mediaChannelStatus | MediaChannelStatus.None;
             }
-            Debug.Console(0, this, JsonConvert.SerializeObject(currentCall));
+            Debug.Console(2, this, JsonConvert.SerializeObject(currentCall));
             var incomingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "incoming");
             if(incomingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Incoming;
             var outgoingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "outgoing");
@@ -4107,7 +4107,7 @@ ConnectorID: {2}"
                     ? mediaChannelStatus | MediaChannelStatus.Audio
                     : mediaChannelStatus;
 
-            Debug.Console(0, this, "Parsed MediaChannelStatus = {0}", mediaChannelStatus);
+            Debug.Console(2, this, "Parsed MediaChannelStatus = {0}", mediaChannelStatus);
 
             return mediaChannelStatus;
         }
@@ -4121,17 +4121,17 @@ ConnectorID: {2}"
         {
             if (result == null)
             {
-                Debug.Console(0, this, "OnDirectoryResultReturned - result is null");
+                Debug.Console(2, this, "OnDirectoryResultReturned - result is null");
                 return;
             }
-            Debug.Console(0, this, "OnDirectoryResultReturned");
+            Debug.Console(2, this, "OnDirectoryResultReturned");
             CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
 
             // This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
             var handler = DirectoryResultReturned;
             if (handler != null)
             {
-                Debug.Console(0, this, "Directory result returned");
+                Debug.Console(2, this, "Directory result returned");
                 handler(this, new DirectoryEventArgs()
                 {
                     Directory = result,
@@ -4445,9 +4445,9 @@ ConnectorID: {2}"
         /// <param name="directory"></param>
         private void PrintDirectory(CodecDirectory directory)
         {
-            Debug.Console(0, this, "Attempting to Print Directory");
+            Debug.Console(2, this, "Attempting to Print Directory");
             if (directory == null) return;
-            Debug.Console(0, this, "Directory Results:\n");
+            Debug.Console(2, this, "Directory Results:\n");
 
             foreach (var item in directory.CurrentDirectoryResults)
             {
@@ -4612,13 +4612,13 @@ ConnectorID: {2}"
         {
             if (volume < 0 || volume > 100)
             {
-                Debug.Console(0, this, "Cannot set ringtone volume to '{0}'. Value must be between 0 - 100", volume);
+                Debug.Console(2, this, "Cannot set ringtone volume to '{0}'. Value must be between 0 - 100", volume);
                 return;
             }
 
             if (volume%5 != 0)
             {
-                Debug.Console(0, this,
+                Debug.Console(2, this,
                     "Cannot set ringtone volume to '{0}'. Value must be between 0 - 100 and a multiple of 5", volume);
                 return;
             }
@@ -5092,7 +5092,7 @@ ConnectorID: {2}"
             const string boilerplate1 = "Available for ";
             const string boilerplate2 = "Next meeting in ";
 
-            Debug.Console(0, this, "Checking Meetings");
+            Debug.Console(2, this, "Checking Meetings");
 
 
             _currentMeetings =
@@ -5104,7 +5104,7 @@ ConnectorID: {2}"
 
             if (_currentMeetings.Count == 0)
             {
-                Debug.Console(0, this, "no Meetings");
+                Debug.Console(2, this, "no Meetings");
                 trilist.SetBool(joinMap.CodecAvailable.JoinNumber, true);
                 trilist.SetBool(joinMap.CodecMeetingBannerActive.JoinNumber, false);
                 trilist.SetBool(joinMap.CodecMeetingBannerWarning.JoinNumber, false);
@@ -5143,9 +5143,9 @@ ConnectorID: {2}"
 
             if (upcomingMeeting != null)
             {
-                Debug.Console(0, this, "Upcoming Meeting Not Null");
-                Debug.Console(0, this, "Upcoming Meeting StartTime = {0}", upcomingMeeting.StartTime.ToString());
-                Debug.Console(0, this, "Upcoming Meeting EndTime = {0}", upcomingMeeting.EndTime.ToString());
+                Debug.Console(2, this, "Upcoming Meeting Not Null");
+                Debug.Console(2, this, "Upcoming Meeting StartTime = {0}", upcomingMeeting.StartTime.ToString());
+                Debug.Console(2, this, "Upcoming Meeting EndTime = {0}", upcomingMeeting.EndTime.ToString());
                 var timeRemainingAvailable = upcomingMeeting.StartTime - currentTime;
                 hoursRemainingAvailable = timeRemainingAvailable.Hours;
                 minutesRemainingAvailable = timeRemainingAvailable.Minutes;
@@ -5332,7 +5332,7 @@ ConnectorID: {2}"
         {
             if (layout == null)
             {
-                Debug.Console(0, this, "Unable to Recall Layout - Null CodecCommandWithLabel Object Sent");
+                Debug.Console(2, this, "Unable to Recall Layout - Null CodecCommandWithLabel Object Sent");
                 return;
             }
             EnqueueCommand(string.Format("xCommand Video Layout SetLayout LayoutName: \"{0}\"", layout.Command));
@@ -5486,7 +5486,7 @@ ConnectorID: {2}"
             {
                 case eCameraTrackingCapabilities.None:
                 {
-                    Debug.Console(0, this, "Camera Auto Mode Unavailable");
+                    Debug.Console(2, this, "Camera Auto Mode Unavailable");
                     break;
                 }
                 case eCameraTrackingCapabilities.PresenterTrack:
@@ -5518,7 +5518,7 @@ ConnectorID: {2}"
             {
                 case eCameraTrackingCapabilities.None:
                 {
-                    Debug.Console(0, this, "Camera Auto Mode Unavailable");
+                    Debug.Console(2, this, "Camera Auto Mode Unavailable");
                     break;
                 }
                 case eCameraTrackingCapabilities.PresenterTrack:
@@ -5574,7 +5574,7 @@ ConnectorID: {2}"
         {
             if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
             {
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+                Debug.Console(2, this, "Presenter Track is Unavailable on this Codec");
                 return;
             }
             if (CameraIsOffFeedback.BoolValue)
@@ -5589,7 +5589,7 @@ ConnectorID: {2}"
         {
             if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
             {
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+                Debug.Console(2, this, "Presenter Track is Unavailable on this Codec");
                 return;
             }
             if (CameraIsOffFeedback.BoolValue)
@@ -5604,7 +5604,7 @@ ConnectorID: {2}"
         {
             if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
             {
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+                Debug.Console(2, this, "Presenter Track is Unavailable on this Codec");
                 return;
             }
 
@@ -5620,7 +5620,7 @@ ConnectorID: {2}"
         {
             if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
             {
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+                Debug.Console(2, this, "Presenter Track is Unavailable on this Codec");
                 return;
             }
             if (CameraIsOffFeedback.BoolValue)
@@ -5806,7 +5806,7 @@ ConnectorID: {2}"
                 FarEndRoomPresets.Add(new CodecRoomPreset(i, label, true, false));
             }
 
-            Debug.Console(0, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
+            Debug.Console(2, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
 
             SelectedCamera = Cameras.First();
             SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.

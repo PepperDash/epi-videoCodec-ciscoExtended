@@ -125,21 +125,6 @@ namespace epi_videoCodec_ciscoExtended
             AuthRequestedCallInstance = new IntFeedback(() => _authRequestedCallInstance);
         }
 
-        class ProcessActionMethod : IQueueMessage
-        {
-            private readonly Action _action;
-
-            public ProcessActionMethod(Action action)
-            {
-                _action = action;
-            }
-
-            public void Dispatch()
-            {
-                _action();
-            }
-        }
-
         public void ParseAuthenticationRequest(JToken token)
         {
             var request = token.ToObject<AuthenticationRequestObject>();
@@ -151,7 +136,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 _authRequested = authRequest.AuthenticationRequest.Value != "None";
                 _authRequestedCallInstance = request.Call.IndexOf(authRequest);
-                Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance,
+                Debug.Console(1, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance,
                     authRequest.AuthenticationRequest.Value);
                 AuthRequestedCallInstance.FireUpdate();
                 AuthRequested.FireUpdate();
@@ -173,7 +158,6 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     JoinedAsGuest.Start();
                     _hostPin = string.Empty;
-                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
                     return;
                 }
 
@@ -181,7 +165,6 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     JoinedAsHost.Start();
                     _hostPin = string.Empty;
-                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
                     return;
                 }
             }
@@ -191,7 +174,6 @@ namespace epi_videoCodec_ciscoExtended
             {
                 PinIncorrect.Start();
                 _hostPin = string.Empty;
-                Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
             }
         }
 
