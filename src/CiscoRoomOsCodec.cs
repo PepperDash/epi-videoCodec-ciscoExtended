@@ -4374,6 +4374,10 @@ ConnectorID: {2}"
                 _phonebookAutoPopulate ? "true" : "false", searchString, _lastSearched,
                 _phonebookInitialSearch ? "true" : "false");
 
+            if ((string.IsNullOrEmpty(searchString) && string.IsNullOrEmpty(_lastSearched)) && !_phonebookInitialSearch)
+                return;
+
+            // I'm not sure what this line is for... todo: investigate
             if (!_phonebookAutoPopulate && searchString == _lastSearched && !_phonebookInitialSearch) return;
 
             _searchInProgress = !String.IsNullOrEmpty(searchString);
