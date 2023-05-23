@@ -98,11 +98,10 @@ namespace epi_videoCodec_ciscoExtended
                 if (_syncState.InitialSyncComplete && _tx.TryToDequeue(out message))
                 {
                     SendText(message);
+                    continue;                    
                 }
-                else
-                {
-                    _waitHandle.Wait();
-                }
+
+                _waitHandle.Wait();
             }
 
             return default(int);
