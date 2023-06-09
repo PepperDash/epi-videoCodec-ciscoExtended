@@ -5,6 +5,7 @@ using System.Text;
 using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharp;
 using PepperDash.Core;
+using PepperDash.Essentials.Core;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -65,7 +66,9 @@ namespace epi_videoCodec_ciscoExtended
             _syncState.InitialSyncCompleted += (sender, args) => _waitHandle.Set();
             new Thread(Run, this)
             {
-                Priority = Thread.eThreadPriority.LowestPriority
+                Priority = Global.ProcessorSeries == eCrestronSeries.Series3 
+                    ? Thread.eThreadPriority.LowestPriority
+                    : Thread.eThreadPriority.MediumPriority
             };
         }
 

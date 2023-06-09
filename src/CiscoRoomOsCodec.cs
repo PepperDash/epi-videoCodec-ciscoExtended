@@ -887,6 +887,9 @@ namespace epi_videoCodec_ciscoExtended
             ExternalSourceListEnabled = props.ExternalSourceListEnabled;
             ExternalSourceInputPort = props.ExternalSourceInputPort;
 
+            //this will hold the activation for 60 seconds to finish registration
+            AddPostActivationAction(InitializeInternal);
+
             if (props.UiBranding == null)
             {
                 return;
@@ -1445,46 +1448,63 @@ namespace epi_videoCodec_ciscoExtended
             OnDirectoryResultReturned(DirectoryRoot);
         }
 
-        #region Overrides of Device
+        private readonly CEvent _startupWait = new CEvent(true, false);
 
-        public override void Initialize()
+        public void InitializeInternal()
         {
-            try
-            {
-                //RegisterSystemUnitEvents();
-                //RegisterSipEvents();
-                //RegisterNetworkEvents();
-                //RegisterVideoEvents();
-                //RegisterConferenceEvents();
-                RegisterRoomPresetEvents();
-                RegisterH323Configuration();
-                RegisterAutoAnswer();
-                RegisterDisconnectEvents();
-                RegisterUserInterfaceEvents();
+            Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Starting initialization");
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+            _syncState.InitialSyncCompleted += SyncStateOnInitialSyncCompleted;
+            CrestronInvoke.BeginInvoke(_ =>
+                                       {
+                                           try
+                                           {
+                                               //RegisterSystemUnitEvents();
+                                               //RegisterSipEvents();
+                                               //RegisterNetworkEvents();
+                                               //RegisterVideoEvents();
+                                               //RegisterConferenceEvents();
+                                               RegisterRoomPresetEvents();
+                                               RegisterH323Configuration();
+                                               RegisterAutoAnswer();
+                                               RegisterDisconnectEvents();
+                                               RegisterUserInterfaceEvents();
 
-                var socket = Communication as ISocketStatus;
-                if (socket != null)
-                {
-                    socket.ConnectionChange += socket_ConnectionChange;
-                }
+                                               var socket = Communication as ISocketStatus;
+                                               if (socket != null)
+                                               {
+                                                   socket.ConnectionChange += socket_ConnectionChange;
+                                               }
 
-                if (Communication == null)
-                    throw new NullReferenceException("Coms");
+                                               if (Communication == null)
+                                                   throw new NullReferenceException("Coms");
 
-                Communication.Connect();
+                                               Communication.Connect();
+                                               CommunicationMonitor.Start();
+                                           }
+                                           catch (Exception ex)
+                                           {
+                                               Debug.Console(0,
+                                                             this,
+                                                             "Caught an exception in initialize:{0}",
+                                                             ex);
 
-                CommunicationMonitor.Start();
 
-            }
-            catch (Exception ex)
-            {
-                Debug.Console(0, this, "Caught an exception in initialize:{0}", ex.StackTrace);
-                throw;
-            }
+                                               _startupWait.Set();
+                                           }
+                                       });
 
+            _startupWait.Wait(120000);
+            _syncState.InitialSyncCompleted -= SyncStateOnInitialSyncCompleted;
+            stopwatch.Stop();
+            Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Total time to initialize:{0}", stopwatch.Elapsed);
         }
 
-        #endregion
+        private void SyncStateOnInitialSyncCompleted(object sender, EventArgs eventArgs)
+        {
+            _startupWait.Set();
+        }
 
         private string BuildFeedbackRegistrationExpression()
         {

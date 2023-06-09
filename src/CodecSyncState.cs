@@ -27,6 +27,7 @@ namespace epi_videoCodec_ciscoExtended
             {
                 if (value && !_initialSyncComplete)
                 {
+                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Codec Sync Complete");
                     var handler = InitialSyncCompleted;
                     if (handler != null)
                         handler(this, new EventArgs());
@@ -256,7 +257,6 @@ namespace epi_videoCodec_ciscoExtended
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                Debug.Console(1, this, "Codec Sync Complete");
                 InitialSyncComplete = true;
             }
             else
