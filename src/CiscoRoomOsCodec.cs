@@ -226,6 +226,8 @@ namespace epi_videoCodec_ciscoExtended
 
         public StringFeedback SelfviewPipPositionFeedback { get; private set; }
 
+        public IntFeedback SelfviewPipPositionIndexFeedback { get; private set; }
+
         public StringFeedback LocalLayoutFeedback { get; private set; }
 
         public BoolFeedback PresentationActiveFeedback { get; private set; }
@@ -456,6 +458,11 @@ namespace epi_videoCodec_ciscoExtended
         protected Func<string> SelfviewPipPositionFeedbackFunc
         {
             get { return () => _currentSelfviewPipPosition.Label; }
+        }
+
+        protected Func<int> SelfviewPipPositionIndexFeedbackFunc
+        {
+            get { return () => SelfviewPipPositions.IndexOf(_currentSelfviewPipPosition); }
         }
 
         protected Func<string> LocalLayoutFeedbackFunc
@@ -711,6 +718,7 @@ namespace epi_videoCodec_ciscoExtended
             PeopleCountFeedback = new IntFeedback(PeopleCountFeedbackFunc);
             SelfviewIsOnFeedback = new BoolFeedback(SelfViewIsOnFeedbackFunc);
             SelfviewPipPositionFeedback = new StringFeedback(SelfviewPipPositionFeedbackFunc);
+            SelfviewPipPositionIndexFeedback = new IntFeedback(SelfviewPipPositionIndexFeedbackFunc);
             LocalLayoutFeedback = new StringFeedback(LocalLayoutFeedbackFunc);
             LocalLayoutIsProminentFeedback = new BoolFeedback(LocalLayoutIsProminentFeedbackFunc);
             FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
@@ -4714,64 +4722,11 @@ ConnectorID: {2}"
             trilist.SetSigFalseAction(joinMap.ToggleDoNotDisturbMode.JoinNumber,
                 dndCodec.ToggleDoNotDisturbMode);
 
-            /*
-            trilist.SetSigFalseAction(joinMap.DialMeeting1.JoinNumber, () =>
-            {
-                const int mtg = 1;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting1.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting2.JoinNumber, () =>
-            {
-                const int mtg = 2;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting2.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting3.JoinNumber, () =>
-            {
-                const int mtg = 3;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting3.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting4.JoinNumber, () =>
-            {
-                const int mtg = 4;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting4.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
+            trilist.SetUShortSigAction(joinMap.SelfviewPosition.JoinNumber,
+                a => SelfviewPipPositionSet(SelfviewPipPositions[a]));
+            SelfviewPipPositionFeedback.LinkInputSig(trilist.StringInput[joinMap.SelfviewPositionFb.JoinNumber]);
+            SelfviewPipPositionIndexFeedback.LinkInputSig(trilist.UShortInput[joinMap.SelfviewPositionFb.JoinNumber]);
 
-            trilist.SetSigFalseAction(joinMap.DialMeeting5.JoinNumber, () =>
-            {
-                const int mtg = 5;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting5.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-             */
             trilist.SetSigFalseAction(joinMap.DialActiveMeeting.JoinNumber, () =>
             {
                 if (_currentMeeting == null) return;
@@ -5323,8 +5278,8 @@ ConnectorID: {2}"
                 SelfviewPipPositions.FirstOrDefault(
                     p => p.Command.ToLower().Equals(CodecStatus.Status.Video.Selfview.PipPosition.Value.ToLower()));
 
-            if (_currentSelfviewPipPosition != null)
-                SelfviewIsOnFeedback.FireUpdate();
+            if (_currentSelfviewPipPosition == null) return;
+            SelfviewIsOnFeedback.FireUpdate();
         }
 
         /*

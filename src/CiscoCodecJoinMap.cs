@@ -403,6 +403,35 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("SelfviewPositionFb")]
+        public JoinDataComplete SelfviewPositionFb = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 211,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "advance selfview position",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.AnalogSerial
+            });
+
+        [JoinName("SelfviewPosition")]
+        public JoinDataComplete SelfviewPosition = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 211,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "advance selfview position",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.DigitalAnalog
+            });
+
+
         [JoinName("WebexPinError")]
         public JoinDataComplete WebexPinError = new JoinDataComplete(
             new JoinData
