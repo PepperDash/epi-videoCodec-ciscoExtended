@@ -190,7 +190,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             catch (Exception ex)
             {
-                Debug.Console(1, this, "Swallowing an exception processing a response:{0}", ex);
+                Debug.Console(1, this, Debug.ErrorLogLevel.Error, "Swallowing an exception processing a response:{0}", ex);
             }
         }
 
