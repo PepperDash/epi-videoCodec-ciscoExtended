@@ -476,11 +476,17 @@ namespace epi_videoCodec_ciscoExtended
         {
             try
             {
-                return jToken.SelectToken(tokenSelector, true);
+                if (jToken == null)
+                    throw new ArgumentNullException("jToken");
+
+                if (string.IsNullOrEmpty(tokenSelector))
+                    throw new ArgumentNullException("tokenSelector");
+
+                return jToken.SelectToken(tokenSelector, false);
             }
             catch (Exception e)
             {
-                Debug.Console(2, "Exception in CheckJTokenInToken - This may be normal : {0}", e.Message);
+                Debug.Console(2, "Exception in CheckJTokenInToken - This may be normal : {0}", e);
                 return null;
             }
         }
@@ -489,11 +495,17 @@ namespace epi_videoCodec_ciscoExtended
         {
             try
             {
-                return jObject.SelectToken(tokenSelector, true);
+                if (jObject == null)
+                    throw new ArgumentNullException("jObject");
+
+                if (string.IsNullOrEmpty(tokenSelector))
+                    throw new ArgumentNullException("tokenSelector");
+
+                return jObject.SelectToken(tokenSelector, false);
             }
             catch (Exception e)
             {
-                Debug.Console(2, "Exception in CheckJTokenInObject - This may be normal : {0}", e.Message);
+                Debug.Console(2, "Exception in CheckJTokenInObject - This may be normal : {0}", e);
                 return null;
             }
 
@@ -2719,13 +2731,7 @@ ConnectorID: {2}"
             }
             catch (Exception e)
             {
-                Debug.Console(2, this, "Exception: PopulateObjectWithToken - {0}", e.Message);
-                Debug.Console(2, this, "Token Type: {0}", jToken.GetType()); // Newtonsoft.Json.Linq.JObject
-                Debug.Console(2, this, "Token = {0}", jToken.ToString());
-                Debug.Console(2, this, "Selector = {0}", tokenSelector);
-                Debug.Console(2, this, "target Type: {0}", target.GetType()); // epi_videoCodec_ciscoExtended.CiscoCodecEvents+UserInterface
-                Debug.Console(1, this, "target serialized val: {0}", JsonConvert.SerializeObject(target));
-                Debug.Console(2, this, "string to PopulateObject: {0}", token_string);
+                Debug.Console(2, this, "Exception: PopulateObjectWithToken - {0}", e);
             }
         }
 
