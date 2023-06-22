@@ -4727,6 +4727,9 @@ ConnectorID: {2}"
             SelfviewPipPositionFeedback.LinkInputSig(trilist.StringInput[joinMap.SelfviewPositionFb.JoinNumber]);
             SelfviewPipPositionIndexFeedback.LinkInputSig(trilist.UShortInput[joinMap.SelfviewPositionFb.JoinNumber]);
 
+            trilist.SetSigTrueAction(joinMap.SelectFarEndCamera.JoinNumber, () => SelectCamera(Cameras.Last().Key));
+            ControllingFarEndCameraFeedback.LinkInputSig(trilist.BooleanInput[joinMap.SelectFarEndCamera.JoinNumber]);
+
             trilist.SetSigFalseAction(joinMap.DialActiveMeeting.JoinNumber, () =>
             {
                 if (_currentMeeting == null) return;
@@ -5914,8 +5917,8 @@ ConnectorID: {2}"
             var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);
             if(phoneCall != null)
                 SendDtmf(digit, phoneCall);
-
         }
+
 
         #endregion
     }

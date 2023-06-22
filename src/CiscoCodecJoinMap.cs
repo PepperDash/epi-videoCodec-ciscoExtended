@@ -23,6 +23,19 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
+        [JoinName("SelectFarEndCamera")]
+        public JoinDataComplete SelectFarEndCamera = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 60,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Select Far End Camera",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            });
         [JoinName("PresenterTrackFollow")]
         public JoinDataComplete PresenterTrackFollow = new JoinDataComplete(
             new JoinData
