@@ -4803,6 +4803,8 @@ ConnectorID: {2}"
             LinkCiscoCodecZoomConnector(trilist, joinMap);
 
             UIExtensionsHandler.LinkToApi(trilist, joinMap);
+
+            SetIsReady();
         }
 
         public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
@@ -5840,7 +5842,6 @@ ConnectorID: {2}"
 
             SelectedCamera = Cameras.First();
             SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.
-
         }
 
         #region IHasCodecCameras Members
