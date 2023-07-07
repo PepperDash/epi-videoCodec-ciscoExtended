@@ -100,7 +100,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Presenter Track Availble",
+                Description = "Dial Active Meeting",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
