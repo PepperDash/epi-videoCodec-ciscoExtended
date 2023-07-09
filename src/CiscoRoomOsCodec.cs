@@ -95,7 +95,7 @@ namespace epi_videoCodec_ciscoExtended
         public Meeting ActiveMeeting { get; private set; }
 
         private const int XSigEncoding = 28591;
-
+        public bool EndAllCallsOnMeetingJoin;
         private List<Meeting> _currentMeetings;
 
         private StringBuilder _feedbackListMessage;
@@ -686,6 +686,7 @@ namespace epi_videoCodec_ciscoExtended
             _timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
             _dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
             _joinableCooldownSeconds = _config.JoinableCooldownSeconds;
+            EndAllCallsOnMeetingJoin = _config.EndAllCallsOnMeetingJoin;
 
             if (_config.Sharing != null)
             {
@@ -4365,6 +4366,7 @@ ConnectorID: {2}"
         /// <param name="meeting"></param>
         public override void Dial(Meeting meeting)
         {
+            if(EndAllCallsOnMeetingJoin)EndAllCalls();
             foreach (Call c in meeting.Calls)
             {
                 Dial(c.Number, c.Protocol, c.CallRate, c.CallType, meeting.Id);
