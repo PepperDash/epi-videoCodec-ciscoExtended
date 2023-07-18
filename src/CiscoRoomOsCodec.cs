@@ -5777,7 +5777,7 @@ ConnectorID: {2}"
             }
             EnqueueCommand(
                 string.Format(
-                    "xCommand UserInterface Presentation ExternalSource Add DetectedConnectorId: {0} SourceIdentifier: \"{1}\" Name: \"{2}\" Type: {3}",
+                    "xCommand UserInterface Presentation ExternalSource Add ConnectorId: {0} SourceIdentifier: \"{1}\" Name: \"{2}\" Type: {3}",
                     id, key, name, type.ToString()));
             // SendText(string.Format("xCommand UserInterface Presentation ExternalSource State Set SourceIdentifier: \"{0}\" State: Ready", key));
             Debug.Console(2, this, "Adding ExternalSource {0} {1}", connectorId, name);
