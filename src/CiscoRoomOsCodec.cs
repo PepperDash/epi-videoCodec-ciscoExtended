@@ -805,9 +805,15 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                var command = string.Format("xStatus SystemUnit\r");
-                CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 30000, 120000, 300000,
-                    command);
+                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r";
+
+                CommunicationMonitor = new GenericCommunicationMonitor(
+                    this, 
+                    Communication, 
+                    30000, 
+                    120000, 
+                    300000,
+                    pollString);
             }
 
             if (props.Sharing != null)
