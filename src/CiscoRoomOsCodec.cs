@@ -659,7 +659,7 @@ namespace epi_videoCodec_ciscoExtended
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
             _receiveQueue = new GenericQueue(Key + "-queue", 500); 
-            WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
+            WebexPinRequestHandler = new WebexPinRequestHandler(this, comm);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
             UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
 
@@ -2446,7 +2446,7 @@ ConnectorID: {2}"
         }
 
 
-        private void ParseCallObjectList(ICollection<CiscoCodecStatus.Call> calls, ICollection<CiscoCodecStatus.MediaChannelCall> mediaChannelsCalls )
+        private void ParseCallObjectList(ICollection<CiscoCodecStatus.Call> calls, ICollection<CiscoCodecStatus.MediaChannelCall> mediaChannelsCalls)
         {
             Debug.Console(1, this, "ParseCallObjectList Started");
             //[]TODO Major Refactor Required
@@ -2488,8 +2488,11 @@ ConnectorID: {2}"
                 {
                     CheckCallType(c.CallIdString, mediaChannelsCalls);
                     _incomingPresentation = CheckIncomingPresentation(c.CallIdString, mediaChannelsCalls);
-
                 }
+
+
+                if (ActiveCalls == null)
+                    throw new NullReferenceException("Active Calls");
 
                 var tempActiveCall = ActiveCalls.FirstOrDefault(x => x.Id.Equals(call.CallIdString));
 
@@ -2521,8 +2524,6 @@ ConnectorID: {2}"
                             CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value);
                         changeDetected = true;
                     }
-
-
 
                     if (call.DisplayName != null)
                         if (!string.IsNullOrEmpty(call.DisplayName.Value))
@@ -2569,11 +2570,9 @@ ConnectorID: {2}"
                 else if (call.GhostString == null || call.GhostString.ToLower() == "false")
                     // if the ghost value is present the call has ended already
                 {
-
                     // Create a new call item
                     var newCallItem = new CodecActiveCallItem()
                     {
-
                         Id = call.CallIdString,
                         Status = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value),
                         Name = call.DisplayName.Value,
@@ -2581,9 +2580,8 @@ ConnectorID: {2}"
                         Type = CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value),
                         Direction = CodecCallDirection.ConvertToDirectionEnum(call.Direction.Value),
                         Duration = call.Duration.DurationValue,
-                        IsOnHold = call.PlacedOnHold.BoolValue,
+                        IsOnHold = call.PlacedOnHold != null && call.PlacedOnHold.BoolValue
                     };
-
 
                     // Add it to the ActiveCalls List
                     ActiveCalls.Add(newCallItem);

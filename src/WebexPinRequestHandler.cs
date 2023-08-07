@@ -6,7 +6,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
-using PepperDash.Essentials.Core.Queues;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -100,61 +99,98 @@ namespace epi_videoCodec_ciscoExtended
             public long Id { get; set; }
         }
 
+        public enum AuthRequestedTypeEnum
+        {
+            None,
+            HostPinOrGuest,
+            HostPinOrGuestPin,
+            AnyHostPinOrGuestPin,
+            PanelistPin,
+            PanelistPinOrAttendeePin,
+            PanelistPinOrAttendee,
+            GuestPin
+        }
+
         private readonly IKeyed _parent;
         private readonly IBasicCommunication _coms;
-        private readonly GenericQueue _handler;
 
         private int _authRequestedCallInstance;
-        private bool _authRequested;
-        private string _hostPin;
-        public readonly BoolFeedback AuthRequested;
+        private string _pin;
+        private AuthRequestedTypeEnum _currentTypeEnum;
+
+        public readonly BoolFeedbackPulse HostPinRequested;
+        public readonly BoolFeedbackPulse PanelistPinRequested;
         public readonly BoolFeedbackPulse JoinedAsGuest;
         public readonly BoolFeedbackPulse JoinedAsHost;
+        public readonly BoolFeedbackPulse JoinedAsPanelist;
         public readonly BoolFeedbackPulse PinIncorrect;
         public readonly IntFeedback AuthRequestedCallInstance;
 
-        public WebexPinRequestHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
+        public WebexPinRequestHandler(CiscoCodec parent, IBasicCommunication coms)
         {
             _parent = parent;
             _coms = coms;
-            _handler = handler;
-            AuthRequested = new BoolFeedback(() => _authRequested);
+            HostPinRequested = new BoolFeedbackPulse(25, true);
+            PanelistPinRequested = new BoolFeedbackPulse(25, true);
+
             JoinedAsGuest = new BoolFeedbackPulse(25, true);
+            JoinedAsPanelist = new BoolFeedbackPulse(25, true);
             JoinedAsHost = new BoolFeedbackPulse(25, true);
             PinIncorrect = new BoolFeedbackPulse(25, true);
             AuthRequestedCallInstance = new IntFeedback(() => _authRequestedCallInstance);
         }
 
-        class ProcessActionMethod : IQueueMessage
-        {
-            private readonly Action _action;
-
-            public ProcessActionMethod(Action action)
-            {
-                _action = action;
-            }
-
-            public void Dispatch()
-            {
-                _action();
-            }
-        }
-
         public void ParseAuthenticationRequest(JToken token)
         {
-            var request = token.ToObject<AuthenticationRequestObject>();
-            if (request.Call == null)
-                return;
-
-            var authRequest = request.Call.FirstOrDefault(x => x.AuthenticationRequest != null);
-            if (authRequest != null)
+            try
             {
-                _authRequested = authRequest.AuthenticationRequest.Value != "None";
-                _authRequestedCallInstance = request.Call.IndexOf(authRequest);
-                Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance,
-                    authRequest.AuthenticationRequest.Value);
-                AuthRequestedCallInstance.FireUpdate();
-                AuthRequested.FireUpdate();
+                var request = token.ToObject<AuthenticationRequestObject>();
+                if (request.Call == null)
+                    return;
+
+                var authRequest = request.Call.FirstOrDefault(x => x.AuthenticationRequest != null);
+                if (authRequest != null)
+                {
+                    _currentTypeEnum = (AuthRequestedTypeEnum)Enum.Parse(typeof(AuthRequestedTypeEnum), authRequest.AuthenticationRequest.Value, true);
+
+                    _authRequestedCallInstance = request.Call.IndexOf(authRequest);
+                    Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}",
+                        _authRequestedCallInstance,
+                        _currentTypeEnum);
+
+                    AuthRequestedCallInstance.FireUpdate();
+                    switch (_currentTypeEnum)
+                    {
+                        case AuthRequestedTypeEnum.None:
+                            break;
+                        case AuthRequestedTypeEnum.HostPinOrGuest:
+                            HostPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.HostPinOrGuestPin:
+                            HostPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.AnyHostPinOrGuestPin:
+                            HostPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.PanelistPin:
+                            PanelistPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.PanelistPinOrAttendeePin:
+                            PanelistPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.PanelistPinOrAttendee:
+                            PanelistPinRequested.Start();
+                            break;
+                        case AuthRequestedTypeEnum.GuestPin:
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(1, "Caught an exception parsing an Authentication Request:{0}", ex);
             }
         }
 
@@ -172,16 +208,27 @@ namespace epi_videoCodec_ciscoExtended
                 if (!String.IsNullOrEmpty(role) && role == "Guest")
                 {
                     JoinedAsGuest.Start();
-                    _hostPin = string.Empty;
+                    _pin = string.Empty;
                     Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    _currentTypeEnum = AuthRequestedTypeEnum.None;
                     return;
                 }
 
                 if (!String.IsNullOrEmpty(role) && role == "Host")
                 {
                     JoinedAsHost.Start();
-                    _hostPin = string.Empty;
+                    _pin = string.Empty;
                     Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    _currentTypeEnum = AuthRequestedTypeEnum.None;
+                    return;
+                }
+
+                if (!String.IsNullOrEmpty(role) && role == "Panelist")
+                {
+                    JoinedAsHost.Start();
+                    _pin = string.Empty;
+                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    _currentTypeEnum = AuthRequestedTypeEnum.None;
                     return;
                 }
             }
@@ -190,7 +237,7 @@ namespace epi_videoCodec_ciscoExtended
             if (pinError != null)
             {
                 PinIncorrect.Start();
-                _hostPin = string.Empty;
+                _pin = string.Empty;
                 Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
             }
         }
@@ -198,25 +245,34 @@ namespace epi_videoCodec_ciscoExtended
         public void JoinAsGuest()
         {
             const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance, String.IsNullOrEmpty(_hostPin) ? String.Empty : String.Format(" Pin: {0}#", _hostPin));
+            var command = String.Format(commandFormat, _authRequestedCallInstance, String.IsNullOrEmpty(_pin) ? String.Empty : String.Format(" Pin: {0}#", _hostPin));
             _coms.SendText(command);
         }
 
         public void JoinAsHost()
         {
             const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance, _hostPin);
+            var command = String.Format(commandFormat, _authRequestedCallInstance, _pin);
+            _coms.SendText(command);
+        }
+
+        public void JoinAsPanelist()
+        {
+            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Panelist Pin: {1}#\x0D\x0A";
+            var command = String.Format(commandFormat, _authRequestedCallInstance, _pin);
             _coms.SendText(command);
         }
 
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
-            trilist.SetStringSigAction(joinMap.WebexSendPin.JoinNumber, s => _hostPin = s);
-            trilist.SetSigTrueAction(joinMap.WebexPinClear.JoinNumber, () => _hostPin = string.Empty);
-            trilist.SetSigTrueAction(joinMap.WebexSendPin.JoinNumber, JoinAsHost);
+            trilist.SetStringSigAction(joinMap.SetWebexPin.JoinNumber, s => _pin = s);
+            trilist.SetSigTrueAction(joinMap.WebexPinClear.JoinNumber, () => _pin = string.Empty);
+            trilist.SetSigTrueAction(joinMap.WebexJoinAsHost.JoinNumber, JoinAsHost);
             trilist.SetSigTrueAction(joinMap.WebexJoinAsGuest.JoinNumber, JoinAsGuest);
+            trilist.SetSigTrueAction(joinMap.WebexJoinAsPanelist.JoinNumber, JoinAsPanelist);
 
-            AuthRequested.LinkInputSig(trilist.BooleanInput[joinMap.WebexPinRequested.JoinNumber]);
+            HostPinRequested.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexPinRequested.JoinNumber]);
+            PanelistPinRequested.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexWebinarPinRequested.JoinNumber]);
             JoinedAsGuest.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsGuest.JoinNumber]);
             JoinedAsHost.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsHost.JoinNumber]);
             PinIncorrect.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexPinError.JoinNumber]);

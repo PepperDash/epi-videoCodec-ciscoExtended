@@ -417,8 +417,36 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("WebexSendPin")]
-        public JoinDataComplete WebexSendPin = new JoinDataComplete(
+        [JoinName("WebexWebinarPinRequested")]
+        public JoinDataComplete WebexWebinarPinRequested = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 315,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex Webinar Pin Requested",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinedAsPanelist")]
+        public JoinDataComplete WebexJoinedAsPanelist = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 316,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinedAsGuest",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinAsHost")]
+        public JoinDataComplete WebexJoinAsHost = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 311,
@@ -426,9 +454,23 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "WebexSendPin",
+                Description = "WebexJoinAsHost",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
-                JoinType = eJoinType.DigitalSerial
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("SetWebexPin")]
+        public JoinDataComplete SetWebexPin = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 311,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "SetWebexPin",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
             });
 
         [JoinName("WebexJoinAsGuest")]
@@ -455,6 +497,20 @@ namespace epi_videoCodec_ciscoExtended
             new JoinMetadata
             {
                 Description = "WebexPinClear",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinAsPanelist")]
+        public JoinDataComplete WebexJoinAsPanelist = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 314,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinAsPanelist",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
