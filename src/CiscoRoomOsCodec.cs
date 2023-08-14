@@ -805,7 +805,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r";
+                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r" + "xStatus Audio Volume\r";
 
                 CommunicationMonitor = new GenericCommunicationMonitor(
                     this, 
