@@ -1729,6 +1729,7 @@ ConnectorID: {2}"
                         if (!_syncState.InitialStatusMessageWasReceived)
                         {
                             SendText("xStatus");
+                            SendText("xStatus SIP");
                             SendText("xStatus Call");
                         }
                     }
@@ -2419,6 +2420,7 @@ ConnectorID: {2}"
                 SipUri = sipUri
             });
         }
+
         
 
         private void ParseLayoutObject(CiscoCodecStatus.CurrentLayouts layoutObject)
@@ -2709,9 +2711,6 @@ ConnectorID: {2}"
 
             return mediaChannelStatus;
         }
-
-
-
 
         private CodecActiveCallItem ParseCallObject(JObject call)
         {
