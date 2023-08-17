@@ -602,7 +602,7 @@ namespace epi_videoCodec_ciscoExtended
 
         public bool CommDebuggingIsOn;
 
-        private string Delimiter = "\r\n";
+        private const string Delimiter = "\r\n";
 
         public IntFeedback PresentationSourceFeedback { get; private set; }
 
@@ -805,9 +805,15 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                var command = string.Format("xStatus SystemUnit\r");
-                CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 30000, 120000, 300000,
-                    command);
+                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r" + "xStatus Audio Volume\r";
+
+                CommunicationMonitor = new GenericCommunicationMonitor(
+                    this, 
+                    Communication, 
+                    30000, 
+                    120000, 
+                    300000,
+                    pollString);
             }
 
             if (props.Sharing != null)
@@ -1727,7 +1733,11 @@ ConnectorID: {2}"
                         _syncState.JsonResponseModeMessageReceived();
 
                         if (!_syncState.InitialStatusMessageWasReceived)
+                        {
                             SendText("xStatus");
+                            SendText("xStatus SIP");
+                            SendText("xStatus Call");
+                        }
                     }
                     else if (data.Contains("xfeedback register /event/calldisconnect"))
                     {
@@ -2416,6 +2426,7 @@ ConnectorID: {2}"
                 SipUri = sipUri
             });
         }
+
         
 
         private void ParseLayoutObject(CiscoCodecStatus.CurrentLayouts layoutObject)
@@ -2446,6 +2457,462 @@ ConnectorID: {2}"
         }
 
 
+        private void ParseCallArrayToken(JToken callToken)
+        {
+            try
+            {
+                Debug.Console(0, this, "Parsing CallArrayToken : {1}{0}", callToken.ToString(), CrestronEnvironment.NewLine);
+                var callArray = callToken as JArray;
+                if (callArray == null) return;
+                foreach (var item in callArray.Cast<JObject>().Where(item => item != null))
+                {
+                    var callIdToken = CheckJTokenInObject(item, "id");
+                    if (callIdToken == null) continue;
+                    CodecActiveCallItem callObject = null;
+
+                    var callId = callIdToken.ToString();
+
+                    var callGhostToken = CheckJTokenInObject(item, "ghost");
+                    var callGhost = callGhostToken != null &&
+                                    bool.Parse(callGhostToken.ToString());
+
+                    if (!callGhost)
+                    {
+                        callObject = ParseCallObject(item);
+                        if (callObject == null) continue;
+                    }
+
+                    var activeCall = ActiveCalls.FirstOrDefault(o => o.Id == callId);
+
+
+                    if (activeCall != null)
+                    {
+                        if (callGhost) ActiveCalls.Remove(activeCall);
+                        if(callObject != null)
+                            if (!MergeCallData(activeCall, callObject)) continue;
+                        PrintActiveCallItem(activeCall);
+
+                        SetSelfViewMode();
+                        Debug.Console(0, this, "On Call ID {1} Status Change - Status == {0}", activeCall.Status,
+                            activeCall.Id);
+                        OnCallStatusChange(activeCall);
+                        ListCalls();
+                        CodecPollLayouts();
+
+                        continue;
+                    }
+
+                    if (callGhost) continue;
+                    ActiveCalls.Add(callObject);
+
+                    SetSelfViewMode();
+
+                    ListCalls();
+
+                    OnCallStatusChange(callObject);
+
+                    CodecPollLayouts();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParseCallArrayToken : {0}", ex.Message);
+            }
+
+        }
+
+        private void ParseMediaChannelsTokenArray(JToken mediaChannelsTokenArray)
+        {
+            try
+            {
+                Debug.Console(0, this, "Parsing MediaChannelsTokenArray : {1}{0}", mediaChannelsTokenArray.ToString(), CrestronEnvironment.NewLine);
+
+                var channelArray = mediaChannelsTokenArray as JArray;
+                if (channelArray == null) return;
+                var channelStatus = MediaChannelStatus.Unknown;
+                foreach (var item in channelArray.Cast<JObject>().Where(item => item != null))
+                {
+                    JToken callIdToken;
+                    JToken channelToken;
+
+                    
+                    var callId = item.TryGetValue("id", out callIdToken) ? callIdToken.ToString() : string.Empty;
+                    if (string.IsNullOrEmpty(callId)) continue;
+                    var activeCall =
+                        ActiveCalls.FirstOrDefault(o => o.Id.Equals(callId, StringComparison.OrdinalIgnoreCase));
+                    if (activeCall == null) continue;
+
+                    
+                    if (!item.TryGetValue("Channel", out channelToken)) continue;
+                    channelStatus = channelStatus | ParseMediaChannelsToken(channelToken, activeCall);
+                    _incomingPresentation = channelStatus;
+                    ListCalls();
+                    if (channelStatus == MediaChannelStatus.Video)
+                    {
+                        activeCall.Type = eCodecCallType.Video;
+                        SetSelfViewMode();
+                        CodecPollLayouts();
+                    }
+                    PrintActiveCallItem(activeCall);
+                }
+                
+                Debug.Console(0, this, "Call {0} audio", ((channelStatus & MediaChannelStatus.Audio) == MediaChannelStatus.Audio) ? "is" : "is not");
+                Debug.Console(0, this, "Call {0} video", ((channelStatus & MediaChannelStatus.Video) == MediaChannelStatus.Video) ? "is" : "is not");
+                Debug.Console(0, this, "Channel Status = {0}", channelStatus);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParseMediaChannelsTokenArray : {0}", ex.Message);
+            }
+        }
+
+        private MediaChannelStatus ParseMediaChannelsToken(JToken mediaChannelsToken, CodecActiveCallItem call)
+        {
+            try
+            {
+                Debug.Console(0, this, "Parsing MediaChannelsToken : {1}{0}", mediaChannelsToken.ToString(), CrestronEnvironment.NewLine);
+
+                var channelStatus = MediaChannelStatus.Unknown;
+                var channelToken = mediaChannelsToken;
+                var channelArray = channelToken as JArray;
+                if (channelArray == null)
+                {
+                    Debug.Console(0, this, "Unable to Cast mediaChannelsToken to JArray");
+                    return channelStatus;
+                }
+                foreach (var jToken in channelArray)
+                {
+                    Debug.Console(0, this, "Parsing MediaChannelsTokenIndividually : {1}{0}", jToken.ToString(), CrestronEnvironment.NewLine);
+
+                    var item = jToken as JObject;
+                    if (item == null)
+                    {
+                        Debug.Console(0, this, "Unable to Cast mediaChannelsToken to JArray");
+                        return channelStatus;
+                    }
+
+                    var channelDirectionToken = CheckJTokenInObject(item, "Direction.Value");
+                    var channelVideoToken = CheckJTokenInObject(item, "Video");
+                    var channelAudioToken = CheckJTokenInObject(item, "Audio");
+
+                    if (channelVideoToken == null && channelAudioToken == null)
+                    {
+                        Debug.Console(0, this, "---------------No Audio - No Video---------------");
+                        return _incomingPresentation;
+                    }
+
+                    var channelDirection = channelDirectionToken != null 
+                        ? channelDirectionToken.ToString()
+                        : "Unknown";
+                        
+                    Debug.Console(0, this, "Channel Direction : {0}", channelDirection);
+                    channelStatus = channelDirection.Equals("incoming", StringComparison.OrdinalIgnoreCase)
+                        ? channelStatus | MediaChannelStatus.Incoming
+                        : channelStatus;
+                    channelStatus = channelDirection.Equals("outgoing", StringComparison.OrdinalIgnoreCase)
+                        ? channelStatus | MediaChannelStatus.Outgoing
+                        : channelStatus;
+
+                    channelStatus = channelVideoToken != null
+                        ? channelStatus | ParseMediaChannelToken(channelVideoToken, MediaChannelStatus.Video)
+                        : channelStatus;
+                    channelStatus = channelAudioToken != null
+                        ? channelStatus | ParseMediaChannelToken(channelAudioToken, MediaChannelStatus.Audio)
+                        : channelStatus;
+                }
+
+                return channelStatus;
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParseMediaChannelsToken : {0}", ex.Message);
+                return MediaChannelStatus.Unknown;
+            }
+        }
+
+        private MediaChannelStatus ParseMediaChannelToken(JToken mediaChannelsToken, MediaChannelStatus identifier)
+        {
+            try
+            {
+                var channelStatus = MediaChannelStatus.Unknown;
+                var channelToken = mediaChannelsToken;
+                if (channelToken == null) return channelStatus;
+                Debug.Console(0, this, "Parsing MediaChannelToken with identifier {2} : {1}{0}", mediaChannelsToken.ToString(), CrestronEnvironment.NewLine, identifier);
+                var item = channelToken as JObject;
+                if (item == null)
+                {
+                    Debug.Console(0, this, "Unable to Cast channelToken to JObject");
+                    return channelStatus;
+                }
+                //JToken channelRoleToken;
+
+                var protocolPresent = false;
+
+                var channelRoleToken = CheckJTokenInObject(item, "ChannelRole.Value");
+
+                var channelRole = channelRoleToken != null
+                    ? channelRoleToken.ToString()
+                    : string.Empty;
+                Debug.Console(0, this, "ChannelRole = {0}", channelRole);
+
+                var protocolToken = CheckJTokenInObject(item, "Protocol.Value");
+                if (protocolToken != null)
+                {
+                    Debug.Console(0, this, "ProtocolValue = {0}", protocolToken.ToString());
+                    protocolPresent = !protocolToken.ToString().Equals("off", StringComparison.OrdinalIgnoreCase);
+                }
+                
+                channelStatus = channelRole.Equals("presentation", StringComparison.OrdinalIgnoreCase)
+                    ? channelStatus | MediaChannelStatus.Presentation
+                    : channelStatus;
+                channelStatus = channelRole.Equals("main", StringComparison.OrdinalIgnoreCase)
+                    ? channelStatus | MediaChannelStatus.Main
+                    : channelStatus;
+                channelStatus = protocolPresent ? channelStatus | identifier : channelStatus;
+                return channelStatus;
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParseMediaChannelToken : {0}", ex.Message);
+                return MediaChannelStatus.Unknown;
+            }
+
+
+        }
+
+        private MediaChannelStatus CheckIncomingPresentation(string id, IEnumerable<CiscoCodecStatus.MediaChannelCall> calls)
+        {
+            Debug.Console(0, this, "Parsing For Incoming Presentation");
+            var mediaChannelStatus = MediaChannelStatus.Unknown;
+            var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
+            if (currentCall == null)
+            {
+                Debug.Console(0, this, "NO CURRENT CALL");
+                return mediaChannelStatus | MediaChannelStatus.None;
+            }
+            Debug.Console(0, this, JsonConvert.SerializeObject(currentCall));
+            var incomingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "incoming");
+            if (incomingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Incoming;
+            var outgoingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "outgoing");
+            if (outgoingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Outgoing;
+
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "presentation")
+                    ? mediaChannelStatus | MediaChannelStatus.Presentation
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "main")
+                    ? mediaChannelStatus | MediaChannelStatus.Main
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelVideo.Protocol.Value))
+                    ? mediaChannelStatus | MediaChannelStatus.Video
+                    : mediaChannelStatus;
+            mediaChannelStatus =
+                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelAudio.Protocol.Value))
+                    ? mediaChannelStatus | MediaChannelStatus.Audio
+                    : mediaChannelStatus;
+
+            Debug.Console(0, this, "Parsed MediaChannelStatus = {0}", mediaChannelStatus);
+
+            return mediaChannelStatus;
+        }
+
+        private CodecActiveCallItem ParseCallObject(JObject call)
+        {
+            try
+            {
+                if (call == null) return null;
+                Debug.Console(0, this, "Parsing CallObject : {1}{0}", call.ToString(), CrestronEnvironment.NewLine);
+
+
+
+                var callIdToken = CheckJTokenInObject(call, "id");
+                var callId = callIdToken != null ? callIdToken.ToString() : string.Empty;
+                Debug.Console(0, this, "CallIDToken = {0}", callIdToken);
+                if (string.IsNullOrEmpty(callId)) return null;
+                Debug.Console(0, this, "Found an ID! : {0}", callId);
+
+
+                var callStatusToken = CheckJTokenInObject(call, "Status.Value");
+                var callStatus = (callStatusToken != null)
+                    ? callStatusToken.ToString()
+                    : string.Empty;
+
+                var callTypeToken = CheckJTokenInObject(call, "CallType.Value");
+                var callType = callTypeToken != null
+                    ? callTypeToken.ToString().Equals("video", StringComparison.OrdinalIgnoreCase)
+                        ? "audio"
+                        : callTypeToken.ToString()
+                    : string.Empty;
+
+                var callDirectionToken = CheckJTokenInObject(call, "Direction.Value");
+                var callDirection = callDirectionToken != null
+                    ? callDirectionToken.ToString()
+                    : string.Empty;
+
+                var callRemoteNumberToken = CheckJTokenInObject(call, "RemoteNumber.Value");
+                var callRemoteNumber = callRemoteNumberToken != null
+                    ? callRemoteNumberToken.ToString()
+                    : string.Empty;
+
+                var callDisplayNameToken = CheckJTokenInObject(call, "DisplayName.Value");
+                var callDisplayName = callDisplayNameToken != null
+                    ? callDisplayNameToken.ToString()
+                    : string.Empty;
+
+                var callDurationToken = CheckJTokenInObject(call, "Duration.Value");
+                var callDuration = callDurationToken != null
+                    ? new TimeSpan(0, 0, Int32.Parse(callDurationToken.ToString()))
+                    : new TimeSpan(0, 0, Int32.MaxValue);
+
+                var callPlacedOnHoldToken = CheckJTokenInObject(call, "PlacedOnHold.Value");
+                var callPlacedOnHold = callPlacedOnHoldToken != null &&
+                                       callPlacedOnHoldToken.ToString()
+                                           .Equals("true", StringComparison.OrdinalIgnoreCase);
+
+                var callStatusEnum = ConvertToStatusEnum(callStatus);
+                var callTypeEnum = ConvertToTypeEnum(callType);
+                var callDirectionEnum = ConvertToDirectionEnum(callDirection);
+
+                var newCallItem = new CodecActiveCallItem()
+                {
+                    Id = callId,
+                    Status = callStatusEnum,
+                    Name = callDisplayName,
+                    Number = callRemoteNumber,
+                    Type = callTypeEnum,
+                    Direction = callDirectionEnum,
+                    Duration = callDuration,
+                    IsOnHold = callPlacedOnHold
+                };
+
+                
+                return newCallItem;
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Exception in ParseCallObject : {0}", ex.Message);
+                return null;
+            }
+        }
+
+        public void PrintActiveCallItem(CodecActiveCallItem callData)
+        {
+                var newLine = CrestronEnvironment.NewLine;
+                var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
+                sb.AppendFormat("Status : {0}{1}", callData.Status, newLine);
+                sb.AppendFormat("Name : {0}{1}", callData.Name, newLine);
+                sb.AppendFormat("Number : {0}{1}", callData.Number, newLine);
+                sb.AppendFormat("Type : {0}{1}", callData.Type, newLine);
+                sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
+                sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
+                sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
+                Debug.Console(0, this, sb.ToString());
+
+        }
+
+        public eCodecCallType ConvertToTypeEnum(string s)
+        {
+            try
+            {
+                Debug.Console(0, this, "Attempting to parse {0} to eCodecCallType", s);
+                if (String.IsNullOrEmpty(s)) return eCodecCallType.Unknown;
+                return (eCodecCallType)Enum.Parse(typeof(eCodecCallType), s, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Unable to Parse Enum String : {0}", ex.Message);
+                return eCodecCallType.Unknown;
+            }
+        }
+        public eCodecCallDirection ConvertToDirectionEnum(string s)
+        {
+            try
+            {
+                Debug.Console(0, this, "Attempting to parse {0} to eCodecCallDirection", s);
+                if (String.IsNullOrEmpty(s)) return eCodecCallDirection.Unknown;
+                return (eCodecCallDirection)Enum.Parse(typeof(eCodecCallDirection), s, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Unable to Parse Enum String : {0}", ex.Message);
+                return eCodecCallDirection.Unknown;
+            }
+        }
+        public eCodecCallStatus ConvertToStatusEnum(string s)
+        {
+            try
+            {
+                Debug.Console(0, this, "Attempting to parse {0} to eCodecCallStatus", s);
+                s.Replace("Dialling", "Dialing");
+                if (String.IsNullOrEmpty(s)) return eCodecCallStatus.Unknown;
+                return (eCodecCallStatus)Enum.Parse(typeof(eCodecCallStatus), s, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.Console(0, this, "Unable to Parse Enum String : {0}", ex.Message);
+                return eCodecCallStatus.Unknown;
+            }
+        }
+
+        public bool MergeCallData(CodecActiveCallItem existingCallData, CodecActiveCallItem newCallData)
+        {
+            bool valueChanged = false;
+
+            if (existingCallData.Direction != newCallData.Direction && newCallData.Direction != eCodecCallDirection.Unknown)
+            {
+                existingCallData.Direction = newCallData.Direction;
+                valueChanged = true;
+            }
+
+            Debug.Console(0, "New Duration : {0}", newCallData.Duration.TotalSeconds);
+            Debug.Console(0, "Old Duration : {0}", existingCallData.Duration.TotalSeconds);
+            if (existingCallData.Duration != newCallData.Duration &&
+                newCallData.Duration.Seconds != Int32.MaxValue)
+            {
+                existingCallData.Duration = newCallData.Duration;
+                valueChanged = true;
+            }
+
+            if (!existingCallData.Name.Equals(newCallData.Name, StringComparison.OrdinalIgnoreCase) &&
+                !String.IsNullOrEmpty(newCallData.Name))
+            {
+                existingCallData.Name = newCallData.Name;
+                valueChanged = true;
+            }
+
+            if (!existingCallData.Number.Equals(newCallData.Number, StringComparison.OrdinalIgnoreCase) &&
+                !String.IsNullOrEmpty(newCallData.Number))
+            {
+                existingCallData.Number = newCallData.Number;
+                valueChanged = true;
+            }
+
+            if (!existingCallData.IsOnHold != newCallData.IsOnHold)
+            {
+                existingCallData.IsOnHold = newCallData.IsOnHold;
+                valueChanged = true;
+            }
+
+            if (existingCallData.Status != newCallData.Status && newCallData.Status != eCodecCallStatus.Unknown)
+            {
+                existingCallData.Status = newCallData.Status;
+                valueChanged = true;
+            }
+            if (existingCallData.Type != newCallData.Type && newCallData.Type != eCodecCallType.Unknown)
+            {
+                existingCallData.Type = newCallData.Type;
+                valueChanged = true;
+            }
+            return valueChanged;
+        }
+
+
+
+
+
+
         private void ParseCallObjectList(ICollection<CiscoCodecStatus.Call> calls, ICollection<CiscoCodecStatus.MediaChannelCall> mediaChannelsCalls )
         {
             Debug.Console(1, this, "ParseCallObjectList Started");
@@ -2455,13 +2922,6 @@ ConnectorID: {2}"
             {
                 ClearLayouts();
             }
-            /*
-            var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
-            if (currentCall == null) return null;
-            var videoChannels = currentCall.Channels.Where(x => x.Type.Value.ToLower() == "video").ToList();
-
-            return videoChannels.All(v => v.ChannelVideo.Protocol.Value.ToLower() == "off") ? "Audio" : "Aideo";
-*/
             var newCalls = calls.ToList();
             var tempMediaChannelsCalls = new List<CiscoCodecStatus.MediaChannelCall>();
             if (mediaChannelsCalls != null)
@@ -2720,14 +3180,14 @@ ConnectorID: {2}"
 
         private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
         {
-            var token_string = String.Empty;
+            var tokenString = String.Empty;
             try
             {
                 //Debug.Console(2, this, "PopulateObjectWithToken: {0}", tokenSelector);
                 var token = JTokenValidInToken(jToken, tokenSelector); // JObject
                 if (token == null) return;
-                token_string = token.ToString();
-                JsonConvert.PopulateObject(token_string, target); 
+                tokenString = token.ToString();
+                JsonConvert.PopulateObject(tokenString, target); 
                 //Debug.Console(2, this, "PopulateObject complete");
             }
             catch (Exception e)
@@ -2828,14 +3288,11 @@ ConnectorID: {2}"
             }
             if (networkToken != null)
             {
-                //PopulateObjectWithToken(statusToken, "Network", CodecStatus.Status.Networks);
                 ParseNetworkToken(networkToken);
             }
             if (sipToken != null)
             {
-                //PopulateObjectWithToken(statusToken, "Sip", CodecStatus.Status.Sip);
                 ParseSipToken(sipToken);
-                //ParseSipObject(status.Sip);
             }
             if (layoutsToken != null)
             {
@@ -2844,7 +3301,6 @@ ConnectorID: {2}"
             if (selfviewToken != null)
             {
                 ParseSelfviewToken(selfviewToken);
-                //PopulateObjectWithToken(statusToken, "Video.Selfview", CodecStatus.Status.Video.Selfview);
             }
             if (conferenceToken != null)
             {
@@ -2854,14 +3310,13 @@ ConnectorID: {2}"
             {
                 Debug.Console(0, this, "callToken : ");
                 Debug.Console(0, this, "{0}", callToken.ToString());
-                //if(mediaChannelsToken)
-                var mediaChannelCalls = mediaChannelsToken == null ? null : status.MediaChannels.MediaChannelCalls;
-                ParseCallObjectList(status.Calls, mediaChannelCalls);
+                ParseCallArrayToken(callToken);
             }
             if (mediaChannelsToken != null)
             {
                 Debug.Console(1, this, "MediaChannelsToken = ");
                 Debug.Console(1, this, "{0}", mediaChannelsToken);
+                ParseMediaChannelsTokenArray(mediaChannelsToken);
             }
             if (status.Audio != null)
             {
@@ -3965,44 +4420,6 @@ ConnectorID: {2}"
             var videoChannels = currentCall.Channels.Where(x => x.Type.Value.ToLower() == "video").ToList();
 
             return videoChannels.All(v => v.ChannelVideo.Protocol.Value.ToLower() == "off") ? "Audio" : "Video";
-        }
-
-        private MediaChannelStatus CheckIncomingPresentation(string id, IEnumerable<CiscoCodecStatus.MediaChannelCall> calls)
-        {
-            Debug.Console(0, this, "Parsing For Incoming Presentation");
-            var mediaChannelStatus = MediaChannelStatus.Unknown;
-            var currentCall = calls.FirstOrDefault(p => p.MediaChannelCallId == id);
-            if (currentCall == null)
-            {
-                Debug.Console(0, this, "NO CURRENT CALL");
-                return mediaChannelStatus | MediaChannelStatus.None;
-            }
-            Debug.Console(0, this, JsonConvert.SerializeObject(currentCall));
-            var incomingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "incoming");
-            if(incomingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Incoming;
-            var outgoingChannels = currentCall.Channels.Where(x => x.Direction.Value.ToLower() == "outgoing");
-            if (outgoingChannels.Any()) mediaChannelStatus = mediaChannelStatus | MediaChannelStatus.Outgoing;
-
-            mediaChannelStatus =
-                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "presentation")
-                    ? mediaChannelStatus | MediaChannelStatus.Presentation
-                    : mediaChannelStatus;
-            mediaChannelStatus =
-                currentCall.Channels.Any(x => x.ChannelVideo.ChannelRole.Value.ToLower() == "main")
-                    ? mediaChannelStatus | MediaChannelStatus.Main
-                    : mediaChannelStatus;
-            mediaChannelStatus =
-                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelVideo.Protocol.Value))
-                    ? mediaChannelStatus | MediaChannelStatus.Video
-                    : mediaChannelStatus;
-            mediaChannelStatus =
-                currentCall.Channels.Any(x => !String.IsNullOrEmpty(x.ChannelAudio.Protocol.Value))
-                    ? mediaChannelStatus | MediaChannelStatus.Audio
-                    : mediaChannelStatus;
-
-            Debug.Console(0, this, "Parsed MediaChannelStatus = {0}", mediaChannelStatus);
-
-            return mediaChannelStatus;
         }
 
 
@@ -5729,6 +6146,7 @@ ConnectorID: {2}"
         }
 
 
+
         #region IHasExternalSourceSwitching Members
 
         /// <summary>
@@ -6000,6 +6418,8 @@ ConnectorID: {2}"
 
     }
 
+
+
     public enum eCodecInfoChangeType
     {
         AutoAnswer,
@@ -6011,6 +6431,8 @@ ConnectorID: {2}"
         SerialNumber,
         Firmware
     }
+
+
 
 
     public class FeedbackGroup
@@ -6186,6 +6608,17 @@ ConnectorID: {2}"
             var encodedTextBytes = Encoding.UTF8.GetBytes(encodedText);
             return Convert.ToString(encodedTextBytes);
         }
+
+        public static JToken GetValueProperty(this JObject jObject, string path)
+        {
+            JToken outToken;
+
+            if (!jObject.TryGetValue(path, out outToken)) return null;
+            var outputValue = outToken.SelectToken("Value");
+            return outputValue;
+        }
+
+
     }
 
 }
