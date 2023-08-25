@@ -1542,10 +1542,10 @@ namespace epi_videoCodec_ciscoExtended
                 });
             }
             // Check for camera config info first
-            if (_config.CameraInfo.Count > 0)
+            if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
             {
                 Debug.Console(0, this, "Reading codec cameraInfo from config properties.");
-                SetUpCameras(_config.CameraInfo);
+                SetUpCamerasFromConfig(_config.CameraInfo);
             }
             else
             {
@@ -2725,7 +2725,7 @@ ConnectorID: {2}"
             try
             {
                 if (call == null) return null;
-                Debug.Console(0, this, "Parsing CallObject : {1}{0}", call.ToString(), CrestronEnvironment.NewLine);
+                Debug.Console(1, this, "Parsing CallObject : {1}{0}", call.ToString(), CrestronEnvironment.NewLine);
 
                 var callIdToken = CheckJTokenInObject(call, "id");
                 var callId = callIdToken != null ? callIdToken.ToString() : string.Empty;
@@ -6061,6 +6061,76 @@ ConnectorID: {2}"
             SelectedCamera = Cameras.First();
             SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.
 
+        }
+
+        /// <summary>
+        /// Builds the cameras List.  Could later be modified to build from config data
+        /// </summary>
+        private void SetUpCamerasFromConfig(List<CameraInfo> cameraInfo)
+        {
+            if (cameraInfo == null)
+                throw new ArgumentNullException("cameraInfo");
+
+            // Add the internal camera
+            Cameras = new List<CameraBase>();
+
+            var camCount = cameraInfo.Count;
+            Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
+
+            // Deal with the case of 1 or no reported cameras
+            if (camCount <= 1)
+            {
+                var internalCamera = new CiscoCamera(Key + "-camera1", "Near End", this, 1);
+
+                if (camCount > 0)
+                {
+                    // Try to get the capabilities from the codec
+                    if (CodecStatus.Status.Cameras.CameraList[0] != null &&
+                        CodecStatus.Status.Cameras.CameraList[0].Capabilities != null)
+                    {
+                        internalCamera.SetCapabilites(CodecStatus.Status.Cameras.CameraList[0].Capabilities.Options.Value);
+                    }
+                }
+
+                Cameras.Add(internalCamera);
+                //DeviceManager.AddDevice(internalCamera);
+            }
+            else
+            {
+                foreach (var item in cameraInfo)
+                {
+                    var cam = item;
+                    var sourceId = (cam.SourceId > 0) ? (uint)cam.SourceId : (uint)cam.CameraNumber;
+                    var key = string.Format("{0}-camera{1}", Key, cam.CameraNumber);
+                    var camera = new CiscoCamera(key, cam.Name ?? string.Empty, this, (uint)cam.CameraNumber, sourceId);
+                    Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
+                    Cameras.Add(camera);
+                }
+            }
+
+            // Add the far end camera
+            var farEndCamera = new CiscoFarEndCamera(Key + "-cameraFar", "Far End", this);
+            Cameras.Add(farEndCamera);
+
+            SelectedCameraFeedback = new StringFeedback(() => SelectedCamera.Key);
+
+            ControllingFarEndCameraFeedback = new BoolFeedback(() => SelectedCamera is IAmFarEndCamera);
+
+            NearEndPresets = new List<CodecRoomPreset>(15);
+
+            FarEndRoomPresets = new List<CodecRoomPreset>(15);
+
+            // Add the far end presets
+            for (var i = 1; i <= FarEndRoomPresets.Capacity; i++)
+            {
+                var label = string.Format("Far End Preset {0}", i);
+                FarEndRoomPresets.Add(new CodecRoomPreset(i, label, true, false));
+            }
+
+            Debug.Console(0, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
+
+            SelectedCamera = Cameras.First();
+            SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.
         }
 
         #region IHasCodecCameras Members
