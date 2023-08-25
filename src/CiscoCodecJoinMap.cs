@@ -458,6 +458,19 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
+        [JoinName("CameraPresetRecall")]
+        public JoinDataComplete CameraPresetRecall = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 120,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Recall Selected Camera Preset",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
 
         #endregion
 
