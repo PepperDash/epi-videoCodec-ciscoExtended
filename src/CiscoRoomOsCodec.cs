@@ -102,6 +102,8 @@ namespace epi_videoCodec_ciscoExtended
 
         private bool _feedbackListMessageIncoming;
 
+        private int _selectedPreset;
+
         private bool _IsInPresentation;
 
         private MediaChannelStatus _incomingPresentation;
@@ -2490,7 +2492,7 @@ ConnectorID: {2}"
                         if (callGhost) ActiveCalls.Remove(activeCall);
                         if(callObject != null)
                             if (!MergeCallData(activeCall, callObject)) continue;
-                        PrintActiveCallItem(activeCall);
+                        PrintCallItem(activeCall);
 
                         SetSelfViewMode();
                         Debug.Console(1, this, "On Call ID {1} Status Change - Status == {0}", activeCall.Status,
@@ -2553,7 +2555,7 @@ ConnectorID: {2}"
                         SetSelfViewMode();
                         CodecPollLayouts();
                     }
-                    PrintActiveCallItem(activeCall);
+                    PrintCallItem(activeCall);
                 }
                 
                 Debug.Console(1, this, "Call {0} audio", ((channelStatus & MediaChannelStatus.Audio) == MediaChannelStatus.Audio) ? "is" : "is not");
@@ -2723,9 +2725,7 @@ ConnectorID: {2}"
             try
             {
                 if (call == null) return null;
-                Debug.Console(1, this, "Parsing CallObject : {1}{0}", call.ToString(), CrestronEnvironment.NewLine);
-
-
+                Debug.Console(0, this, "Parsing CallObject : {1}{0}", call.ToString(), CrestronEnvironment.NewLine);
 
                 var callIdToken = CheckJTokenInObject(call, "id");
                 var callId = callIdToken != null ? callIdToken.ToString() : string.Empty;
@@ -2772,8 +2772,16 @@ ConnectorID: {2}"
                                            .Equals("true", StringComparison.OrdinalIgnoreCase);
 
                 var callStatusEnum = ConvertToStatusEnum(callStatus);
+
+
                 var callTypeEnum = ConvertToTypeEnum(callType);
                 var callDirectionEnum = ConvertToDirectionEnum(callDirection);
+
+                if (callStatusEnum == eCodecCallStatus.OnHold)
+                {
+                    Debug.Console(0, this, "Enum Says On Hold!!!!!");
+                    callPlacedOnHold = true;
+                }
 
                 var newCallItem = new CodecActiveCallItem()
                 {
@@ -2797,7 +2805,7 @@ ConnectorID: {2}"
             }
         }
 
-        public void PrintActiveCallItem(CodecActiveCallItem callData)
+        public void PrintCallItem(CodecActiveCallItem callData)
         {
                 var newLine = CrestronEnvironment.NewLine;
                 var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
@@ -2855,6 +2863,11 @@ ConnectorID: {2}"
 
         public bool MergeCallData(CodecActiveCallItem existingCallData, CodecActiveCallItem newCallData)
         {
+            Debug.Console(0, this, "Merging Call Data");
+            Debug.Console(0, this, "Existing : ");
+            PrintCallItem(existingCallData);
+            Debug.Console(0, this, "New");
+            PrintCallItem(newCallData);
             bool valueChanged = false;
 
             if (existingCallData.Direction != newCallData.Direction && newCallData.Direction != eCodecCallDirection.Unknown)
@@ -2886,15 +2899,10 @@ ConnectorID: {2}"
                 valueChanged = true;
             }
 
-            if (!existingCallData.IsOnHold != newCallData.IsOnHold)
-            {
-                existingCallData.IsOnHold = newCallData.IsOnHold;
-                valueChanged = true;
-            }
-
             if (existingCallData.Status != newCallData.Status && newCallData.Status != eCodecCallStatus.Unknown)
             {
                 existingCallData.Status = newCallData.Status;
+                existingCallData.IsOnHold = newCallData.IsOnHold;
                 valueChanged = true;
             }
             if (existingCallData.Type != newCallData.Type && newCallData.Type != eCodecCallType.Unknown)
@@ -3026,19 +3034,20 @@ ConnectorID: {2}"
                 else if (call.GhostString == null || call.GhostString.ToLower() == "false")
                     // if the ghost value is present the call has ended already
                 {
+                    var tempStatus = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value);
 
                     // Create a new call item
                     var newCallItem = new CodecActiveCallItem()
                     {
 
                         Id = call.CallIdString,
-                        Status = CodecCallStatus.ConvertToStatusEnum(call.CallStatus.Value),
+                        Status = tempStatus,
                         Name = call.DisplayName.Value,
                         Number = call.RemoteNumber.Value,
                         Type = CodecCallType.ConvertToTypeEnum(currentCallType ?? call.CallType.Value),
                         Direction = CodecCallDirection.ConvertToDirectionEnum(call.Direction.Value),
                         Duration = call.Duration.DurationValue,
-                        IsOnHold = call.PlacedOnHold.BoolValue,
+                        IsOnHold = call.PlacedOnHold.BoolValue || tempStatus == eCodecCallStatus.OnHold
                     };
 
 
@@ -5134,6 +5143,7 @@ ConnectorID: {2}"
                 dndCodec.DeactivateDoNotDisturbMode);
             trilist.SetSigFalseAction(joinMap.ToggleDoNotDisturbMode.JoinNumber,
                 dndCodec.ToggleDoNotDisturbMode);
+            trilist.SetSigFalseAction(joinMap.CameraPresetRecall.JoinNumber, CiscoRoomPresetRecall);
 
             /*
             trilist.SetSigFalseAction(joinMap.DialMeeting1.JoinNumber, () =>
@@ -6123,13 +6133,23 @@ ConnectorID: {2}"
             if (SelectedCamera is IAmFarEndCamera)
                 SelectFarEndPreset(preset);
             else
-                EnqueueCommand(string.Format("xCommand RoomPreset Activate PresetId: {0}", preset));
+                _selectedPreset = preset;
+                
+        }
+
+        public void CiscoRoomPresetRecall()
+        {
+            if (_selectedPreset < 1) return;
+            EnqueueCommand(string.Format("xCommand RoomPreset Activate PresetId: {0}", _selectedPreset));
+            _selectedPreset = 0;
         }
 
         public void CodecRoomPresetStore(int preset, string description)
         {
+            if (_selectedPreset < 1) return;
             EnqueueCommand(string.Format("xCommand RoomPreset Store PresetId: {0} Description: \"{1}\" Type: All",
                 preset, description));
+            _selectedPreset = 0;
         }
 
         #endregion
