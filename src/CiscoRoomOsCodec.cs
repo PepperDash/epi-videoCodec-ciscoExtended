@@ -1126,8 +1126,8 @@ namespace epi_videoCodec_ciscoExtended
                 {
                     //digitals
                         tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, meeting.Joinable);
-                        tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Id != "0");
-                        tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, meeting.Joinable && (meeting.Id != "0"));
+                        tokenArray[digitalIndex + 1] = new XSigDigitalToken(digitalIndex + 2, meeting.Dialable);
+                        tokenArray[digitalIndex + 2] = new XSigDigitalToken(digitalIndex + 3, meeting.Joinable && meeting.Dialable);
 
 
                         tokenArray[stringIndex] = new XSigSerialToken(stringIndex + 1, meeting.Organizer);
