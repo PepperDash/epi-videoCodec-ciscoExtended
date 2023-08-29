@@ -373,7 +373,7 @@ namespace epi_videoCodec_ciscoExtended
 
                 if (b.DialInfo.Calls.Call != null)
                 {
-
+					meeting.Dialable = b.DialInfo.Calls.Call.Count > 0;
                     foreach (var c in b.DialInfo.Calls.Call)
                     {
                         meeting.Calls.Add(new Call
