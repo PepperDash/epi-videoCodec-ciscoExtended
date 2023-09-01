@@ -4403,19 +4403,13 @@ ConnectorID: {2}"
                 #endregion
 
             }
+            catch (JsonReaderException ex)
+            {
+                Debug.Console(1, this, "Error Deserializing feedback from codec: {0}", ex);
+            }
             catch (Exception ex)
             {
                 Debug.Console(1, this, "Error Deserializing feedback from codec: {0}", ex);
-
-                if (ex is JsonReaderException)
-                {
-                    Debug.Console(1, this, "Received malformed response from codec.");
-
-                    //Communication.Disconnect();
-
-                    //Initialize();
-                }
-
             }
         }
 
