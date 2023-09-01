@@ -6078,35 +6078,14 @@ ConnectorID: {2}"
             var camCount = cameraInfo.Count;
             Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
 
-            // Deal with the case of 1 or no reported cameras
-            if (camCount <= 1)
+            foreach (var item in cameraInfo)
             {
-                var internalCamera = new CiscoCamera(Key + "-camera1", "Near End", this, 1);
-
-                if (camCount > 0)
-                {
-                    // Try to get the capabilities from the codec
-                    if (CodecStatus.Status.Cameras.CameraList[0] != null &&
-                        CodecStatus.Status.Cameras.CameraList[0].Capabilities != null)
-                    {
-                        internalCamera.SetCapabilites(CodecStatus.Status.Cameras.CameraList[0].Capabilities.Options.Value);
-                    }
-                }
-
-                Cameras.Add(internalCamera);
-                //DeviceManager.AddDevice(internalCamera);
-            }
-            else
-            {
-                foreach (var item in cameraInfo)
-                {
-                    var cam = item;
-                    var sourceId = (cam.SourceId > 0) ? (uint)cam.SourceId : (uint)cam.CameraNumber;
-                    var key = string.Format("{0}-camera{1}", Key, cam.CameraNumber);
-                    var camera = new CiscoCamera(key, cam.Name ?? string.Empty, this, (uint)cam.CameraNumber, sourceId);
-                    Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
-                    Cameras.Add(camera);
-                }
+                var cam = item;
+                var sourceId = (cam.SourceId > 0) ? (uint)cam.SourceId : (uint)cam.CameraNumber;
+                var key = string.Format("{0}-camera{1}", Key, cam.CameraNumber);
+                var camera = new CiscoCamera(key, cam.Name ?? string.Empty, this, (uint)cam.CameraNumber, sourceId);
+                Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
+                Cameras.Add(camera);
             }
 
             // Add the far end camera
