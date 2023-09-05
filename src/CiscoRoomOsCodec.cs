@@ -2511,6 +2511,8 @@ ConnectorID: {2}"
 
                     ListCalls();
 
+					Debug.Console(1, this, "On Call ID {1} Status Change - Status == {0}", callObject.Status,
+							callObject.Id);
                     OnCallStatusChange(callObject);
 
                     CodecPollLayouts();
@@ -2554,6 +2556,7 @@ ConnectorID: {2}"
                         activeCall.Type = eCodecCallType.Video;
                         SetSelfViewMode();
                         CodecPollLayouts();
+						OnCallStatusChange(activeCall);
                     }
                     PrintCallItem(activeCall);
                 }
@@ -2807,16 +2810,16 @@ ConnectorID: {2}"
 
         public void PrintCallItem(CodecActiveCallItem callData)
         {
-                var newLine = CrestronEnvironment.NewLine;
-                var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
-                sb.AppendFormat("Status : {0}{1}", callData.Status, newLine);
-                sb.AppendFormat("Name : {0}{1}", callData.Name, newLine);
-                sb.AppendFormat("Number : {0}{1}", callData.Number, newLine);
-                sb.AppendFormat("Type : {0}{1}", callData.Type, newLine);
-                sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
-                sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
-                sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
-                Debug.Console(0, this, sb.ToString());
+				//var newLine = CrestronEnvironment.NewLine;
+				//var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
+				//sb.AppendFormat("Status : {0}{1}", callData.Status, newLine);
+				//sb.AppendFormat("Name : {0}{1}", callData.Name, newLine);
+				//sb.AppendFormat("Number : {0}{1}", callData.Number, newLine);
+				//sb.AppendFormat("Type : {0}{1}", callData.Type, newLine);
+				//sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
+				//sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
+				//sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
+                Debug.Console(0, this, callData.ToString());
 
         }
 
@@ -3058,6 +3061,8 @@ ConnectorID: {2}"
 
                     SetSelfViewMode();
 
+					Debug.Console(1, this, "On Call ID {1} Status Change - Status == {0}", newCallItem.Status,
+							newCallItem.Id);
                     OnCallStatusChange(newCallItem);
 
                     CodecPollLayouts();
@@ -6082,7 +6087,7 @@ ConnectorID: {2}"
             {
                 var internalCamera = new CiscoCamera(Key + "-camera1", "Near End", this, 1);
 
-                if (camCount > 0)
+                if (camCount > 0 && CodecStatus.Status.Cameras.CameraList.Count > 0)
                 {
                     // Try to get the capabilities from the codec
                     if (CodecStatus.Status.Cameras.CameraList[0] != null &&
