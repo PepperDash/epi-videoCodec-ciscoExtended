@@ -2810,17 +2810,16 @@ ConnectorID: {2}"
 
         public void PrintCallItem(CodecActiveCallItem callData)
         {
-				//var newLine = CrestronEnvironment.NewLine;
-				//var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
-				//sb.AppendFormat("Status : {0}{1}", callData.Status, newLine);
-				//sb.AppendFormat("Name : {0}{1}", callData.Name, newLine);
-				//sb.AppendFormat("Number : {0}{1}", callData.Number, newLine);
-				//sb.AppendFormat("Type : {0}{1}", callData.Type, newLine);
-				//sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
-				//sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
-				//sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
-                Debug.Console(0, this, callData.ToString());
-
+			var newLine = CrestronEnvironment.NewLine;
+			var sb = new StringBuilder(string.Format("New Call Item : ID = {1}{0}", newLine, callData.Id));
+			sb.AppendFormat("Status : {0}{1}", callData.Status, newLine);
+			sb.AppendFormat("Name : {0}{1}", callData.Name, newLine);
+			sb.AppendFormat("Number : {0}{1}", callData.Number, newLine);
+			sb.AppendFormat("Type : {0}{1}", callData.Type, newLine);
+			sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
+			sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
+			sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
+            Debug.Console(0, this, sb.ToString());
         }
 
         public eCodecCallType ConvertToTypeEnum(string s)
