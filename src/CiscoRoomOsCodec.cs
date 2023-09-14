@@ -2850,15 +2850,16 @@ ConnectorID: {2}"
         }
         public eCodecCallStatus ConvertToStatusEnum(string s)
         {
+            var stringToProcess = s.Replace("Dialling", "Dialing");
+
             try
             {
-                s.Replace("Dialling", "Dialing");
-                if (String.IsNullOrEmpty(s)) return eCodecCallStatus.Unknown;
-                return (eCodecCallStatus)Enum.Parse(typeof(eCodecCallStatus), s, true);
+                if (String.IsNullOrEmpty(stringToProcess)) return eCodecCallStatus.Unknown;
+                return (eCodecCallStatus)Enum.Parse(typeof(eCodecCallStatus), stringToProcess, true);
             }
             catch (Exception ex)
             {
-                Debug.Console(0, this, "Unable to Parse Enum String : {0}", ex.Message);
+                Debug.Console(0, this, "Unable to Parse Enum String: {0} | {1}", stringToProcess, ex.Message);
                 return eCodecCallStatus.Unknown;
             }
         }
