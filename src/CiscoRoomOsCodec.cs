@@ -661,7 +661,7 @@ namespace epi_videoCodec_ciscoExtended
             _phonebookInitialSearch = true;
             CurrentLayout = string.Empty;
             _receiveQueue = new GenericQueue(Key + "-queue", 500); 
-            WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
+            WebexPinRequestHandler = new WebexPinRequestHandler(this, comm);
             DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
             UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
 
