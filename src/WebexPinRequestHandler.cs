@@ -230,6 +230,7 @@ namespace epi_videoCodec_ciscoExtended
                 if (!String.IsNullOrEmpty(role) && role == "Guest")
                 {
                     JoinedAsGuest.Start();
+                    JoinedAsAttendee.Start();
                     _pin = string.Empty;
                     Debug.Console(1, _parent, "Joined as {0}", role);
                     return;
@@ -242,16 +243,6 @@ namespace epi_videoCodec_ciscoExtended
                     Debug.Console(1, _parent, "Joined as {0}", role);
                     return;
                 }
-
-
-                if (!String.IsNullOrEmpty(role) && role == "Attendee")
-                {
-                    JoinedAsAttendee.Start();
-                    _pin = string.Empty;
-                    Debug.Console(1, _parent, "Joined as {0}", role);
-                    return;
-                }
-
 
                 if (!String.IsNullOrEmpty(role) && role == "Panelist")
                 {
@@ -279,13 +270,6 @@ namespace epi_videoCodec_ciscoExtended
             _coms.SendText(command);
         }
 
-        public void JoinAsAttendee()
-        {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Attendee{1}\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance, String.IsNullOrEmpty(_pin) ? String.Empty : String.Format(" Pin: {0}#", _pin));
-            _coms.SendText(command);
-        }
-
         public void JoinAsHost()
         {
             const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#\x0D\x0A";
@@ -307,7 +291,7 @@ namespace epi_videoCodec_ciscoExtended
             trilist.SetSigTrueAction(joinMap.WebexJoinAsHost.JoinNumber, JoinAsHost);
             trilist.SetSigTrueAction(joinMap.WebexJoinAsGuest.JoinNumber, JoinAsGuest);
             trilist.SetSigTrueAction(joinMap.WebexJoinAsPanelist.JoinNumber, JoinAsPanelist);
-            trilist.SetSigTrueAction(joinMap.WebexJoinedAsAttendee.JoinNumber, JoinAsAttendee);
+            trilist.SetSigTrueAction(joinMap.WebexJoinAsAttendee.JoinNumber, JoinAsGuest);
 
             JoinedAsGuest.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsGuest.JoinNumber]);
             JoinedAsHost.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsHost.JoinNumber]);
