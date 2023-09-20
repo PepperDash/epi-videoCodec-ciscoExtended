@@ -559,6 +559,20 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("WebexJoinAsAttendee")]
+        public JoinDataComplete WebexJoinAsAttendee = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 317,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "WebexJoinAsAttendee",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
         [JoinName("WebexPinClear")]
         public JoinDataComplete WebexPinClear = new JoinDataComplete(
             new JoinData
