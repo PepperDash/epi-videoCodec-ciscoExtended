@@ -187,6 +187,8 @@ namespace epi_videoCodec_ciscoExtended
                 if (authRequest.AuthenticationRequest.Value == null)
                     throw new NullReferenceException("AuthenticationRequest.Value");
 
+                Debug.Console(1, _parent, "Parsing Auth Request object: {0}", JsonConvert.SerializeObject(authRequest));
+
                 _currentRequestType =
                     (AuthRequestedTypeEnum)
                     Enum.Parse(typeof (AuthRequestedTypeEnum), authRequest.AuthenticationRequest.Value, true);
@@ -221,6 +223,18 @@ namespace epi_videoCodec_ciscoExtended
             if (request.Call == null || request.Call.AuthenticationResponse == null)
                 return;
 
+            Debug.Console(1, _parent, "Parsing Auth Response object: {0}", JsonConvert.SerializeObject(request));
+
+            var pinError = request.Call.AuthenticationResponse.PinError;
+
+            if (pinError != null)
+            {
+                PinIncorrect.Start();
+                _pin = string.Empty;
+                Debug.Console(1, _parent, "Pin error on call instance:{0}", _authRequestedCallInstance);
+                return;
+            }
+
             var pinEntered = request.Call.AuthenticationResponse.PinEntered;
 
             if (pinEntered != null)
@@ -251,15 +265,6 @@ namespace epi_videoCodec_ciscoExtended
                     Debug.Console(1, _parent, "Joined as {0}", role);
                     return;
                 }
-            }
-
-            var pinError = request.Call.AuthenticationResponse.PinError;
-
-            if (pinError != null)
-            {
-                PinIncorrect.Start();
-                _pin = string.Empty;
-                Debug.Console(1, _parent, "Pin error on call instance:{0}", _authRequestedCallInstance);
             }
         }
 
