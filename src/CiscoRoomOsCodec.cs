@@ -6082,8 +6082,7 @@ ConnectorID: {2}"
             var camCount = cameraInfo.Count;
             Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
 
-            // Deal with the case of 1 or no reported cameras
-            if (camCount <= 1)
+            if (camCount == 0)
             {
                 var internalCamera = new CiscoCamera(Key + "-camera1", "Near End", this, 1);
 
@@ -6204,12 +6203,14 @@ ConnectorID: {2}"
 
         public void CodecRoomPresetSelect(int preset)
         {
-            Debug.Console(1, this, "Selecting Preset: {0}", preset);
+            Debug.Console(1, this, "Selecting Preset: {0} for Camera:{1}", preset, SelectedCamera.Key);
             if (SelectedCamera is IAmFarEndCamera)
                 SelectFarEndPreset(preset);
             else
+            {
                 _selectedPreset = preset;
-                
+                CiscoRoomPresetRecall();
+            }
         }
 
         public void CiscoRoomPresetRecall()
