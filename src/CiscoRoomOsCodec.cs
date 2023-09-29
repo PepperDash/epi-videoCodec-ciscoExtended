@@ -2819,7 +2819,7 @@ ConnectorID: {2}"
 			sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
 			sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
 			sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
-            Debug.Console(0, this, sb.ToString());
+            Debug.Console(2, this, sb.ToString());
         }
 
         public eCodecCallType ConvertToTypeEnum(string s)
@@ -2866,10 +2866,10 @@ ConnectorID: {2}"
 
         public bool MergeCallData(CodecActiveCallItem existingCallData, CodecActiveCallItem newCallData)
         {
-            Debug.Console(0, this, "Merging Call Data");
-            Debug.Console(0, this, "Existing : ");
+            Debug.Console(2, this, "Merging Call Data");
+            Debug.Console(2, this, "Existing : ");
             PrintCallItem(existingCallData);
-            Debug.Console(0, this, "New");
+            Debug.Console(2, this, "New");
             PrintCallItem(newCallData);
             bool valueChanged = false;
 
@@ -2879,8 +2879,8 @@ ConnectorID: {2}"
                 valueChanged = true;
             }
 
-            Debug.Console(1, "New Duration : {0}", newCallData.Duration.TotalSeconds);
-            Debug.Console(1, "Old Duration : {0}", existingCallData.Duration.TotalSeconds);
+            Debug.Console(2, "New Duration : {0}", newCallData.Duration.TotalSeconds);
+            Debug.Console(2, "Old Duration : {0}", existingCallData.Duration.TotalSeconds);
             if (existingCallData.Duration != newCallData.Duration &&
                 newCallData.Duration.Seconds != Int32.MaxValue)
             {
