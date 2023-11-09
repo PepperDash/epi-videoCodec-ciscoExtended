@@ -72,6 +72,8 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("joinableCooldownSeconds")]
         public int JoinableCooldownSeconds { get; set; }
 
+        [JsonProperty("endAllCallsOnMeetingJoin")]
+        public bool EndAllCallsOnMeetingJoin { get; set; }
 
         /// <summary>
         /// These are key-value pairs, uint id, string type
