@@ -8,6 +8,10 @@ namespace epi_videoCodec_ciscoExtended
 {
     public class CiscoCodecConfig
     {
+        public string Username { get; set; }
+
+        public string Password { get; set; }
+
         [JsonProperty("communicationMonitorProperties")]
         public CommunicationMonitorConfig CommunicationMonitorProperties { get; set; }
 
