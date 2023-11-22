@@ -160,6 +160,11 @@ Provided under MIT license
 | 801         | 50        | Toggles the participant's video mute status                                                                         | Digital       | ToSIMPL      |
 | 1101        | 50        | Toggles the participant's pin status                                                                                | Digital       | ToSIMPL      |
 
+> Note: Using the Camera Mode Auto/Manual/Off joins (131-133) to control the tracking mode relies on the tracking capabilities reported from the codec.<br>
+> If only SpeakerTrack is available, setting the camera mode to auto will turn on SpeakerTrack.<br>
+> If only PresenterTrack is available, setting the camera mode to auto will turn on PresenterTrack.<br>
+> If both are available, setting the camera mode to auto will turn on the preferred mode set using the `defaultTrackingMode` configuration value<br>
+
 ## Analogs
 
 | Join Number | Join Span | Description                                                                                    | Type   | Capabilities |
