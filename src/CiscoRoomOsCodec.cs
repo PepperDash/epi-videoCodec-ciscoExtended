@@ -793,7 +793,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r";
+                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r" + "xstatus volume\r" + "xstatus call\r";
 
                 CommunicationMonitor = new GenericCommunicationMonitor(this, Communication, 90000, 120000, 300000,
                     pollString);
@@ -1339,6 +1339,11 @@ namespace epi_videoCodec_ciscoExtended
             EnqueueCommand("xStatus Cameras PresenterTrack");
         }
 
+        public void PollStatus()
+        {
+            EnqueueCommand("xStatus Call");
+            EnqueueCommand("xStatus Volume");
+        }
 
 
         /// <summary>

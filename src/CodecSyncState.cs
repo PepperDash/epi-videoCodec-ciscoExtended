@@ -31,6 +31,7 @@ namespace epi_videoCodec_ciscoExtended
                     if (handler != null)
                         handler(this, new EventArgs());
 
+                    _parent.PollStatus();
                     _parent.PollSpeakerTrack();
                     _parent.PollPresenterTrack();
                 }
