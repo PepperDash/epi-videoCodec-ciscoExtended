@@ -4762,9 +4762,9 @@ ConnectorID: {2}"
         /// <param name="directory"></param>
         private void PrintDirectory(CodecDirectory directory)
         {
-            Debug.Console(0, this, "Attempting to Print Directory");
+            Debug.Console(1, this, "Attempting to Print Directory");
             if (directory == null) return;
-            Debug.Console(0, this, "Directory Results:\n");
+            Debug.Console(1, this, "Directory Results:\n");
 
             foreach (var item in directory.CurrentDirectoryResults)
             {
