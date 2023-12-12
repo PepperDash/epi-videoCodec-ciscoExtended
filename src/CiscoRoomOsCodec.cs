@@ -3742,11 +3742,14 @@ ConnectorID: {2}"
         {
             try
             {
-                return obj["ResultId"].ToString();
+                JToken result;
+                return obj.TryGetValue("ResultId", out result)
+                    ? result.Value<string>()
+                    : string.Empty;
             }
             catch (Exception ex)
             {
-                return Guid.Empty.ToString();
+                return string.Empty;
             }
         }
 
