@@ -3347,7 +3347,8 @@ ConnectorID: {2}"
             if (!_syncState.InitialConfigurationMessageWasReceived)
             {
                 Debug.Console(0, this, "Sending Configuration");
-                SendText("xConfiguration");
+                SendText("xConfiguration conference");
+                SendText("xConfiguration h323");
             }
             if (_syncState.FeedbackWasRegistered) return;
             Debug.Console(0, this, "Sending Feedback");
@@ -3449,6 +3450,7 @@ ConnectorID: {2}"
                 } 
                 if (_syncState.InitialConfigurationMessageWasReceived) return;
                 Debug.Console(2, this, "InitialConfig Received");
+
                 _syncState.InitialConfigurationMessageReceived();
                 if (!_syncState.InitialSoftwareVersionMessageWasReceived)
                 {
@@ -3551,8 +3553,7 @@ ConnectorID: {2}"
             }
             catch (Exception ex)
             {
-
-                Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex.Message);
+                Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex);
                 if (ex.InnerException == null) return;
                 Debug.Console(0, this, "Inner Exception in ParsePhonebookNumberOfContacts : {0}", ex.InnerException.Message);
             }
@@ -4416,8 +4417,7 @@ ConnectorID: {2}"
 
                 if (ex is JsonReaderException)
                 {
-                    Debug.Console(1, this, "Received malformed response from codec.");
-
+                    Debug.Console(1, this, "Received malformed response from codec:{0}", response);
                     //Communication.Disconnect();
 
                     //Initialize();
