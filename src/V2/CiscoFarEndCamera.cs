@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using PepperDash.Essentials.Devices.Common.Cameras;
 
-namespace PDT.Plugins.Cisco.RoomOs.V2
+namespace epi_videoCodec_ciscoExtended.V2
 {
-    internal class CiscoFarEndCamera : CameraBase, IHasCameraPtzControl, IAmFarEndCamera
+    internal class CiscoFarEndCamera : CameraBase, IHasCameraPtzControl, IAmFarEndCamera, IHasCameraPresets
     {
         private readonly CiscoRoomOsDevice parent;
 
@@ -11,56 +12,100 @@ namespace PDT.Plugins.Cisco.RoomOs.V2
             : base(key, name)
         {
             this.parent = parent;
+            Presets = new List<CameraPreset>();
         }
 
         public void PanLeft()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: Left CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void PanRight()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: Right CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void PanStop()
         {
-            throw new NotImplementedException();
-        }
-
-        public void TiltDown()
-        {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void TiltUp()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: Up CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
+        }
+
+        public void TiltDown()
+        {
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: Down CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void TiltStop()
         {
-            throw new NotImplementedException();
+            //"xCommand Call FarEndControl Camera Stop CallId: {0}"
+            var command = string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void ZoomIn()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: ZoomIn CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void ZoomOut()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Move Value: ZoomOut CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void ZoomStop()
         {
-            throw new NotImplementedException();
+            var command = string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", parent.CallStatus.GetActiveCallId());
+            parent.SendText(command);
         }
 
         public void PositionHome()
         {
-            throw new NotImplementedException();
+
         }
+
+        public void PresetSelect(int preset)
+        {
+            if (preset == 0)
+                return;
+
+            // xCommand Call FarEndControl RoomPreset Activate CallId: value ParticipantId: value PresetId: value
+            var activeCall = parent.CallStatus.GetActiveCallId();
+
+            var command =
+                string.Format(
+                    "xCommand Call FarEndControl RoomPreset Activate CallId: {0} PresetId: {1}", activeCall, preset);
+
+            parent.SendText(command);
+        }
+
+        public void PresetStore(int preset, string description)
+        {
+            if (preset == 0)
+                return;
+
+            // xCommand Call FarEndControl RoomPreset Activate CallId: value ParticipantId: value PresetId: value
+            var activeCall = parent.CallStatus.GetActiveCallId();
+
+            var command =
+                string.Format(
+                    "xCommand Call FarEndControl RoomPreset Store CallId: {0} PresetId: {1}", activeCall, preset);
+
+            parent.SendText(command);
+        }
+
+        public List<CameraPreset> Presets { get; private set; }
+        public event EventHandler<EventArgs> PresetsListHasChanged;
     }
 }

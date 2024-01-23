@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using PDT.Plugins.Cisco.RoomOs.V2;
+using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Core.Intersystem.Tokens;
 using PepperDash.Essentials.Core;
@@ -14,25 +14,20 @@ using PepperDash.Essentials.Devices.Common.VideoCodec;
 
 namespace epi_videoCodec_ciscoExtended.V2
 {
-    public class CiscoCallStatusJoinMap : JoinMapBaseAdvanced
-    {
-
-
-        public CiscoCallStatusJoinMap(uint joinStart)
-            : base(joinStart, typeof(CiscoCallStatusJoinMap))
-        {
-        }
-    }
-    public class CiscoCallStatus : CiscoRoomOsFeature, IJoinCalls, IHasCallHold, IHasDialer
+    public class CiscoCallStatus : CiscoRoomOsFeature, IJoinCalls, IHasCallHold, IHasDialer, IHasPolls,
+        IHasEventSubscriptions, IHandlesResponses
     {
         private readonly CCriticalSection activeCallItemsSync = new CCriticalSection();
 
-        private readonly IDictionary<string, CodecActiveCallItem> activeCallItems =
-            new Dictionary<string, CodecActiveCallItem>();
+        private readonly IDictionary<string, CodecActiveCallItem> activeCallItems;
 
         private readonly CiscoRoomOsDevice parent;
+        public readonly StringFeedback CallStatusXSig;
 
-        private StringFeedback callStatusXsig;
+        public IEnumerable<CodecActiveCallItem> ActiveCalls
+        {
+            get { return activeCallItems.Values.ToList(); }
+        }
 
         private static readonly List<string> PollStrings = new List<string>
         {
@@ -41,32 +36,68 @@ namespace epi_videoCodec_ciscoExtended.V2
 
         private static readonly List<string> EventSubscriptions = new List<string>
         {
-            "/Status/Call"
+            "Status/Call"
         };
 
         public CiscoCallStatus(CiscoRoomOsDevice parent)
             : base(parent.Key + "-calls")
         {
             this.parent = parent;
-            callStatusXsig = new StringFeedback(UpdateCallStatusXSig);
+            activeCallItems = new Dictionary<string, CodecActiveCallItem>();
+
+            CallStatusXSig = new StringFeedback(UpdateCallStatusXSig);
+            NumberOfActiveCalls = new IntFeedback("NumberOfCalls", () => activeCallItems.Count);
+            CallIsConnectedOrConnecting = new BoolFeedback("CallIsConnected/Connecting", () => activeCallItems.Any());
+            CallIsIncoming = new BoolFeedback("CallIncoming", () => activeCallItems.Any(item => item.Value.Direction == eCodecCallDirection.Incoming));
+            IncomingCallName = new StringFeedback("IncomingCallName", () =>
+            {
+                var incoming =
+                    activeCallItems.Values.FirstOrDefault(item => item.Direction == eCodecCallDirection.Incoming);
+
+                return incoming == null ? string.Empty : incoming.Name;
+            });
+
+            IncomingCallNumber = new StringFeedback("IncomingCallNumber", () =>
+            {
+                var incoming =
+                    activeCallItems.Values.FirstOrDefault(item => item.Direction == eCodecCallDirection.Incoming);
+
+                return incoming == null ? string.Empty : incoming.Number;
+            });
+
+            CallIsIncoming.RegisterForDebug(parent);
+            NumberOfActiveCalls.RegisterForDebug(parent);
+            CallIsConnectedOrConnecting.RegisterForDebug(parent);
+            IncomingCallName.RegisterForDebug(parent);
+            IncomingCallNumber.RegisterForDebug(parent);
+
+            CallStatusChange +=
+                (sender, args) =>
+                    Debug.Console(1, parent, "Call Status Change:{0} {1}", args.CallItem.Name, args.CallItem.Status);
         }
 
-        public override IEnumerable<string> Polls
+        public readonly BoolFeedback CallIsIncoming;
+        public readonly IntFeedback NumberOfActiveCalls;
+        public readonly BoolFeedback CallIsConnectedOrConnecting;
+        public readonly StringFeedback IncomingCallName;
+        public readonly StringFeedback IncomingCallNumber;
+
+        public IEnumerable<string> Polls
         {
             get { return PollStrings; }
         }
 
-        public override IEnumerable<string> Subscriptions
+        public IEnumerable<string> Subscriptions
         {
             get { return EventSubscriptions; }
         }
 
-        public override bool HandlesResponse(string response)
+        public bool HandlesResponse(string response)
         {
             return response.IndexOf("*s Call", StringComparison.Ordinal) > -1;
         }
 
-        public override void HandleResponse(string response)
+        public void HandleResponse(string response)
         {
             const string pattern = @"\*s Call (\d+) (\w+ ?\w*): (.*)";
             const string ghostPattern = @"\*s Call (\d+) \(ghost=(True|False)\):";
@@ -104,7 +135,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                     if (match.Success)
                     {
                         var callId = match.Groups[1].Value;
-                        var property = match.Groups[2].Value;
+                        var property = match.Groups[2].Value.Trim(new []{ ' ', '\"' });
                         var value = match.Groups[3].Value;
 
                         CodecActiveCallItem activeCall;
@@ -119,31 +150,40 @@ namespace epi_videoCodec_ciscoExtended.V2
                             activeCallItems.Add(callId, activeCall);
                         }
 
-                        switch (property)
-                        { 
-                            case "DisplayName":
-                                activeCallItems[callId].Name = value;
-                                break;
-                            case "RemoteNumber":
-                                activeCallItems[callId].Number = value;
-                                break;
-                            case "CallType":
-                                activeCallItems[callId].Type =
-                                    (eCodecCallType)Enum.Parse(typeof(eCodecCallType), value, true);
-                                break;
-                            case "Status":
-                                activeCallItems[callId].Status = 
-                                    value == "Dialling" 
-                                    ? eCodecCallStatus.Dialing
-                                    : (eCodecCallStatus)Enum.Parse(typeof (eCodecCallStatus), value, true);
-                                break;
-                            case "Direction":
-                                activeCallItems[callId].Direction =
-                                    (eCodecCallDirection)Enum.Parse(typeof(eCodecCallDirection), value, true);
-                                break;
-                            case "PlacedOnHold":
-                                activeCallItems[callId].IsOnHold = bool.Parse(value);
-                                break;
+                        try
+                        {
+                            switch (property)
+                            {
+                                case "DisplayName":
+                                    activeCallItems[callId].Name = value;
+                                    break;
+                                case "RemoteNumber":
+                                    activeCallItems[callId].Number = value;
+                                    break;
+                                case "CallType":
+                                    activeCallItems[callId].Type =
+                                        (eCodecCallType) Enum.Parse(typeof (eCodecCallType), value, true);
+                                    break;
+                                case "Status":
+                                    activeCallItems[callId].Status =
+                                        value == "Dialling"
+                                            ? eCodecCallStatus.Dialing
+                                            : (eCodecCallStatus) Enum.Parse(typeof (eCodecCallStatus), value, true);
+                                    break;
+                                case "Direction":
+                                    activeCallItems[callId].Direction =
+                                        (eCodecCallDirection) Enum.Parse(typeof (eCodecCallDirection), value, true);
+                                    break;
+                                case "PlacedOnHold":
+                                    activeCallItems[callId].IsOnHold = bool.Parse(value);
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.Console(0, this, "Failed parsing the call status:{0}", ex);
                         }
 
                         if (!changedCallItems.ContainsKey(callId))
@@ -152,42 +192,100 @@ namespace epi_videoCodec_ciscoExtended.V2
                         }
                     }
                 }
-
-                callStatusXsig.FireUpdate();
             }
             finally
             {
                 activeCallItemsSync.Leave();
             }
 
+            CallIsIncoming.FireUpdate();
+            CallIsConnectedOrConnecting.FireUpdate();
+            NumberOfActiveCalls.FireUpdate();
+            IncomingCallName.FireUpdate();
+            IncomingCallNumber.FireUpdate();
+            CallStatusXSig.FireUpdate();
+
             var handler = CallStatusChange;
-            if (handler != null)
+            if (handler == null) return;
+
+            foreach (var callItem in changedCallItems.Values)
             {
-                foreach (var callItem in changedCallItems.Values)
-                {  
-                    handler(parent, new CodecCallStatusItemChangeEventArgs(callItem));
-                }
+                handler(parent, new CodecCallStatusItemChangeEventArgs(callItem));
             }
         }
 
         public void JoinCall(CodecActiveCallItem activeCall)
         {
-            throw new NotImplementedException();
+            var command = "xCommand Call Join CallId:" + activeCall.Id;
+
+            var ids = activeCallItems
+                .Values
+                .Aggregate(new StringBuilder(), (builder, item) =>
+            {
+                if (item.IsActiveCall)
+                    builder.Append(" CallId:{0}" + item.Id);
+
+                return builder;
+            });
+
+            parent.SendText(command + ids);
         }
 
         public void JoinAllCalls()
         {
-            throw new NotImplementedException();
+            var ids = new StringBuilder();
+
+            foreach (var call in activeCallItems.Values)
+            {
+                ids.Append(string.Format(" CallId:{0}", call.Id));
+            }
+
+            if (ids.Length <= 0) return;
+
+            var command = "xCommand Call Join" + ids;
+            parent.SendText(command);
         }
 
         public void HoldCall(CodecActiveCallItem activeCall)
         {
-            throw new NotImplementedException();
+            var command = "xCommand Call Hold CallId: " + activeCall.Id;
+            parent.SendText(command);
+        }
+
+        public void HoldAllCalls()
+        {
+            var ids = new StringBuilder();
+
+            foreach (var call in activeCallItems.Values)
+            {
+                ids.Append(string.Format(" CallId:{0}", call.Id));
+            }
+
+            if (ids.Length <= 0) return;
+
+            var command = "xCommand Call Hold" + ids;
+            parent.SendText(command);
         }
 
         public void ResumeCall(CodecActiveCallItem activeCall)
         {
-            throw new NotImplementedException();
+            var command = "xCommand Call Resume CallId: " + activeCall.Id;
+            parent.SendText(command);
+        }
+
+        public void ResumeAllCalls()
+        {
+            var ids = new StringBuilder();
+
+            foreach (var call in activeCallItems.Values)
+            {
+                ids.Append(string.Format(" CallId:{0}", call.Id));
+            }
+
+            if (ids.Length <= 0) return;
+
+            var command = "xCommand Call Resume" + ids;
+            parent.SendText(command);
         }
 
         private string UpdateCallStatusXSig()
@@ -197,14 +295,14 @@ namespace epi_videoCodec_ciscoExtended.V2
             const int maxDigitals = 2;
             const int offset = maxStrings + maxDigitals;
             var stringIndex = 0;
-            var digitalIndex = maxStrings * maxCalls;
+            var digitalIndex = maxStrings*maxCalls;
             var arrayIndex = 0;
 
-            var tokenArray = new XSigToken[maxCalls * offset]; //set array size for number of calls * pieces of info
+            var tokenArray = new XSigToken[maxCalls*offset]; //set array size for number of calls * pieces of info
 
             foreach (var call in activeCallItems.Values)
             {
-                if (arrayIndex >= maxCalls * offset)
+                if (arrayIndex >= maxCalls*offset)
                     break;
 
                 //digitals
@@ -226,7 +324,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 digitalIndex += maxDigitals;
             }
 
-            while (arrayIndex < maxCalls * offset)
+            while (arrayIndex < maxCalls*offset)
             {
                 //digitals
                 tokenArray[digitalIndex] = new XSigDigitalToken(digitalIndex + 1, false);
@@ -253,7 +351,7 @@ namespace epi_videoCodec_ciscoExtended.V2
         private static string GetXSigString(XSigToken[] tokenArray)
         {
             using (var s = new MemoryStream())
-            using (var tw = new XSigTokenStreamWriter(s, true))
+            using (var tw = new XSigTokenStreamWriter(s, false))
             {
                 tw.WriteXSigData(tokenArray);
                 var xSig = s.ToArray();
@@ -263,32 +361,61 @@ namespace epi_videoCodec_ciscoExtended.V2
 
         public void Dial(string number)
         {
-            throw new NotImplementedException();
+            const string format = "xCommand Dial Number: \"{0}\"";
+            var command = string.Format(format, number);
+            parent.SendText(command);
         }
 
         public void EndCall(CodecActiveCallItem activeCall)
         {
-            throw new NotImplementedException();
+            var command = "xCommand Call Disconnect CallId: " + activeCall.Id;
+            parent.SendText(command);
         }
 
         public void EndAllCalls()
         {
-            throw new NotImplementedException();
+            foreach (var callItem in activeCallItems.Values)
+            {
+                EndCall(callItem);
+            }
         }
 
         public void AcceptCall(CodecActiveCallItem item)
         {
-            throw new NotImplementedException();
+            parent.SendText("xCommand Call Accept CallId: " + item.Id);
+        }
+
+        public void AcceptCall()
+        {
+            parent.SendText("xCommand Call Accept");
         }
 
         public void RejectCall(CodecActiveCallItem item)
         {
-            throw new NotImplementedException();
+            parent.SendText("xCommand Call Reject CallId:" + item.Id);
+        }
+
+        public void RejectCall()
+        {
+            parent.SendText("xCommand Call Reject");
         }
 
         public void SendDtmf(string digit)
         {
-            throw new NotImplementedException();
+            var activeCall = GetActiveCallId();
+            const string format = "xCommand Call DTMFSend CallId: {0} DTMFString: \"{1}\"";
+            var command = string.Format(format, activeCall, digit);
+            parent.SendText(command);
+        }
+
+        public string GetActiveCallId()
+        {
+            var calls = ActiveCalls.ToList();
+            if (calls.Count <= 1) 
+                return calls.Count == 1 ? calls[0].Id : string.Empty;
+
+            var lastCallIndex = calls.Count - 1;
+            return calls[lastCallIndex].Id;
         }
 
         public bool IsInCall

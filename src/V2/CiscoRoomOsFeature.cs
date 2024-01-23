@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using PepperDash.Core;
 
-namespace PDT.Plugins.Cisco.RoomOs.V2
+namespace epi_videoCodec_ciscoExtended.V2
 {
     public abstract class CiscoRoomOsFeature : IKeyed
     {
@@ -10,10 +10,22 @@ namespace PDT.Plugins.Cisco.RoomOs.V2
             Key = key;
         }
 
-        public abstract IEnumerable<string> Polls { get; }
-        public abstract IEnumerable<string> Subscriptions { get; }
         public string Key { get; private set; }
-        public abstract bool HandlesResponse(string response);
-        public abstract void HandleResponse(string response);
+    }
+
+    public interface IHasPolls : IKeyed
+    {
+        IEnumerable<string> Polls { get; }
+    }
+
+    public interface IHasEventSubscriptions : IKeyed
+    {
+        IEnumerable<string> Subscriptions { get; }
+    }
+
+    public interface IHandlesResponses : IKeyed
+    {
+        bool HandlesResponse(string response);
+        void HandleResponse(string response);
     }
 }

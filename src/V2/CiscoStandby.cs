@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using PDT.Plugins.Cisco.RoomOs.V2;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 
 namespace epi_videoCodec_ciscoExtended.V2
 {
-    public class CiscoStandby : CiscoRoomOsFeature, IHasHalfWakeMode
+    public class CiscoStandby : CiscoRoomOsFeature, IHasHalfWakeMode, IHasPolls, IHasEventSubscriptions, IHandlesResponses 
     {
         private string standbyState;
         private readonly CiscoRoomOsDevice parent;
@@ -28,27 +27,31 @@ namespace epi_videoCodec_ciscoExtended.V2
         {
             this.parent = parent;
 
-            StandbyIsOnFeedback = new BoolFeedback(() => standbyState != null && standbyState != "Off");
-            HalfWakeModeIsOnFeedback = new BoolFeedback(() => standbyState == "Halfwake");
-            EnteringStandbyModeFeedback = new BoolFeedback(() => standbyState == "EnteringStandby");
+            StandbyIsOnFeedback = new BoolFeedback("Standby", () => standbyState != null && standbyState != "Off");
+            HalfWakeModeIsOnFeedback = new BoolFeedback("HalfWake", () => standbyState == "Halfwake");
+            EnteringStandbyModeFeedback = new BoolFeedback("Entering Standby", () => standbyState == "EnteringStandby");
+
+            StandbyIsOnFeedback.RegisterForDebug(parent);
+            HalfWakeModeIsOnFeedback.RegisterForDebug(parent);
+            EnteringStandbyModeFeedback.RegisterForDebug(parent);
         }
 
-        public override IEnumerable<string> Polls
+        public IEnumerable<string> Polls
         {
             get { return PollStrings; }
         }
 
-        public override IEnumerable<string> Subscriptions
+        public IEnumerable<string> Subscriptions
         {
             get { return EventSubscriptions; }
         }
 
-        public override bool HandlesResponse(string response)
+        public bool HandlesResponse(string response)
         {
             return response.StartsWith("*s Standby State");
         }
 
-        public override void HandleResponse(string response)
+        public void HandleResponse(string response)
         {
             const string pattern = @"Standby State:\s*(?<state>\w+)";
             var match = Regex.Match(response, pattern);
@@ -60,8 +63,6 @@ namespace epi_videoCodec_ciscoExtended.V2
                 StandbyIsOnFeedback.FireUpdate();
                 HalfWakeModeIsOnFeedback.FireUpdate();
                 EnteringStandbyModeFeedback.FireUpdate();
-
-                Debug.Console(1, this, "Standby State:{0}", standbyState);
             }
         }
 
