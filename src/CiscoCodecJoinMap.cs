@@ -519,6 +519,66 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("SpeakerTrackGroupDeactivate")]
+        public JoinDataComplete SpeakerTrackGroupDeactivate = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 451,
+                JoinSpan = 1,
+            },
+            new JoinMetadata
+            {
+                Description = "Deactivate SpeakerTrack Group mode",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            }
+            );
+
+        [JoinName("SpeakerTrackGroupActivate")]
+        public JoinDataComplete SpeakerTrackGroupActivate = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 452,
+                JoinSpan = 1,
+            },
+            new JoinMetadata
+            {
+                Description = "Activate SpeakerTrack Group mode.",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            }
+            );
+
+        [JoinName("SpeakerTrackFramesDeactivate")]
+        public JoinDataComplete SpeakerTrackFramesDeactivate = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 453,
+                JoinSpan = 1,
+            },
+            new JoinMetadata
+            {
+                Description = "Deactivate SpeakerTrack Frames mode",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            }
+            );
+
+        [JoinName("SpeakerTrackFramesActivate")]
+        public JoinDataComplete SpeakerTrackFramesActivate = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 454,
+                JoinSpan = 1,
+            },
+            new JoinMetadata
+            {
+                Description = "Activate SpeakerTrack Frames mode.",
+                JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                JoinType = eJoinType.Digital
+            }
+            );
+
         #endregion
 
 

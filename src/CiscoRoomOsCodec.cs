@@ -5339,6 +5339,11 @@ ConnectorID: {2}"
                 }
             });
 
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackFramesActivate.JoinNumber, SpeakerTrackFramesOn);
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackFramesDeactivate.JoinNumber, SpeakerTrackFramesOff);
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackGroupActivate.JoinNumber, SpeakerTrackGroupOn);
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackGroupDeactivate.JoinNumber, SpeakerTrackGroupOff);
+
 
             DirectorySearchInProgress.LinkInputSig(trilist.BooleanInput[joinMap.DirectorySearchBusy.JoinNumber]);
             PresentationActiveFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationActive.JoinNumber]);
@@ -5829,6 +5834,8 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
+            EnqueueCommand("xCommand Cameras SpeakerTrack Closeup Activate");
+            EnqueueCommand("xCommand Cameras SpeakerTrack Frames Deactivate");
             EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
         }
 
@@ -5841,6 +5848,49 @@ ConnectorID: {2}"
 
             EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
 
+        }
+
+        public void SpeakerTrackGroupOn()
+        {
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras SpeakerTrack Closeup Deactivate");
+            EnqueueCommand("xCommand Cameras SpeakerTrack Frames Deactivate");
+            EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
+        }
+
+        public void SpeakerTrackGroupOff()
+        {
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+            
+            EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
+        }
+
+        public void SpeakerTrackFramesOn()
+        {
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+            
+            EnqueueCommand("xCommand Cameras SpeakerTrack Frames Activate");
+            EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
+        }
+
+        public void SpeakerTrackFramesOff()
+        {
+            if (CameraIsOffFeedback.BoolValue)
+            {
+                CameraMuteOff();
+            }
+
+            EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
         }
 
 
@@ -5874,6 +5924,7 @@ ConnectorID: {2}"
                 CameraMuteOff();
             }
 
+            EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
             EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Follow");
         }
 
