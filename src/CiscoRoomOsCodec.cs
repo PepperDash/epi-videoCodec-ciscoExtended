@@ -6170,7 +6170,7 @@ ConnectorID: {2}"
             else
             {
                 _selectedPreset = preset;
-                CiscoRoomPresetRecall();
+                // CiscoRoomPresetRecall();
             }
         }
 
