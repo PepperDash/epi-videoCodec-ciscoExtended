@@ -66,7 +66,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 
             Polls = new List<string>
             {
-                "xStatus Conference Presentation",    
+                "xStatus Conference Presentation",          
                 "xConfiguration Video Presentation DefaultSource"                
             };
 
@@ -74,7 +74,8 @@ namespace epi_videoCodec_ciscoExtended.V2
             {
                 //"Event/PresentationStarted",
                 //"Event/PresentationStopped",
-                "Status/Conference/Presentation",             
+                "Status/Conference/Presentation",
+                "Status/Video/Input/Connector/Connected",  
             };
 
             SharingContentIsOnFeedback = new BoolFeedback("SharingActive", () => presentations.Any());
@@ -85,6 +86,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                     ? firstPresentation.LocalSource
                     : "None";
             });
+
             ReceivingContent = new BoolFeedback("IsReceivingContent", () => isReceivingContent);
 
             SharingSourceIntFeedback = new IntFeedback(() =>
@@ -208,11 +210,15 @@ namespace epi_videoCodec_ciscoExtended.V2
 
             if (string.IsNullOrEmpty(shareSourceId))
             {
+                Debug.Console(1, parent, "Sharing default source as no sourceId is selected");
+
                 command = string.Format("xCommand Presentation Start SendingMode: {0}",
                     defaultToLocalOnly ? "LocalOnly" : "LocalRemote");
             }
             else
             {
+                Debug.Console(1, parent, "Sharing source:{0}", shareSourceId);
+
                 command = string.Format("xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
                     shareSourceId, defaultToLocalOnly ? "LocalOnly" : "LocalRemote");
             }
