@@ -1744,6 +1744,7 @@ ConnectorID: {2}"
                             SendText("xStatus");
                             SendText("xStatus SIP");
                             SendText("xStatus Call");
+                            CodecPollLayouts();
                         }
                     }
                     else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -1898,6 +1899,8 @@ ConnectorID: {2}"
 
         private void ClearLayouts()
         {
+            if (EnhancedLayouts)
+                return;
 
             var nullLayout = new CiscoCodecStatus.CurrentLayouts()
             {
@@ -1914,8 +1917,6 @@ ConnectorID: {2}"
             LocalLayoutFeedback.FireUpdate();
             OnAvailableLayoutsChanged(new List<CodecCommandWithLabel>());
             OnCurrentLayoutChanged(String.Empty);
-
-
         }
 
         private void RegisterSystemUnitEvents()
@@ -2451,13 +2452,14 @@ ConnectorID: {2}"
 
         private void ParseLayoutToken(JToken layoutToken)
         {
+            Debug.Console(1, this, "Parsing Layout Token");
             //if ((_presentationLocalOnly || _presentationSource == 0) && (_incomingPresentation == IncomingPresentationStatus.False)) return;
             if (!_IsInPresentation)
             {
-                ClearLayouts();
-                return;
+                // ClearLayouts();
+                // return;
             }
-            Debug.Console(1, this, "Parsing Layout Token");
+
             if (String.IsNullOrEmpty(layoutToken.ToString())) return;
             UpdateCurrentLayout(layoutToken.SelectToken("ActiveLayout.Value"));
             UpdateLayoutList(layoutToken.SelectToken("AvailableLayouts"));
@@ -6175,7 +6177,7 @@ ConnectorID: {2}"
             else
             {
                 _selectedPreset = preset;
-                CiscoRoomPresetRecall();
+                // CiscoRoomPresetRecall();
             }
         }
 
