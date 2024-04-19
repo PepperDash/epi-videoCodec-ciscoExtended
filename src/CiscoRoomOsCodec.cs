@@ -1626,10 +1626,12 @@ ConnectorID: {2}"
             if (_registrationCheckTimer == null)
             {
                 _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
+                Debug.Console(2, this, "xFeedback List Timer was null.  Created New");
             }
             else
             {
-                _registrationCheckTimer.Reset();
+                _registrationCheckTimer.Reset(90000, 90000);
+                Debug.Console(2, this, "xFeedback List Timer existed.  Reset with same times");
             }
         }
 
