@@ -1595,24 +1595,42 @@ ConnectorID: {2}"
 
             GetCallHistory();
 
-            PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+            if (PhonebookRefreshTimer == null)
+            {
+                PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+            }
+            else
+            {
+                PhonebookRefreshTimer.Reset();
+            }
+
+            
             // check each hour to see if the phonebook should be downloaded
             GetPhonebook(null);
 
-            BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+            if (BookingsRefreshTimer == null)
+            {
+                BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+            }
+            else
+            {
+                BookingsRefreshTimer.Reset();
+            }
+            
             // 15 minute timer to check for new booking info
             GetBookings(null);
 
             // Fire the ready event
             SetIsReady();
-            if (_registrationCheckTimer != null)
+
+            if (_registrationCheckTimer == null)
             {
-                _registrationCheckTimer.Stop();
-                _registrationCheckTimer = null;
-
+                _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
             }
-            _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
-
+            else
+            {
+                _registrationCheckTimer.Reset();
+            }
         }
 
         public void SetCommDebug(string s)
