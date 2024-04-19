@@ -906,11 +906,13 @@ namespace epi_videoCodec_ciscoExtended
             {
                 BookingsRefreshTimer.Stop();
                 BookingsRefreshTimer.Dispose();
+                BookingsRefreshTimer = null;
             }
             if (PhonebookRefreshTimer != null)
             {
                 PhonebookRefreshTimer.Stop();
                 PhonebookRefreshTimer.Dispose();
+                PhonebookRefreshTimer = null;
             }
             if (_loginMessageReceivedTimer != null)
             {
@@ -927,6 +929,19 @@ namespace epi_videoCodec_ciscoExtended
                 _scheduleCheckTimer.Stop();
                 _scheduleCheckTimer.Dispose();
             }
+            if (_registrationCheckTimer != null)
+            {
+                _registrationCheckTimer.Stop();
+                _registrationCheckTimer.Dispose();
+                _registrationCheckTimer = null;
+            }
+            if (_brandingTimer != null)
+            {
+                _brandingTimer.Stop();
+                _brandingTimer.Dispose();
+                _brandingTimer = null;
+            }
+            
  
         }
         
