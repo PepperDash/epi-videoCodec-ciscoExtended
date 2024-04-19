@@ -1605,7 +1605,12 @@ ConnectorID: {2}"
 
             // Fire the ready event
             SetIsReady();
+            if (_registrationCheckTimer != null)
+            {
+                _registrationCheckTimer.Stop();
+                _registrationCheckTimer = null;
 
+            }
             _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
 
         }
