@@ -1287,8 +1287,11 @@ namespace epi_videoCodec_ciscoExtended
 
             var mcBridgeKey = String.Format("mobileControlBridge-{0}", roomKey);
 
+#if SERIES4
+            var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomMessenger;
+#else
             var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomBridge;
-
+#endif
             if (!String.IsNullOrEmpty(_brandingUrl))
             {
                 Debug.Console(1, this, "Branding URL found: {0}", _brandingUrl);
@@ -1350,30 +1353,34 @@ namespace epi_videoCodec_ciscoExtended
                     code));
         }
 
-        private void SendMcBrandingUrl(IMobileControlRoomBridge mcBridge)
+#if SERIES4
+        private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
+#else
+        private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
+#endif
         {
-            if (mcBridge == null)
+            if (roomMessenger == null)
             {
                 return;
             }
 
-            Debug.Console(1, this, "Sending url: {0}", mcBridge.QrCodeUrl);
+            Debug.Console(1, this, "Sending url: {0}", roomMessenger.QrCodeUrl);
 
             EnqueueCommand(
                 "xconfiguration userinterface custommessage: \"Scan the QR code with a mobile phone to get started\"");
             EnqueueCommand(
                 "xconfiguration userinterface osd halfwakemessage: \"Tap the touch panel or scan the QR code with a mobile phone to get started\"");
 
-            var checksum = !String.IsNullOrEmpty(mcBridge.QrCodeChecksum)
-                ? String.Format("checksum: {0} ", mcBridge.QrCodeChecksum)
+            var checksum = !String.IsNullOrEmpty(roomMessenger.QrCodeChecksum)
+                ? String.Format("checksum: {0} ", roomMessenger.QrCodeChecksum)
                 : String.Empty;
 
             EnqueueCommand(String.Format(
                 "xcommand userinterface branding fetch {1}type: branding url: {0}",
-                mcBridge.QrCodeUrl, checksum));
+                roomMessenger.QrCodeUrl, checksum));
             EnqueueCommand(String.Format(
                 "xcommand userinterface branding fetch {1}type: halfwakebranding url: {0}",
-                mcBridge.QrCodeUrl, checksum));
+                roomMessenger.QrCodeUrl, checksum));
         }
 
         private void SendBrandingUrl()
