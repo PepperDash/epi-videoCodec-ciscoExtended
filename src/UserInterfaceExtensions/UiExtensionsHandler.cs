@@ -1,5 +1,6 @@
 ﻿using epi_videoCodec_ciscoExtended.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
+using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 
 		public Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
 
-		public event EventHandler<UiExtensionsPanelEventArgs> UiExtensionsPanelClickEvent;
+		public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
 
 		public UiExtensionsHandler(IKeyed parent, IBasicCommunication coms)
 
@@ -37,7 +38,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 		{
 			if (panel.Clicked != null && panel.Clicked.PanelId != null && panel.Clicked.PanelId.Value != null)
 			{
-				UiExtensionsPanelClickEvent?.Invoke(this, new UiExtensionsPanelEventArgs(true, panel.Clicked.PanelId.Value));
+				UiExtensionsClickedEvent?.Invoke(this, new UiExtensionsClickedEventArgs(true, panel.Clicked.PanelId.Value));
 			}
 		}
 	}
