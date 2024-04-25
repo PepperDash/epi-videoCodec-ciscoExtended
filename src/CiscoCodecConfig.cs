@@ -3,6 +3,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
 using Newtonsoft.Json;
+using epi_videoCodec_ciscoExtended.UserInterfaceExtensions;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -87,6 +88,9 @@ namespace epi_videoCodec_ciscoExtended
             CameraInfo = new List<CameraInfo>();
             PhonebookMode = "corporate";
         }
+
+        [JsonProperty("extensions")]
+        public Extensions Extensions { get; set; }
     }
 
     public class SharingProperties
