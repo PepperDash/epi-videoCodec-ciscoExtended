@@ -27,7 +27,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 		public ushort ConfigId { get; set; }
 
 		[XmlElement("Panel")]
-		[JsonProperty("panel")]
+		[JsonProperty("panels")]
 		public List<Panel> Panels { get; set; }
 		//other extensions later
 
