@@ -15,7 +15,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 
 		PanelsHandler PanelsHandler { get; }
 
-		void Initialize(IKeyed parent, IBasicCommunication coms);
+		void Initialize(IKeyed parent, IBasicCommunication coms, Action<string> enqueueCommand);
 
 		string xCommand();
 	}

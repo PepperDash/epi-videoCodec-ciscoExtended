@@ -83,14 +83,14 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("Widgets")]
         public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
-        public CiscoCodecConfig()
+		[JsonProperty("extensions")]
+		public Extensions Extensions { get; set; }
+
+		public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
             PhonebookMode = "corporate";
         }
-
-        [JsonProperty("extensions")]
-        public Extensions Extensions { get; set; }
     }
 
     public class SharingProperties

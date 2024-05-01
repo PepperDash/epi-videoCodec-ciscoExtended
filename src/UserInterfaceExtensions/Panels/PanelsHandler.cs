@@ -15,50 +15,65 @@ using PepperDash.Essentials.Core.Queues;
 namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions.Panels
 {
 
-    public class PanelsHandler: ICiscoCodecUiExtensionsHandler
-    {
-        private readonly IKeyed _parent;
-        private readonly IBasicCommunication _coms;
-        private readonly List<Panel> _panelConfigs;
+	public class PanelsHandler : ICiscoCodecUiExtensionsHandler
+	{
+		private readonly IKeyed _parent;
+		private readonly IBasicCommunication _coms;
+		private readonly List<Panel> _panelConfigs;
+		private Action<string> EnqueueCommand;
 
-        public PanelsHandler(IKeyed parent, IBasicCommunication coms, List<Panel> config)
-        {
-            _parent = parent;
-            _coms = coms;
-            _panelConfigs = config;
-            if (config == null || config.Count == 0)
-            {
-                Debug.LogMessage(
-                    Serilog.Events.LogEventLevel.Information, 
-                    "No Cisco Panels Configured {0}", _parent, config);
-                return;
-            }
-            RegisterFeedback();
-        }
+		public PanelsHandler(IKeyed parent, IBasicCommunication coms, Action<string> enqueueCommand, List<Panel> config)
+		{
+			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "Constructing PanelsHandler", parent);
+			_parent = parent;
+			_coms = coms;
+			_panelConfigs = config;
+			EnqueueCommand = enqueueCommand;
+			if (config == null || config.Count == 0)
+			{
+				Debug.LogMessage(
+					Serilog.Events.LogEventLevel.Information,
+					"No Cisco Panels Configured {0}", _parent, config);
+				return;
+			}
+			RegisterFeedback();
+		}
 
-        public void ParseStatus(CiscoCodecEvents.Panel panel)
-        {
-            var pconfig = _panelConfigs.FirstOrDefault((Panel p) => p.PanelId == panel.Clicked.PanelId.Value);
-            if (pconfig == null) return;
-            pconfig.OnClickedEvent();
-        }
+		public void ParseStatus(CiscoCodecEvents.Panel panel)
+		{
+			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "PanelsHandler Parse Status Panel Clicked: {0}", _parent, panel.Clicked.PanelId.Value);
+			var pconfig = _panelConfigs.FirstOrDefault((Panel p) => p.PanelId == panel.Clicked.PanelId.Value);
+			if (pconfig == null)
+			{
+				Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "Panel not found in config id: {0}", _parent, panel.Id);
+				return;
+			}
+			pconfig.OnClickedEvent();
+		}
 
-        public void RegisterFeedback()
-        {
-            //detect button changes for panel buttons ROOM OS
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Panel/Clicked" + CiscoCodec.Delimiter);
-        }
+		public void RegisterFeedback()
+		{
+			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "PanelsHandler RegisterFeedback", _parent);
+			//detect button changes for panel buttons ROOM OS
+			var cmd = "xfeedback register /Event/UserInterface/Extensions/Panel/Clicked" + CiscoCodec.Delimiter;
+			//_coms.SendText(cmd);
+			EnqueueCommand(cmd);
+		}
 
-        public void DeregisterFeedback()
-        {
-            _coms.SendText("xfeedback deregister /Event/UserInterface/Extensions/Panel/Clicked" + CiscoCodec.Delimiter);
-        }
+		public void DeregisterFeedback()
+		{
+			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "PanelsHandler DeregisterFeedback", _parent);
+			var cmd = "xfeedback deregister /Event/UserInterface/Extensions/Panel/Clicked" + CiscoCodec.Delimiter;
+			//_coms.SendText(cmd);
+			EnqueueCommand(cmd);
+		}
 
-        public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
-        {
-            //add simpl stuff later
-        }
-    }
+		public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+		{
+			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "PanelsHandler LinkToApi. NOT IMPLEMENTED", _parent);
+			//add simpl stuff later
+		}
+	}
 }
 
 /*

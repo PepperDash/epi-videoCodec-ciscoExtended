@@ -45,8 +45,30 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceWebViewDisplay
 		/// <returns></returns>
 		public string xCommand()
 		{
-			return string.Format($"xCommand UserInterface WebView Display Header: {Header} Mode: {Mode} Options: {Options} Target: {Target} Title: {Title} Url: {Url}{CiscoCodec.Delimiter}");
-		}	
+			var command = "xCommand UserInterface WebView Display";
+
+			if (!string.IsNullOrEmpty(Header))
+				command += $" Header: \"{Header}\"";
+
+			if (!string.IsNullOrEmpty(Mode))
+				command += $" Mode: \"{Mode}\"";
+
+			if (!string.IsNullOrEmpty(Options))
+				command += $" Options: \"{Options}\"";
+
+			if (!string.IsNullOrEmpty(Target))
+				command += $" Target: \"{Target}\"";
+
+			if (!string.IsNullOrEmpty(Title))
+				command += $" Title: \"{Title}\"";
+
+			if (!string.IsNullOrEmpty(Url))
+				command += $" Url: \"{Url}\"";
+
+			command += CiscoCodec.Delimiter;
+
+			return command;
+		}
 
 	}
 }

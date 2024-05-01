@@ -23,6 +23,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 		[XmlElement("Version")]
 		public string Version { get; set; }
 
+		[XmlIgnore]
 		[JsonProperty("configId")] //0-40
 		public ushort ConfigId { get; set; }
 
@@ -31,16 +32,21 @@ namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions
 		public List<Panel> Panels { get; set; }
 		//other extensions later
 
+		[JsonIgnore]
+		[XmlIgnore]
 		public PanelsHandler PanelsHandler { get; set; }
 
-		public void Initialize(IKeyed parent, IBasicCommunication coms)
+		public void Initialize(IKeyed parent, IBasicCommunication coms, Action<string> enqueueCommand)
 		{
-			PanelsHandler = new PanelsHandler(parent, coms, Panels);
-			coms.SendText(xCommand());
+			Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
+			PanelsHandler = new PanelsHandler(parent, coms, enqueueCommand, Panels);
+			Debug.LogMessage(LogEventLevel.Debug, xCommand(), parent);
+			enqueueCommand(xCommand());
+			//coms.SendText(xCommand());
 		}
 		
 		/// <summary>
-		/// string literal for multiline command
+		/// string literal for multiline command 
 		/// </summary>
 		/// <returns></returns>
 		public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}
