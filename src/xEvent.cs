@@ -202,7 +202,7 @@ namespace epi_videoCodec_ciscoExtended
             }
  
             public Widget Widget { get; set; }
-            public UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
+            public epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
 
             public UiExtensions()
             {
@@ -210,7 +210,7 @@ namespace epi_videoCodec_ciscoExtended
                 //PageClosed = new PageClosed();
                 //WidgetEvent = new WidgetEvent();
                 Widget = new Widget();
-				Panel = new epi_videoCodec_ciscoExtended.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
+				Panel = new epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
             }
         }
 

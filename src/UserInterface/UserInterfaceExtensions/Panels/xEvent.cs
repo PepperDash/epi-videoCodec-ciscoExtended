@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace epi_videoCodec_ciscoExtended.UserInterfaceExtensions.Panels
+namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
 {
     public class CiscoCodecEvents
     {
