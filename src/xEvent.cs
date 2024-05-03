@@ -202,6 +202,7 @@ namespace epi_videoCodec_ciscoExtended
             }
  
             public Widget Widget { get; set; }
+
             public epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
 
             public UiExtensions()

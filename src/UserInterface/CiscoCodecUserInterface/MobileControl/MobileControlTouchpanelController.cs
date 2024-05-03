@@ -1,4 +1,4 @@
-﻿
+﻿using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
@@ -7,14 +7,14 @@ using System;
 using System.Linq;
 using Feedback = PepperDash.Essentials.Core.Feedback;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface
+namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl
 {
-    public class CiscoUiMobileControlTouchpanelController : CiscoCodecUserInterface, IMobileControlTouchpanelController
+    public class MobileControlTouchpanelController : CiscoCodecUserInterface, IMobileControlTouchpanelController
     {
         private readonly CiscoCodecUserInterfaceMobileControlConfig McConfigProps;
         private IMobileControlRoomMessenger _bridge;
-        private IMobileControl mc; 
-		private string _appUrl;
+        private IMobileControl mc;
+        private string _appUrl;
 
         public StringFeedback AppUrlFeedback { get; private set; }
         private readonly StringFeedback QrCodeUrlFeedback;
@@ -29,11 +29,11 @@ namespace epi_videoCodec_ciscoExtended.UserInterface
 
         bool IMobileControlTouchpanelController.ZoomRoomController => false;
 
-		public CiscoUiMobileControlTouchpanelController(DeviceConfig config) : base(config)
+        public MobileControlTouchpanelController(DeviceConfig config) : base(config)
         {
             McConfigProps = ParseConfigProps<CiscoCodecUserInterfaceMobileControlConfig>(config);
 
-			AddPostActivationAction(SubscribeForMobileControlUpdates);
+            AddPostActivationAction(SubscribeForMobileControlUpdates);
 
             AppUrlFeedback = new StringFeedback(() => _appUrl);
             QrCodeUrlFeedback = new StringFeedback(() => _bridge?.QrCodeUrl);
@@ -76,7 +76,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface
             // use first in list, since there should only be one.
             var mc = mcList[0];
 
-            var bridge = mc.GetRoomBridge(McConfigProps.DefaultRoomKey);
+            var bridge = mc.GetRoomMessenger(McConfigProps.DefaultRoomKey);
 
             if (bridge == null)
             {

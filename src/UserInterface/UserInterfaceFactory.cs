@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using epi_videoCodec_ciscoExtended.UserInterface;
+using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface;
+using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl;
 using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
@@ -25,7 +27,7 @@ namespace epi_videoCodec_ciscoExtended
 
 			if (type.Equals("ciscoRoomOsMobileControl"))
 			{
-				return new CiscoUiMobileControlTouchpanelController(dc);
+				return new MobileControlTouchpanelController(dc);
 			}
 			return new CiscoCodecUserInterface(dc);
         }
