@@ -99,7 +99,8 @@ namespace epi_videoCodec_ciscoExtended
 			IHasCallHold,
 			IJoinCalls,
 			IDeviceInfoProvider,
-			IHasPhoneDialing
+			IHasPhoneDialing,
+			IVideoCodecUiExtensions,
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
@@ -730,7 +731,7 @@ namespace epi_videoCodec_ciscoExtended
 			);
 
 			UiExtensions = props.Extensions;
-			if (props.Extensions.ConfigId != null)
+			if (props.Extensions.ConfigId > 0)
 			{
 				VideoCodecUiExtensionsHandler = new UiExtensionsHandler(this, EnqueueCommand);
 			}
