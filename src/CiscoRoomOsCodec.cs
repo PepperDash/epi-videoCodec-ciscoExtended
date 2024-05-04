@@ -100,7 +100,7 @@ namespace epi_videoCodec_ciscoExtended
 			IJoinCalls,
 			IDeviceInfoProvider,
 			IHasPhoneDialing,
-			IVideoCodecUiExtensions,
+			IVideoCodecUiExtensions
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
