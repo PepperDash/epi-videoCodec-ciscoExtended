@@ -46,18 +46,6 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             };
         }
 
-        public override bool CustomActivate()
-        {
-            mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
-
-            if (mc == null)
-            {
-                return base.CustomActivate();
-            }
-
-            return base.CustomActivate();
-        }
-
         private void SubscribeForMobileControlUpdates()
         {
             foreach (var dev in DeviceManager.AllDevices)

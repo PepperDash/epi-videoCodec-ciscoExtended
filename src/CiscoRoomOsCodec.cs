@@ -731,7 +731,7 @@ namespace epi_videoCodec_ciscoExtended
 			);
 
 			UiExtensions = props.Extensions;
-			if (props.Extensions.ConfigId > 0)
+			if (props?.Extensions?.ConfigId > 0)
 			{
 				VideoCodecUiExtensionsHandler = new UiExtensionsHandler(this, EnqueueCommand);
 			}

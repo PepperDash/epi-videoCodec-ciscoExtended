@@ -29,14 +29,14 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 
         public CiscoCodecUserInterface(DeviceConfig config) : base(config)
         {
-
-            ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
+            ConfigProps = ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
 
         }
 
         public override bool CustomActivate()
         {
-            UisCiscoCodec = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
+            Debug.LogMessage(LogEventLevel.Debug, "[DEBUG] Activating Video Codec UI Extensions", this);
+			UisCiscoCodec = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
 
             if (UisCiscoCodec == null)
             {
