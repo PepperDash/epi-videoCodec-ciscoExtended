@@ -14,11 +14,11 @@ using System.Threading.Tasks;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 {
-    public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface, IReconfigurableDevice
-    {
+    public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface, IReconfigurableDevice, IVideoCodecUiExtensions
+	{
         public CiscoCodec UisCiscoCodec { get; private set; }
         public CiscoCodecUserInterfaceConfig ConfigProps { get; }
-        public IVideoCodecUiExtensionsHandler VideoCodecUiExtensionsHandler { get; private set; }
+        public IVideoCodecUiExtensionsHandler VideoCodecUiExtensionsHandler { get; set; }
 
         public ICiscoCodecUiExtensions UiExtensions { get; private set; }
 
@@ -30,10 +30,10 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
         public CiscoCodecUserInterface(DeviceConfig config) : base(config)
         {
             ConfigProps = ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
-
+            AddPreActivationAction(PreActivateAction);
         }
 
-        public override bool CustomActivate()
+        public void PreActivateAction()
         {
             Debug.LogMessage(LogEventLevel.Debug, "[DEBUG] Activating Video Codec UI Extensions", this);
 			UisCiscoCodec = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
@@ -42,7 +42,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
             {
                 var msg = $"Video codec UserInterface could not find codec with key '{ConfigProps.VideoCodecKey}'.";
                 Debug.LogMessage(new NullReferenceException(msg), msg, this);
-                return base.CustomActivate();
+                //return base.CustomActivate();
+                return;
             }
 
             UiExtensions = ConfigProps.Extensions;
@@ -61,7 +62,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
                 UiExtensions.Initialize(this, UisCiscoCodec.EnqueueCommand);
                 Debug.LogMessage(LogEventLevel.Debug, "[DEBUG] Video Codec UI Extensions Handler Initilizing", this);
             };
-            return base.CustomActivate();
+            //return base.CustomActivate();
+            return;
         }
     }
 }

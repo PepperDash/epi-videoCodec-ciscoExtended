@@ -3,6 +3,7 @@ using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
+using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
 using System.Linq;
 using Feedback = PepperDash.Essentials.Core.Feedback;

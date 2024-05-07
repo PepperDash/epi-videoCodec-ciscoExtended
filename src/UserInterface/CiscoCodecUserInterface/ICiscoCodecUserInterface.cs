@@ -10,10 +10,9 @@ using System.Threading.Tasks;
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 {
     public interface ICiscoCodecUserInterface : IKeyed
-    {
+	{
         CiscoCodec UisCiscoCodec { get; }
         CiscoCodecUserInterfaceConfig ConfigProps { get; }
-        IVideoCodecUiExtensionsHandler VideoCodecUiExtensionsHandler { get; }
         ICiscoCodecUiExtensions UiExtensions { get; }
     }
 }
