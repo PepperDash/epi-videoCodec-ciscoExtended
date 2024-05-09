@@ -38,7 +38,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         {
             Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
             PanelsHandler = new PanelsHandler(parent, enqueueCommand, Panels);
-            Debug.LogMessage(LogEventLevel.Debug, xCommand(), parent);
+            //Debug.LogMessage(LogEventLevel.Warning, xCommand(), parent);
             enqueueCommand(xCommand());
         }
 

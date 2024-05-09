@@ -359,3 +359,4 @@ MigrationBackup/
 *.suo
 .vscode/settings.json
 .vscode
+.config/dotnet-tools.json

@@ -1,4 +1,5 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+﻿using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
@@ -23,7 +24,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
             UiWebViewDisplayAction =
                 new Action<UiWebViewDisplayActionArgs>((args) =>
                 {
-                    Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction URL: {0}", _parent, args.Url);
+                    //Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction URL: {0}", _parent, args.Url.MaskQParamTokenInUrl());
                     Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction Header: {0}", _parent, args.Header);
                     Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction Mode: {0}", _parent, args.Mode);
                     Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction Title: {0}", _parent, args.Title);

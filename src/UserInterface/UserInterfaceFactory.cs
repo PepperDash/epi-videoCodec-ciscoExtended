@@ -27,7 +27,7 @@ namespace epi_videoCodec_ciscoExtended
 
 			if (type.Equals("ciscoRoomOsMobileControl"))
 			{
-				return new MobileControlTouchpanelController(dc);
+				return new McTouchpanelController(dc);
 			}
 			return new CiscoCodecUserInterface(dc);
         }

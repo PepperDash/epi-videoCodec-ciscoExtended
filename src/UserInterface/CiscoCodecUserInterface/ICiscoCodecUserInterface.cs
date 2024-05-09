@@ -1,5 +1,6 @@
 ﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using PepperDash.Core;
+using PepperDash.Essentials.Core.Devices;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
 using System.Collections.Generic;
@@ -9,10 +10,20 @@ using System.Threading.Tasks;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 {
-    public interface ICiscoCodecUserInterface : IKeyed
+    public interface ICiscoCodecUserInterface : IKeyed, IReconfigurableDevice, IVideoCodecUiExtensions
 	{
         CiscoCodec UisCiscoCodec { get; }
         CiscoCodecUserInterfaceConfig ConfigProps { get; }
         ICiscoCodecUiExtensions UiExtensions { get; }
-    }
+
+		RoomCombiner.IRoomCombinerHandler RoomCombinerHandler { get; }
+
+		void AddCustomActivationAction(Action a);
+	}
+
+    public interface ICiscoCodecUserInterfaceConfig
+	{
+		Extensions Extensions { get; set; }
+		string VideoCodecKey { get; set; }
+	}
 }

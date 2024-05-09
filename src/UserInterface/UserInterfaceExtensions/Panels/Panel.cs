@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using Newtonsoft.Json;
 using System;
 using System.Xml.Serialization;
 
@@ -49,5 +50,14 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [XmlElement("Name")]
         [JsonProperty("name")]
         public string Name { get; set; }
-    }
+
+        [JsonProperty("mobileControlPath", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+		public string MobileControlPath { get; set; }
+
+        [JsonProperty("uiWebViewDisplay", NullValueHandling = NullValueHandling.Ignore)]
+		[XmlIgnore]
+		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
+
+	}
 }

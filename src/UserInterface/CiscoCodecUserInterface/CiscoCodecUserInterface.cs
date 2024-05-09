@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 {
-    public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface, IReconfigurableDevice, IVideoCodecUiExtensions
+    public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface
 	{
         public CiscoCodec UisCiscoCodec { get; private set; }
         public CiscoCodecUserInterfaceConfig ConfigProps { get; }
@@ -22,16 +22,47 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 
         public ICiscoCodecUiExtensions UiExtensions { get; private set; }
 
-        public T ParseConfigProps<T>(DeviceConfig config)
+        public RoomCombiner.IRoomCombinerHandler RoomCombinerHandler { get; private set; }
+
+        public bool LockedOut { get; set; } = false;
+
+		#region ParseConfigProps
+		public T ParseConfigProps<T>(DeviceConfig config)
         {
             return JsonConvert.DeserializeObject<T>(config.Properties.ToString());
         }
+		#endregion
 
-        public CiscoCodecUserInterface(DeviceConfig config) : base(config)
+		#region Custom Activate
+		private List<Action> CustomActivateActions = new List<Action>();
+
+		public override bool CustomActivate()
+		{
+			foreach (var action in CustomActivateActions)
+			{
+				action();
+			}
+			return base.CustomActivate();
+		}
+
+		public void AddCustomActivationAction(Action a)
+		{
+			CustomActivateActions.Add(a);
+		}
+		#endregion
+
+        public virtual void BuildRoomCombinerHandler()
+        {
+			RoomCombinerHandler = new RoomCombiner.RoomCombinerHandler(this);
+		}
+
+
+		public CiscoCodecUserInterface(DeviceConfig config) : base(config)
         {
             ConfigProps = ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
             AddPreActivationAction(PreActivateAction);
-        }
+            BuildRoomCombinerHandler();
+		}
 
         public void PreActivateAction()
         {

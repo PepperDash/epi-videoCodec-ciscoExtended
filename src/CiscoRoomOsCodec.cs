@@ -909,7 +909,7 @@ namespace epi_videoCodec_ciscoExtended
 
 			ShowSelfViewByDefault = props.ShowSelfViewByDefault;
 
-			DeviceManager.AddDevice(CommunicationMonitor);
+			//DeviceManager.AddDevice(CommunicationMonitor);
 
 			_phonebookMode = props.PhonebookMode;
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
@@ -1923,7 +1923,7 @@ ConnectorID: {2}",
 			BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
 			// 15 minute timer to check for new booking info
 			GetBookings(null);
-			
+
 			var msg = UiExtensions != null ? "[DEBUG] Initializing Video Codec UI Extensions" : "[DEBUG] No Ui Extensions in config";
 			Debug.LogMessage(LogEventLevel.Debug, msg, this);
 			UiExtensions?.Initialize(this, EnqueueCommand);
@@ -3808,9 +3808,12 @@ ConnectorID: {2}",
 							userInterfaceObject.Extensions.Panel
 						);
 
-						(
-							VideoCodecUiExtensionsHandler as ICiscoCodecUiExtensionsHandler
-						)?.ParseStatus(userInterfaceObject.Extensions.Panel);
+						Debug.LogMessage(LogEventLevel.Debug, "VideoCodecUiExtensionHandler == null: {0}", this, VideoCodecUiExtensionsHandler == null);
+						var ciscoCodecUiExtensionsHandler = VideoCodecUiExtensionsHandler as ICiscoCodecUiExtensionsHandler;
+						if (ciscoCodecUiExtensionsHandler != null)
+						{
+							ciscoCodecUiExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.Panel);
+						}
 					}
 				}
 				catch (Exception e)
