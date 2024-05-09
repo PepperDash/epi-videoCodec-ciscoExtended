@@ -9,7 +9,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
     public class UiExtensionsHandler : ICiscoCodecUiExtensionsHandler, IVideoCodecUiExtensionsHandler
     {
         private readonly IKeyed _parent;
-        private readonly Action<string> EnqueuCommand;
+        private readonly Action<string> EnqueueCommand;
 
         public Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
 
@@ -19,7 +19,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
         {
             _parent = parent;
-            EnqueuCommand = enqueueCommand;
+            EnqueueCommand = enqueueCommand;
             //set the action that will run when called with args from elsewhere via interface
             UiWebViewDisplayAction =
                 new Action<UiWebViewDisplayActionArgs>((args) =>
@@ -31,9 +31,20 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
                     Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction Target: {0}", _parent, args.Target);
                     UiWebViewDisplay uwvd = new UiWebViewDisplay { Header = args.Header, Url = args.Url, Mode = args.Mode, Title = args.Title, Target = args.Target };
                     //coms.SendText(uwvd.xCommand());
-                    EnqueuCommand(uwvd.xCommand());
+                    EnqueueCommand(uwvd.xCommand());
                 });
+            EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Display{CiscoCodec.Delimiter}");
+            EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Cleared{CiscoCodec.Delimiter}");
 
+		}
+
+        public void ParseStatus(WebView wv)
+        {
+
+		}
+
+        public void ParseStatus(CiscoCodecStatus.Reason reason, )
+        {
         }
 
         public void ParseStatus(Panels.CiscoCodecEvents.Panel panel)

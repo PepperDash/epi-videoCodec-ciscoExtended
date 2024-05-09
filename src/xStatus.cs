@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Core.Presets;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -1862,7 +1863,8 @@ namespace epi_videoCodec_ciscoExtended
         public class UserInterface
         {
             public ContactInfo ContactInfo { get; set; }
-        }
+			public List<WebView> WebViews { get; set; }
+		}
 
 
         public class ActiveSpeakerPip
