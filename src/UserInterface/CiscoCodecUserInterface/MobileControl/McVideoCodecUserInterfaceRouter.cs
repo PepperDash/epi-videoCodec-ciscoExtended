@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Crestron.SimplSharp.Net;
 using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.RoomCombiner;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using Independentsoft.Json.Parser;
@@ -18,20 +19,16 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 {
     internal class McVideoCodecUserInterfaceRouter : IKeyed
     {
-        private McTouchpanelController _mcTpController;
+        private McVideoCodecTouchpanelController _mcTpController;
 
         private IVideoCodecUiExtensionsHandler _extensionsHandler;
 
         private IRoomCombinerHandler _combinerHandler;
         private IMobileControlRoomMessenger _bridge;
 
-        private McCodecUserInterfaceConfig _props { get; }
-
-        private Room _primaryRoom;
+        private McVideoCodecUserInterfaceConfig _props { get; }
 
         public string Key { get; }
-
-		public string Key { get; }
 
         private UiWebViewDisplayConfig _defaultUiWebViewDisplayConfig = new UiWebViewDisplayConfig()
         {
@@ -41,9 +38,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
         };
 
         internal McVideoCodecUserInterfaceRouter(
-            McTouchpanelController ui,
+            McVideoCodecTouchpanelController ui,
             IMobileControlRoomMessenger bridge,
-            McCodecUserInterfaceConfig props
+            McVideoCodecUserInterfaceConfig props
         )
         {
             _props = props;
@@ -52,7 +49,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             Key = ui.Key + "-McVcUiRouter";
         }
 
-        internal void Activate(McTouchpanelController ui)
+        internal void Activate(McVideoCodecTouchpanelController ui)
         {
             Debug.LogMessage(
                 LogEventLevel.Debug,
@@ -199,7 +196,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     );
                     var path = _props?.Lockout?.MobileControlPath;
                     Debug.LogMessage(LogEventLevel.Debug, $"Lockout path: {path}", null, null);
-                    if (path == null || path.Length == 0)
+
+                    // If path is null or empty, set it to "/lockout"
+                    if (string.IsNullOrEmpty(path))
                         path = "/lockout";
                     Debug.LogMessage(LogEventLevel.Debug, $"Lockout path: {path}", null, null);
                     var webViewConfig =
@@ -217,55 +216,6 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                         room != null ? room.Name : primaryRoomKey
                     );
                     SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
-				if (!getPrimaryKeySuccess.GetValueOrDefault())
-				{
-					Debug.LogMessage(
-						LogEventLevel.Debug,
-						$"Primary room key not found in UiMap for scenario: {curScenario.Key}",
-						null, null
-					);
-				}
-				if (thisUisUiMapRoomKeyValue == null)
-				{
-					Debug.LogMessage(
-						LogEventLevel.Debug,
-						$"[ERROR] UiMap default room key: {thisUisDefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {curScenario.Key} or lockout",
-						null, null
-					);
-					return;
-				}
-				if (thisUisUiMapRoomKeyValue == "lockout")
-				{
-					Debug.LogMessage(
-						LogEventLevel.Debug,
-						$"UiMap default room key: {thisUisDefaultRoomKey} is in lockout state",
-						null, null
-					);
-					var path = _props.Lockout.MobileControlPath;
-					if (path == null || path.Length == 0)
-						path = "/lockout";
-					var webViewConfig =
-						_props.Lockout.UiWebViewDisplay == null
-							? _defaultUiWebViewDisplayConfig
-							: _props.Lockout.UiWebViewDisplay;
-					var room = DeviceManager.GetDeviceForKey(primaryRoomKey) as EssentialsRoomBase;
-					webViewConfig.QueryParams.Add("primary", room?.Name?.Length > 0 ? room.Name : primaryRoomKey);
-					SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
-					return;
-				}
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"ui with default room key {thisUisDefaultRoomKey} is not locked out",
-					null, null
-				);
-			}
-			catch (Exception ex)
-			{
-				Debug.LogMessage(ex, "Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", null, null);
-				Debug.LogMessage(LogEventLevel.Debug,
-					$"Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler: {ex.Message}, {ex.StackTrace}", null, null);
-			}
-		}
                     return;
                 }
                 Debug.LogMessage(
@@ -377,7 +327,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             );
             // Parse the _appUrl into a Uri object
             var appUrl = _mcTpController.AppUrlFeedback.StringValue;
-            if (appUrl == null)
+			if (appUrl == null)
             {
                 Debug.LogMessage(
                     LogEventLevel.Debug,
@@ -388,9 +338,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             }
             //var printableAppUrl = _mcTpController?.AppUrlFeedback?.StringValue?.MaskQParamTokenInUrl();
             //Debug.LogMessage(
-            //	LogEventLevel.Debug,
-            //	$"SendCiscoCodecUiToWebViewMcUrl: {printableAppUrl}",
-            //	this
+            //    LogEventLevel.Debug,
+            //    $"SendCiscoCodecUiToWebViewMcUrl: {printableAppUrl}",
+            //    this
             //);
 
             UriBuilder uriBuilder = new UriBuilder(appUrl);
@@ -399,7 +349,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             var qparams = webViewConfig.QueryParams;
             if (qparams != null)
             {
-                var parameters = HttpUtility.ParseQueryString(appUrl);
+                var parameters = HttpUtility.ParseQueryString(uriBuilder.Query);
                 foreach (var item in qparams)
                 {
                     parameters.Add(item.Key, item.Value);
@@ -413,7 +363,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             // Get the final URL
             var url = uriBuilder.ToString();
 
-            var printableUrl = url.MaskQParamTokenInUrl();
+            var printableUrl = uriBuilder.ToString().MaskQParamTokenInUrl();
 
             Debug.LogMessage(
                 LogEventLevel.Debug,
@@ -441,5 +391,18 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 }
             );
         }
-    }
+
+        public void ClearCiscoCodecUiWebViewController()
+        {
+            Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewController", this);
+            _extensionsHandler?.UiWebViewClearAction?.Invoke(new UiWEbViewDisplayClearActionArgs() { Target = "Controller"});
+		}
+
+		public void ClearCiscoCodecUiWebViewOsd()
+		{
+            Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewOsd", this);
+			_extensionsHandler?.UiWebViewClearAction?.Invoke(new UiWEbViewDisplayClearActionArgs() { Target = "OSD" });
+		}
+
+	}
 }

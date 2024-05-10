@@ -18,7 +18,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
 	}
 
-	public class McCodecUserInterfaceConfig : CiscoCodecUserInterfaceConfig
+	public class McVideoCodecUserInterfaceConfig : CiscoCodecUserInterfaceConfig
 	{
 		[JsonProperty("defaultRoomKey")]
 		public string DefaultRoomKey { get; set; }

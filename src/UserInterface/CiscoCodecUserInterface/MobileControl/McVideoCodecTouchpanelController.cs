@@ -5,6 +5,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
+using PepperDash.Essentials.Touchpanel;
 using Serilog.Events;
 using System;
 using System.Linq;
@@ -12,9 +13,9 @@ using Feedback = PepperDash.Essentials.Core.Feedback;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl
 {
-	public class McTouchpanelController : CiscoCodecUserInterface, IMobileControlTouchpanelController
+	public class McVideoCodecTouchpanelController : CiscoCodecUserInterface, IMcCiscoCodecUserInterfaceAppControl, IMobileControlTouchpanelController
 	{
-		private readonly McCodecUserInterfaceConfig _props;
+		private readonly McVideoCodecUserInterfaceConfig _props;
 		private IMobileControlRoomMessenger _bridge;
 		private IMobileControl Mc;
 		private string _appUrl;
@@ -32,12 +33,14 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 
 		bool IMobileControlTouchpanelController.ZoomRoomController => false;
 
+		//public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
+
 		private McVideoCodecUserInterfaceRouter _router;
 
-		public McTouchpanelController(DeviceConfig config) : base(config)
+		public McVideoCodecTouchpanelController(DeviceConfig config) : base(config)
 		{
 			Debug.LogMessage(LogEventLevel.Debug, "McTouchpanelController Constructor", this);
-			_props = ParseConfigProps<McCodecUserInterfaceConfig>(config);
+			_props = ParseConfigProps<McVideoCodecUserInterfaceConfig>(config);
 
 			AddPostActivationAction(SubscribeForMobileControlUpdates);
 
@@ -101,8 +104,12 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 
 				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Subscribing to Mobile Control Events: AppUrlChanged", this);
 
-				_bridge.AppUrlChanged += (s, a) => { Debug.Console(0, this, "[McTouchpanelController] AppURL changed"); SetAppUrl(_bridge.AppUrl); UpdateFeedbacks(s, a); };
-			
+				//SetAppUrl here fixing AppUrlFeedback.StringValue null after initial event
+				_bridge.AppUrlChanged += (s, a) => { Debug.Console(0, this, "[McTouchpanelController] AppURL changed"); UpdateFeedbacks(s, a);
+					SetAppUrl(_bridge.AppUrl);
+				}; 
+				
+
 				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Building McVideoCodecUserInterfaceRouter", this);
 				_router = new McVideoCodecUserInterfaceRouter(this, _bridge, _props);
 				_router.Activate(this);
@@ -119,7 +126,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		{
 			try
 			{
-				Debug.LogMessage(LogEventLevel.Verbose, $"Setting AppUrl", this);
+				Debug.LogMessage(LogEventLevel.Debug, $"Setting AppUrl", this);
 				_appUrl = url;
 				AppUrlFeedback.FireUpdate();
 			}
@@ -137,6 +144,16 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		private void UpdateFeedbacks()
 		{
 			foreach (var feedback in Feedbacks) { feedback.FireUpdate(); }
+		}
+
+		public void CloseWebViewController()
+		{
+			_router.ClearCiscoCodecUiWebViewController();
+		}
+
+		public void CloseWebViewOsd()
+		{
+			_router.ClearCiscoCodecUiWebViewOsd();
 		}
 	}
 }

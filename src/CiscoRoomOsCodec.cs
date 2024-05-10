@@ -31,8 +31,8 @@ using Feedback = PepperDash.Essentials.Core.Feedback;
 
 namespace epi_videoCodec_ciscoExtended
 {
-	#region enums
-	internal enum eCommandType
+    #region enums
+    internal enum eCommandType
 	{
 		SessionStart,
 		SessionEnd,
