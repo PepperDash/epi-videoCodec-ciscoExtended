@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -3873,8 +3873,11 @@ ConnectorID: {2}",
 
 		private void ParseStatusObject(JToken statusToken)
 		{
-			if (statusToken == null)
+			if (statusToken == null || (statusToken.Type == JTokenType.Object && !statusToken.HasValues))
+			{
 				return;
+			}
+
 			var status = new CiscoCodecStatus.Status();
 			var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
@@ -4081,7 +4084,7 @@ ConnectorID: {2}",
 		{
 			try
 			{
-				if (configurationToken == null)
+				if (configurationToken == null || (configurationToken.Type == JTokenType.Object && !configurationToken.HasValues))
 					return;
 				var configuration = new CiscoCodecConfiguration.Configuration();
 				try
@@ -4266,8 +4269,13 @@ ConnectorID: {2}",
 
 		private void ParseEventObject(JToken eventToken)
 		{
-			if (eventToken == null)
+			if (
+				eventToken == null
+				|| (eventToken.Type == JTokenType.Object && !eventToken.HasValues)
+			)
+			{
 				return;
+			}
 
 			try
 			{
@@ -4376,7 +4384,7 @@ ConnectorID: {2}",
 
 		private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
 		{
-			if (commandResponseToken == null)
+			if (commandResponseToken == null || (commandResponseToken.Type == JTokenType.Object && !commandResponseToken.HasValues))
 				return;
 			var callHistoryRecentsResultResponse = commandResponseToken.SelectToken(
 				"CallHistoryRecentsResult"
