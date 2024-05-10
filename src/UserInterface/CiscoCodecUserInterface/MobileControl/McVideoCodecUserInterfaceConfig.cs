@@ -21,7 +21,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		public int PollInterval { get; set; }
 	}
 
-	public class McCodecUserInterfaceConfig : CiscoCodecUserInterfaceConfig
+	public class McVideoCodecUserInterfaceConfig : CiscoCodecUserInterfaceConfig
 	{
 		[JsonProperty("defaultRoomKey")]
 		public string DefaultRoomKey { get; set; }

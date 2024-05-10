@@ -3,6 +3,7 @@ using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
+using static epi_videoCodec_ciscoExtended.CiscoCodecConfiguration;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 {
@@ -13,7 +14,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
         public Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
 
-        public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
+		public Action<UiWEbViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
+
+		public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
 
         public UiExtensionsHandler(IKeyed parent, Action<string> enqueueCommand)
 
@@ -31,9 +34,19 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
                     Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewDisplayAction Target: {0}", _parent, args.Target);
                     UiWebViewDisplay uwvd = new UiWebViewDisplay { Header = args.Header, Url = args.Url, Mode = args.Mode, Title = args.Title, Target = args.Target };
                     //coms.SendText(uwvd.xCommand());
-                    EnqueueCommand(uwvd.xCommand());
+                    EnqueuCommand(uwvd.xCommand());
                 });
-            EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Display{CiscoCodec.Delimiter}");
+            UiWebViewClearAction = new Action<UiWEbViewDisplayClearActionArgs>((args) =>
+			{
+                var target = args.Target;
+                if(args.Target == null || args.Target == "")
+                {
+					target = "Controller";
+				}
+				Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewClearAction: {0}", _parent, args);
+				EnqueuCommand($"xCommand UserInterface WebView Display Clear Target:{target}{CiscoCodec.Delimiter}");
+			});           
+       EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Display{CiscoCodec.Delimiter}");
             EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Cleared{CiscoCodec.Delimiter}");
 
 		}
@@ -45,7 +58,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
         public void ParseStatus(CiscoCodecStatus.Reason reason, )
         {
-        }
+		}
 
         public void ParseStatus(Panels.CiscoCodecEvents.Panel panel)
         {
