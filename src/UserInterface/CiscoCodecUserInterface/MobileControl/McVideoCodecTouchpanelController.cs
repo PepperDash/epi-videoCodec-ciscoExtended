@@ -42,7 +42,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 			Debug.LogMessage(LogEventLevel.Debug, "McTouchpanelController Constructor", this);
 			_props = ParseConfigProps<McVideoCodecUserInterfaceConfig>(config);
 
-			AddPostActivationAction(SubscribeForMobileControlUpdates);
+			AddPostActivationAction(PostActivateSubscribeForMobileControlUpdates);
 
 			AppUrlFeedback = new StringFeedback(() => _appUrl);
 			QrCodeUrlFeedback = new StringFeedback(() => _bridge?.QrCodeUrl);
@@ -69,7 +69,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 			return base.CustomActivate();
 		}
 
-		private void SubscribeForMobileControlUpdates()
+		private void PostActivateSubscribeForMobileControlUpdates()
 		{
 			try
 			{
@@ -109,7 +109,6 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 					SetAppUrl(_bridge.AppUrl);
 				}; 
 				
-
 				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Building McVideoCodecUserInterfaceRouter", this);
 				_router = new McVideoCodecUserInterfaceRouter(this, _bridge, _props);
 				_router.Activate(this);

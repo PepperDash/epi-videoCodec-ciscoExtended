@@ -10,5 +10,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 
         [JsonProperty("videoCodecKey")]
         public string VideoCodecKey { get; set; }
-    }
+
+		[JsonProperty("enableLockoutPoll", NullValueHandling = NullValueHandling.Ignore)]
+		public bool? EnableLockoutPoll { get; set; }
+	}
 }

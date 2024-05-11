@@ -16,7 +16,7 @@ using PepperDash.Essentials.Core.Queues;
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
 {
 
-    public class PanelsHandler : ICiscoCodecUiExtensionsHandler
+    public class PanelsHandler : ICiscoCodecUiExtensionsPanelClickedEventHandler
     {
         private readonly IKeyed _parent;
         private readonly List<Panel> _panelConfigs;

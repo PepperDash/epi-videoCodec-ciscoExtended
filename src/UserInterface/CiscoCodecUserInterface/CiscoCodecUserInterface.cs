@@ -18,13 +18,15 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 	{
         public CiscoCodec UisCiscoCodec { get; private set; }
         public CiscoCodecUserInterfaceConfig ConfigProps { get; }
-        public IVideoCodecUiExtensionsHandler VideoCodecUiExtensionsHandler { get; set; }
+        public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
 
         public ICiscoCodecUiExtensions UiExtensions { get; private set; }
 
         public RoomCombiner.IRoomCombinerHandler RoomCombinerHandler { get; private set; }
 
-        public bool LockedOut { get; set; } = false;
+        public bool EnableLockoutPoll { get; set; } = false;
+
+		public bool LockedOut { get; set; } = false;
 
 		#region ParseConfigProps
 		public T ParseConfigProps<T>(DeviceConfig config)
@@ -60,7 +62,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 		public CiscoCodecUserInterface(DeviceConfig config) : base(config)
         {
             ConfigProps = ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
-            AddPreActivationAction(PreActivateAction);
+            EnableLockoutPoll = ConfigProps.EnableLockoutPoll ?? false;
+			AddPreActivationAction(PreActivateAction);
             BuildRoomCombinerHandler();
 		}
 
@@ -78,12 +81,12 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
             }
 
             UiExtensions = ConfigProps.Extensions;
-            VideoCodecUiExtensionsHandler = new UiExtensionsHandler(this, UisCiscoCodec.EnqueueCommand);
+            CiscoCodecUiExtensionsHandler = new UserInterfaceExtensionsHandler(this, UisCiscoCodec.EnqueueCommand);
 
             // update the codec props which will be overwritten if they exist from codec config.
             // #TODO Remove codec config later probably not needed with UI device. 
             UisCiscoCodec.UiExtensions = UiExtensions;
-            UisCiscoCodec.VideoCodecUiExtensionsHandler = VideoCodecUiExtensionsHandler;
+            UisCiscoCodec.CiscoCodecUiExtensionsHandler = CiscoCodecUiExtensionsHandler;
 
             UisCiscoCodec.IsReadyChange += (s, a) =>
             {

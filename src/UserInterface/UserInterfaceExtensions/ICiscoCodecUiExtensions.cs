@@ -1,4 +1,5 @@
 ﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 using System;
 using System.Collections.Generic;
@@ -8,7 +9,19 @@ using System.Threading.Tasks;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 {
-    public interface ICiscoCodecUiExtensions
+	public interface ICiscoCodecUiExtensionsHandler : 
+		ICiscoCodecUiExtensionsWebViewDisplayHandler, 
+		ICiscoCodecUiExtensionsClickedEvent, 
+		ICiscoCodecUiExtensionsPanelClickedEventHandler
+	{
+	}
+
+	public interface ICiscoCodecUiExtensionsController
+	{
+		ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
+	}
+
+	public interface ICiscoCodecUiExtensions
     {
         List<Panel> Panels { get; }
         //other extensions later

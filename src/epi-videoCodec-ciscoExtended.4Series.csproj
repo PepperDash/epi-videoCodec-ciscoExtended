@@ -38,8 +38,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PepperDash.Essentials.Plugin.MobileControl.Messengers" Version="4.0.0-fix-mobile-control-system-controller-fix.1" />
-    <PackageReference Include="PepperDashEssentials" Version="2.0.0-alpha-2480" />
+    <PackageReference Include="PepperDash.Essentials.Plugin.MobileControl.Messengers" Version="4.0.0-fix-mobile-control-system-controller-fix.3" />
+    <PackageReference Include="PepperDashEssentials" Version="2.0.0-alpha-2486" />
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
   </ItemGroup>
 

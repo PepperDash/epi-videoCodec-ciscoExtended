@@ -2,7 +2,7 @@
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
 {
-    public interface IVideoCodecUiExtensionsWebViewDisplayActions
+    public interface ICiscoCodecUiExtensionsWebViewDisplayActions
     {
         Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
         Action<UiWEbViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }

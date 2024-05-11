@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
@@ -31,8 +32,8 @@ using Feedback = PepperDash.Essentials.Core.Feedback;
 
 namespace epi_videoCodec_ciscoExtended
 {
-    #region enums
-    internal enum eCommandType
+	#region enums
+	internal enum eCommandType
 	{
 		SessionStart,
 		SessionEnd,
@@ -100,7 +101,7 @@ namespace epi_videoCodec_ciscoExtended
 			IJoinCalls,
 			IDeviceInfoProvider,
 			IHasPhoneDialing,
-			IVideoCodecUiExtensions
+			ICiscoCodecUiExtensionsController
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
@@ -692,7 +693,7 @@ namespace epi_videoCodec_ciscoExtended
 		public RoutingOutputPort HdmiOut1 { get; private set; }
 		public RoutingOutputPort HdmiOut2 { get; private set; }
 
-		public IVideoCodecUiExtensionsHandler VideoCodecUiExtensionsHandler { get; set; }
+		public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
 
 		private readonly IBasicCommunication _comms;
 
@@ -733,7 +734,10 @@ namespace epi_videoCodec_ciscoExtended
 			UiExtensions = props.Extensions;
 			if (props?.Extensions?.ConfigId > 0)
 			{
-				VideoCodecUiExtensionsHandler = new UiExtensionsHandler(this, EnqueueCommand);
+				CiscoCodecUiExtensionsHandler = new UserInterfaceExtensionsHandler(
+					this,
+					EnqueueCommand
+				);
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -1924,7 +1928,10 @@ ConnectorID: {2}",
 			// 15 minute timer to check for new booking info
 			GetBookings(null);
 
-			var msg = UiExtensions != null ? "[DEBUG] Initializing Video Codec UI Extensions" : "[DEBUG] No Ui Extensions in config";
+			var msg =
+				UiExtensions != null
+					? "[DEBUG] Initializing Video Codec UI Extensions"
+					: "[DEBUG] No Ui Extensions in config";
 			Debug.LogMessage(LogEventLevel.Debug, msg, this);
 			UiExtensions?.Initialize(this, EnqueueCommand);
 
@@ -3808,11 +3815,19 @@ ConnectorID: {2}",
 							userInterfaceObject.Extensions.Panel
 						);
 
-						Debug.LogMessage(LogEventLevel.Debug, "VideoCodecUiExtensionHandler == null: {0}", this, VideoCodecUiExtensionsHandler == null);
-						var ciscoCodecUiExtensionsHandler = VideoCodecUiExtensionsHandler as ICiscoCodecUiExtensionsHandler;
+						Debug.LogMessage(
+							LogEventLevel.Debug,
+							"VideoCodecUiExtensionHandler == null: {0}",
+							this,
+							CiscoCodecUiExtensionsHandler == null
+						);
+						var ciscoCodecUiExtensionsHandler =
+							CiscoCodecUiExtensionsHandler as ICiscoCodecUiExtensionsPanelClickedEventHandler;
 						if (ciscoCodecUiExtensionsHandler != null)
 						{
-							ciscoCodecUiExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.Panel);
+							ciscoCodecUiExtensionsHandler.ParseStatus(
+								userInterfaceObject.Extensions.Panel
+							);
 						}
 					}
 				}
@@ -3896,12 +3911,18 @@ ConnectorID: {2}",
 			var serializedToken = statusToken.ToString();
 			if (errorToken != null)
 			{
+				CiscoCodecUiExtensionsHandler?.ParseErrorStatus(statusToken);
 				//This is an Error - Deal with it somehow?
 				Debug.Console(2, this, "Error In Status Response :");
 				Debug.Console(2, this, "{0}", errorToken.ToString());
 				return;
 			}
 			JsonConvert.PopulateObject(statusToken.ToString(), status);
+
+			if(status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
+			{
+				CiscoCodecUiExtensionsHandler?.ParseStatus(status.UserInterface.WebViews);
+			}
 
 			var standbyToken = statusToken.SelectToken("Standby");
 			if (standbyToken != null)

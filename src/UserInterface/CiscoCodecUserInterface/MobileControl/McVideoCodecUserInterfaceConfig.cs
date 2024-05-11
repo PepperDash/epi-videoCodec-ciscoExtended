@@ -18,7 +18,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
 
 		[JsonProperty("pollInterval")]
-		public int PollInterval { get; set; }
+		public int PollIntervalMs { get; set; }
 	}
 
 	public class McVideoCodecUserInterfaceConfig : CiscoCodecUserInterfaceConfig

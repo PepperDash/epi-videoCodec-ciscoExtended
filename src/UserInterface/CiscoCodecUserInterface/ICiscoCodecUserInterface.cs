@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 {
-    public interface ICiscoCodecUserInterface : IKeyed, IReconfigurableDevice, IVideoCodecUiExtensions
+    public interface ICiscoCodecUserInterface : IKeyed, IReconfigurableDevice, ICiscoCodecUiExtensionsController
 	{
         CiscoCodec UisCiscoCodec { get; }
         CiscoCodecUserInterfaceConfig ConfigProps { get; }
@@ -19,6 +19,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 		RoomCombiner.IRoomCombinerHandler RoomCombinerHandler { get; }
 
 		void AddCustomActivationAction(Action a);
+		bool EnableLockoutPoll { get; set; }
+		bool LockedOut { get; set; }
 	}
 
     public interface ICiscoCodecUserInterfaceConfig

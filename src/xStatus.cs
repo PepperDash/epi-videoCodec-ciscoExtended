@@ -850,11 +850,16 @@ namespace epi_videoCodec_ciscoExtended
         public class Reason
         {
             public string Value { get; set; }
-        }
+		}
+
+		public class XPath
+		{
+			public string Value { get; set; }
+		}
 
 
 
-        public class H323Mode
+		public class H323Mode
         {
             public Reason Reason { get; set; }
             public Status Status { get; set; }
@@ -1863,7 +1868,7 @@ namespace epi_videoCodec_ciscoExtended
         public class UserInterface
         {
             public ContactInfo ContactInfo { get; set; }
-			public List<WebView> WebViews { get; set; }
+			public List<UiWebView> WebViews { get; set; }
 		}
 
 
@@ -2426,8 +2431,11 @@ namespace epi_videoCodec_ciscoExtended
             public Time Time { get; set; }
             public UserInterface UserInterface { get; set; }
             public Video Video { get; set; }
+			public Reason Reason { get; set; }
+			public XPath XPath { get; set; }
+			public string status { get; set; }
 
-            public Status()
+			public Status()
             {
                 RoomPresetsChange = new RoomPresetsChange();
                 _roomPresets = new List<RoomPreset>();
