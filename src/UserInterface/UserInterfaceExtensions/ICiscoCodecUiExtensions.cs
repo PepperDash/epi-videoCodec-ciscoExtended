@@ -13,7 +13,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 		ICiscoCodecUiExtensionsWebViewDisplayHandler, 
 		ICiscoCodecUiExtensionsClickedEvent, 
 		ICiscoCodecUiExtensionsPanelClickedEventHandler
-	{
+    {
 	}
 
 	public interface ICiscoCodecUiExtensionsController
@@ -32,4 +32,5 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
         string xCommand();
     }
+
 }

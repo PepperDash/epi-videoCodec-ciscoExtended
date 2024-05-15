@@ -151,8 +151,8 @@ namespace epi_videoCodec_ciscoExtended
 
             public UserInterface()
             {
-                Presentation = new Presentation();
-                Extensions = new UiExtensions();
+                //Presentation = new Presentation();
+                //Extensions = new UiExtensions();
             }
         }
         public class UiExtensions : ValueProperty // /Event/UserInterface/Extensions/

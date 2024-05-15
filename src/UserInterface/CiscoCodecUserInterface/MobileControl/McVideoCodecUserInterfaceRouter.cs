@@ -105,9 +105,19 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 				this
 			);
 
+
+			_mcTpController.UisCiscoCodec.IsReadyChange += (s, a) =>
+			{
+				if (!_mcTpController.UisCiscoCodec.IsReady) return;
+				
+                //send lockout if in lockout state
+                HandleRoomCombineScenarioChanged();       
+            };
+
 			//subscribe to events for routing buttons from codec ui to mobile control
 			_combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged +=
 				Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler;
+
 			_extensionsHandler.UiExtensionsClickedEvent +=
 				VideoCodecUiExtensionsClickedMcEventHandler;
 
@@ -132,120 +142,128 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 			EventArgs e
 		)
 		{
-			try
-			{
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					"Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler",
-					null,
-					null
-				);
-
-				var combiner = _combinerHandler?.EssentialsRoomCombiner;
-				var curScenario = combiner?.CurrentScenario;
-				var uimap = curScenario?.UiMap;
-				if (uimap == null)
-				{
-					Debug.LogMessage(LogEventLevel.Debug, "uimap is null", null, null);
-					return;
-				}
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"thisUisDefaultRoomKey: {_thisUisDefaultRoomKey}",
-					null,
-					null
-				);
-				var thisUisUiMapRoomKeyValue = (
-					uimap?.FirstOrDefault((kv) => kv.Key == _thisUisDefaultRoomKey)
-				)?.Value;
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"thisUisUiMapRoomKeyValue: {thisUisUiMapRoomKeyValue}",
-					null,
-					null
-				);
-				var getPrimaryKeySuccess = uimap?.TryGetValue("primary", out _primaryRoomKey);
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"primaryRoomKey done: {_primaryRoomKey}",
-					null,
-					null
-				);
-
-				if (!getPrimaryKeySuccess.GetValueOrDefault())
-				{
-					Debug.LogMessage(
-						LogEventLevel.Debug,
-						$"Primary room key not found in UiMap for scenario: {curScenario.Key}",
-						null,
-						null
-					);
-				}
-				if (thisUisUiMapRoomKeyValue == null)
-				{
-					Debug.LogMessage(
-						LogEventLevel.Debug,
-						$"[ERROR] UiMap default room key: {_thisUisDefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {curScenario.Key} or lockout",
-						null,
-						null
-					);
-					return;
-				}
-				if (thisUisUiMapRoomKeyValue == "lockout")
-				{
-					Debug.LogMessage(LogEventLevel.Debug, $"UiMap default room key {_thisUisDefaultRoomKey} is in lockout state", null, null);
-					_mcTpController.LockedOut = true;
-					//SendLockout(_thisUisDefaultRoomKey, _primaryRoomKey);
-					_extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
-					_mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
-					if (_mcTpController.EnableLockoutPoll)
-					{
-						// Start the timer when lockout occurs
-						_lockoutPollTimer = new System.Timers.Timer(
-							_props?.Lockout?.PollIntervalMs > 0 ? _props.Lockout.PollIntervalMs : 5000
-						);
-						_lockoutPollTimer.AutoReset = true;
-						_lockoutPollTimer.Enabled = true;
-						_lockoutPollTimer.Elapsed += (s, a) =>
-						{
-							if (!_mcTpController.LockedOut)
-							{
-								_extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
-								_lockoutPollTimer.Enabled = false;
-								_lockoutPollTimer.Dispose();
-								return;
-							}
-							_mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
-						};
-						return;
-					}
-					return;
-				}
-				_extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
-				_mcTpController.LockedOut = false;
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"ui with default room key {_thisUisDefaultRoomKey} is not locked out",
-					null,
-					null
-				);
-			}
-			catch (Exception ex)
-			{
-				Debug.LogMessage(
-					ex,
-					"Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler",
-					null,
-					null
-				);
-				Debug.LogMessage(
-					LogEventLevel.Debug,
-					$"Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler: {ex.Message}, {ex.StackTrace}",
-					null,
-					null
-				);
-			}
+			HandleRoomCombineScenarioChanged();
 		}
+
+		private void HandleRoomCombineScenarioChanged()
+		{
+            try
+            {
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    "Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler",
+                    null,
+                    null
+                );
+
+                var combiner = _combinerHandler?.EssentialsRoomCombiner;
+                var curScenario = combiner?.CurrentScenario;
+                var uimap = curScenario?.UiMap;
+                if (uimap == null)
+                {
+                    Debug.LogMessage(LogEventLevel.Debug, "uimap is null", null, null);
+                    return;
+                }
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    $"thisUisDefaultRoomKey: {_thisUisDefaultRoomKey}",
+                    null,
+                    null
+                );
+                var thisUisUiMapRoomKeyValue = (
+                    uimap?.FirstOrDefault((kv) => kv.Key == _thisUisDefaultRoomKey)
+                )?.Value;
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    $"thisUisUiMapRoomKeyValue: {thisUisUiMapRoomKeyValue}",
+                    null,
+                    null
+                );
+                var getPrimaryKeySuccess = uimap?.TryGetValue("primary", out _primaryRoomKey);
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    $"primaryRoomKey done: {_primaryRoomKey}",
+                    null,
+                    null
+                );
+
+                if (!getPrimaryKeySuccess.GetValueOrDefault())
+                {
+                    Debug.LogMessage(
+                        LogEventLevel.Debug,
+                        $"Primary room key not found in UiMap for scenario: {curScenario.Key}",
+                        null,
+                        null
+                    );
+                }
+                if (thisUisUiMapRoomKeyValue == null)
+                {
+                    Debug.LogMessage(
+                        LogEventLevel.Debug,
+                        $"[ERROR] UiMap default room key: {_thisUisDefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {curScenario.Key} or lockout",
+                        null,
+                        null
+                    );
+                    return;
+                }
+                if (thisUisUiMapRoomKeyValue == "lockout")
+                {
+                    Debug.LogMessage(LogEventLevel.Debug, $"UiMap default room key {_thisUisDefaultRoomKey} is in lockout state", null, null);
+                    _mcTpController.LockedOut = true;
+                    //SendLockout(_thisUisDefaultRoomKey, _primaryRoomKey);
+                    _extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
+                    _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
+                    if (_mcTpController.EnableLockoutPoll)
+                    {
+                        // Start the timer when lockout occurs
+                        _lockoutPollTimer = new System.Timers.Timer(
+                            _props?.Lockout?.PollIntervalMs > 0 ? _props.Lockout.PollIntervalMs : 5000
+                        );
+                        _lockoutPollTimer.AutoReset = true;
+                        _lockoutPollTimer.Enabled = true;
+                        _lockoutPollTimer.Elapsed += (s, a) =>
+                        {
+                            if (!_mcTpController.LockedOut)
+                            {
+                                //if not in lockout state and was previously locked out
+                                ClearCiscoCodecUiWebViewController();
+                                _extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
+                                _lockoutPollTimer.Enabled = false;
+                                _lockoutPollTimer.Dispose();
+                                return;
+                            }
+                            _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
+                        };
+                        return;
+                    }
+                    return;
+                }
+
+                _extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
+                _mcTpController.LockedOut = false;
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    $"ui with default room key {_thisUisDefaultRoomKey} is not locked out",
+                    null,
+                    null
+                );
+            }
+            catch (Exception ex)
+            {
+                Debug.LogMessage(
+                    ex,
+                    "Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler",
+                    null,
+                    null
+                );
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    $"Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler: {ex.Message}, {ex.StackTrace}",
+                    null,
+                    null
+                );
+            }
+        }
 
 		public void LockoutUiWebViewChanagedEventHandler(object sender, UiWebViewChanagedEventArgs args)
 		{
@@ -269,7 +287,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 			{
 				UiWebView uiWebView = args?.UiWebViewStatus?.UiWebView;
 				_extensionsHandler.UiWebViewClearAction?.Invoke(
-					new UiWEbViewDisplayClearActionArgs() { Target = "Controller" }
+					new UiWebViewDisplayClearActionArgs() { Target = "Controller" }
 				);
 			}
 		}
@@ -299,10 +317,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 				{
 					webViewConfig.QueryParams = new Dictionary<string, string>();
 				}
-				webViewConfig.QueryParams.Add(
-					"primaryRoomName",
-					room != null ? room.Name : primaryRoomKey
-				);
+
+				webViewConfig.QueryParams["primaryRoomName"] =
+					room != null ? room.Name : primaryRoomKey;
 			}
 			SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
 		}
@@ -461,7 +478,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		{
 			Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewController", this);
 			_extensionsHandler?.UiWebViewClearAction?.Invoke(
-				new UiWEbViewDisplayClearActionArgs() { Target = "Controller" }
+				new UiWebViewDisplayClearActionArgs() { Target = "Controller" }
 			);
 		}
 
@@ -469,7 +486,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		{
 			Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewOsd", this);
 			_extensionsHandler?.UiWebViewClearAction?.Invoke(
-				new UiWEbViewDisplayClearActionArgs() { Target = "OSD" }
+				new UiWebViewDisplayClearActionArgs() { Target = "OSD" }
 			);
 		}
 	}

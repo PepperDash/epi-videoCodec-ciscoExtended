@@ -18,7 +18,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
 		public Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
 
-		public Action<UiWEbViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
+		public Action<UiWebViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
 
 		public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
 		public event EventHandler<UiWebViewChanagedEventArgs> UiWebViewChanagedEvent;
@@ -43,7 +43,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 					//coms.SendText(uwvd.xCommand());
 					EnqueueCommand(uwvd.xCommand());
 				});
-			UiWebViewClearAction = new Action<UiWEbViewDisplayClearActionArgs>((args) =>
+			UiWebViewClearAction = new Action<UiWebViewDisplayClearActionArgs>((args) =>
 			{
 				var target = args.Target;
 				if (args.Target == null || args.Target == "")

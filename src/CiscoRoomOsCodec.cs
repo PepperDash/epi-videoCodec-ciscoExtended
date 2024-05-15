@@ -738,6 +738,7 @@ namespace epi_videoCodec_ciscoExtended
 					this,
 					EnqueueCommand
 				);
+
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -1705,7 +1706,7 @@ namespace epi_videoCodec_ciscoExtended
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
 				RegisterDisconnectEvents();
-				RegisterUserInterfaceEvents();
+				//RegisterUserInterfaceEvents();
 
 				var socket = Communication as ISocketStatus;
 				if (socket != null)

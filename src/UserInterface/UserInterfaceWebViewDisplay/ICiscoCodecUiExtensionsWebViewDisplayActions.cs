@@ -5,7 +5,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
     public interface ICiscoCodecUiExtensionsWebViewDisplayActions
     {
         Action<UiWebViewDisplayActionArgs> UiWebViewDisplayAction { get; set; }
-        Action<UiWEbViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
+        Action<UiWebViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
 	}
 
     public class UiWebViewDisplayActionArgs
@@ -39,7 +39,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
         public string Target { get; set; }
     }
 
-    public class UiWEbViewDisplayClearActionArgs
+    public class UiWebViewDisplayClearActionArgs
     {
 		/// <summary>
 		/// OSD, Controller, PersistentWebApp Controller: Only for Cisco internal use.
