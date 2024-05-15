@@ -64,6 +64,10 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 				return base.CustomActivate();
 			}
 
+			var messenger = new McVideoCodecUserInterfaceControlMessenger(string.Format("appControlMessenger-{0}", Key), string.Format("/device/{0}", Key), this);
+
+			Mc.AddDeviceMessenger(messenger);
+
 			//Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, $"mc.ClientAppUrl: {Mc.ClientAppUrl.MaskQParamTokenInUrl()}", this);
 
 			return base.CustomActivate();
