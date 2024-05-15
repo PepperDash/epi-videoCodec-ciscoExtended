@@ -387,7 +387,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 				$"SendCiscoCodecUiToWebViewMcUrl: {mcPath}, webViewConfig null: {webViewConfig == null}, "
 					+ $"_McTouchPanelController: {_mcTpController == null}, "
 					+ $"AppUrlFeedback null: {_mcTpController?.AppUrlFeedback == null}, "
-					+ $"appUrl null: {_mcTpController?.AppUrlFeedback?.StringValue == null}",
+					+ $"appUrl: {_mcTpController?.AppUrlFeedback?.StringValue}",
 				this
 			);
 			// Parse the _appUrl into a Uri object
@@ -422,7 +422,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 				uriBuilder.Query = parameters.ToString();
 			}
 
-			// Append "/lockout" to the path
+			// Append suffix (i.e: "/lockout") to the path
 			uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + mcPath;
 
 			// Get the final URL

@@ -129,7 +129,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 		{
 			try
 			{
-				Debug.LogMessage(LogEventLevel.Debug, $"Setting AppUrl", this);
+				Debug.LogMessage(LogEventLevel.Debug, $"Setting AppUrl to: {url}", this);
 				_appUrl = url;
 				AppUrlFeedback.FireUpdate();
 			}

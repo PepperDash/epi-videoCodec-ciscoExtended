@@ -51,8 +51,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 					target = "Controller";
 				}
 				Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "WebViewClearAction: {0}", _parent, args);
-				EnqueueCommand($"xCommand UserInterface WebView Display Clear Target:{target}{CiscoCodec.Delimiter}");
-			});
+                EnqueueCommand($"xCommand UserInterface WebView Clear Target:{target}{CiscoCodec.Delimiter}");
+            });
 
 			EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Display{CiscoCodec.Delimiter}");
 			EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Cleared{CiscoCodec.Delimiter}");
