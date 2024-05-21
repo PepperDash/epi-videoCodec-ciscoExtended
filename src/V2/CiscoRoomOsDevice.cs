@@ -13,10 +13,11 @@ using PepperDash.Essentials.Core.Bridges;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
+using PepperDash.Essentials.Devices.Common.VideoCodec;
 
 namespace epi_videoCodec_ciscoExtended.V2
 {
-    public class CiscoRoomOsDevice : EssentialsDevice, IHasCodecCameras, IOnline, ICommunicationMonitor, IBridgeAdvanced, IBasicVolumeWithFeedback, IPrivacy, IHasDoNotDisturbMode
+    public class CiscoRoomOsDevice : EssentialsDevice, IHasCodecCameras, IOnline, ICommunicationMonitor, IBridgeAdvanced, IBasicVolumeWithFeedback, IPrivacy, IHasDoNotDisturbMode, IHasCodecLayoutsAvailable
     {
         public const string Delimiter = "\r\n";
 
@@ -29,6 +30,7 @@ namespace epi_videoCodec_ciscoExtended.V2
         internal readonly CiscoRecents Recents;
         internal readonly CiscoDoNotDisturb DoNotDisturb;
         internal readonly CiscoSelfView SelfView;
+        internal readonly CiscoLayouts Layouts;
 
         private readonly IBasicCommunication communications;
         private readonly IList<CiscoRoomOsFeature> features = new List<CiscoRoomOsFeature>();
@@ -81,6 +83,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             Recents = new CiscoRecents(this);
             DoNotDisturb = new CiscoDoNotDisturb(this);
             SelfView = new CiscoSelfView(this);
+            Layouts = new CiscoLayouts(this);
 
             features.Add(CodecCameras);
             features.Add(Standby);
@@ -91,8 +94,12 @@ namespace epi_videoCodec_ciscoExtended.V2
             features.Add(DoNotDisturb);
             features.Add(SelfView);
             features.Add(Recents);
+            features.Add(Layouts);
 
             CodecCameras.CameraSelected += CameraSelected;
+            Layouts.AvailableLayoutsChanged += AvailableLayoutsChanged;
+            Layouts.CurrentLayoutChanged += CurrentLayoutChanged;
+
             requestTimeout = new CTimer(_ =>
             {
                 var now = DateTime.UtcNow;
@@ -1016,6 +1023,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 var join = joinMap.Recents.JoinNumber + x;
                 var index = x;
                 var feedback = Recents.Feedbacks.ElementAtOrDefault(index);
+
                 if (feedback == null)
                 {
                     continue;
@@ -1031,6 +1039,11 @@ namespace epi_videoCodec_ciscoExtended.V2
             trilist.SetSigTrueAction(joinMap.DoNotDisturbOn.JoinNumber, ActivateDoNotDisturbMode);
             trilist.SetSigTrueAction(joinMap.DoNotDisturbOff.JoinNumber, DeactivateDoNotDisturbMode);
             trilist.SetSigTrueAction(joinMap.DoNotDisturbToggle.JoinNumber, ToggleDoNotDisturbMode);
+
+            trilist.SetSigTrueAction(joinMap.ToggleLayout.JoinNumber, LocalLayoutToggle);
+            trilist.SetStringSigAction(joinMap.SelectLayout.JoinNumber, LayoutSet);
+            Layouts.LocalLayoutFeedback.LinkInputSig(trilist.StringInput[joinMap.CurrentLayout.JoinNumber]);
+            Layouts.AvailableLayoutsFeedback.LinkInputSig(trilist.StringInput[joinMap.AvailableLayouts.JoinNumber]);
 
             // we may need these, just need to verify what's available on the bridge
             // trilist.SetSigTrueAction(joinMap.SelfviewOn.JoinNumber, () => SelfView.SelfViewModeOn());
@@ -1125,6 +1138,50 @@ namespace epi_videoCodec_ciscoExtended.V2
         public BoolFeedback DoNotDisturbModeIsOnFeedback
         {
             get { return DoNotDisturb.DoNotDisturbModeIsOnFeedback; }
+        }
+
+        public void LocalLayoutToggle()
+        {
+            ((IHasCodecLayouts) Layouts).LocalLayoutToggle();
+        }
+
+        public void LocalLayoutToggleSingleProminent()
+        {
+            ((IHasCodecLayouts) Layouts).LocalLayoutToggleSingleProminent();
+        }
+
+        public void MinMaxLayoutToggle()
+        {
+            ((IHasCodecLayouts) Layouts).MinMaxLayoutToggle();
+        }
+
+        public StringFeedback LocalLayoutFeedback
+        {
+            get { return Layouts.LocalLayoutFeedback; }
+        }
+
+        public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
+
+        public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
+
+        public StringFeedback AvailableLayoutsFeedback
+        {
+            get { return Layouts.AvailableLayoutsFeedback; }
+        }
+
+        public List<CodecCommandWithLabel> AvailableLayouts
+        {
+            get { return Layouts.AvailableLayouts; }
+        }
+
+        public void LayoutSet(string layout)
+        {
+            ((IHasCodecLayoutsAvailable) Layouts).LayoutSet(layout);
+        }
+
+        public void LayoutSet(CodecCommandWithLabel layout)
+        {
+            ((IHasCodecLayoutsAvailable) Layouts).LayoutSet(layout);
         }
     }
 }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
@@ -17,8 +16,6 @@ namespace epi_videoCodec_ciscoExtended.V2
     public class CiscoCallStatus : CiscoRoomOsFeature, IJoinCalls, IHasCallHold, IHasDialer, IHasPolls,
         IHasEventSubscriptions, IHandlesResponses
     {
-        private readonly CCriticalSection activeCallItemsSync = new CCriticalSection();
-
         private readonly IDictionary<string, CodecActiveCallItem> activeCallItems;
 
         private readonly CiscoRoomOsDevice parent;
@@ -104,98 +101,90 @@ namespace epi_videoCodec_ciscoExtended.V2
 
             var changedCallItems = new Dictionary<string, CodecActiveCallItem>();
 
-            activeCallItemsSync.Enter();
-            try
+            foreach (var line in response.Split('|'))
             {
-                foreach (var line in response.Split('|'))
+                var ghostMatch = Regex.Match(line, ghostPattern);
+                if (ghostMatch.Success)
                 {
-                    var ghostMatch = Regex.Match(line, ghostPattern);
-                    if (ghostMatch.Success)
+                    var callId = ghostMatch.Groups[1].Value;
+                    var isGhost = bool.Parse(ghostMatch.Groups[2].Value);
+
+                    CodecActiveCallItem activeCall;
+
+                    if (isGhost && activeCallItems.TryGetValue(callId, out activeCall))
                     {
-                        var callId = ghostMatch.Groups[1].Value;
-                        var isGhost = bool.Parse(ghostMatch.Groups[2].Value);
-
-                        CodecActiveCallItem activeCall;
-
-                        if (isGhost && activeCallItems.TryGetValue(callId, out activeCall))
-                        {
-                            activeCallItems.Remove(callId);
-                            activeCall.Status = eCodecCallStatus.Disconnected;
-
-                            if (!changedCallItems.ContainsKey(callId))
-                            {
-                                changedCallItems.Add(callId, activeCall);
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    var match = Regex.Match(line, pattern);
-                    if (match.Success)
-                    {
-                        var callId = match.Groups[1].Value;
-                        var property = match.Groups[2].Value.Trim(new []{ ' ', '\"' });
-                        var value = match.Groups[3].Value;
-
-                        CodecActiveCallItem activeCall;
-
-                        if (!activeCallItems.TryGetValue(callId, out activeCall))
-                        {
-                            activeCall = new CodecActiveCallItem
-                            {
-                                Id = callId
-                            };
-
-                            activeCallItems.Add(callId, activeCall);
-                        }
-
-                        try
-                        {
-                            switch (property)
-                            {
-                                case "DisplayName":
-                                    activeCallItems[callId].Name = value;
-                                    break;
-                                case "RemoteNumber":
-                                    activeCallItems[callId].Number = value;
-                                    break;
-                                case "CallType":
-                                    activeCallItems[callId].Type =
-                                        (eCodecCallType) Enum.Parse(typeof (eCodecCallType), value, true);
-                                    break;
-                                case "Status":
-                                    activeCallItems[callId].Status =
-                                        value == "Dialling"
-                                            ? eCodecCallStatus.Dialing
-                                            : (eCodecCallStatus) Enum.Parse(typeof (eCodecCallStatus), value, true);
-                                    break;
-                                case "Direction":
-                                    activeCallItems[callId].Direction =
-                                        (eCodecCallDirection) Enum.Parse(typeof (eCodecCallDirection), value, true);
-                                    break;
-                                case "PlacedOnHold":
-                                    activeCallItems[callId].IsOnHold = bool.Parse(value);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.Console(0, this, "Failed parsing the call status:{0}", ex);
-                        }
+                        activeCallItems.Remove(callId);
+                        activeCall.Status = eCodecCallStatus.Disconnected;
 
                         if (!changedCallItems.ContainsKey(callId))
                         {
                             changedCallItems.Add(callId, activeCall);
                         }
                     }
+
+                    continue;
                 }
-            }
-            finally
-            {
-                activeCallItemsSync.Leave();
+
+                var match = Regex.Match(line, pattern);
+                if (match.Success)
+                {
+                    var callId = match.Groups[1].Value;
+                    var property = match.Groups[2].Value.Trim(new[] { ' ', '\"' });
+                    var value = match.Groups[3].Value;
+
+                    CodecActiveCallItem activeCall;
+
+                    if (!activeCallItems.TryGetValue(callId, out activeCall))
+                    {
+                        activeCall = new CodecActiveCallItem
+                        {
+                            Id = callId
+                        };
+
+                        activeCallItems.Add(callId, activeCall);
+                    }
+
+                    try
+                    {
+                        switch (property)
+                        {
+                            case "DisplayName":
+                                activeCallItems[callId].Name = value;
+                                break;
+                            case "RemoteNumber":
+                                activeCallItems[callId].Number = value;
+                                break;
+                            case "CallType":
+                                activeCallItems[callId].Type =
+                                    (eCodecCallType)Enum.Parse(typeof(eCodecCallType), value, true);
+                                break;
+                            case "Status":
+                                activeCallItems[callId].Status =
+                                    value == "Dialling"
+                                        ? eCodecCallStatus.Dialing
+                                        : (eCodecCallStatus)Enum.Parse(typeof(eCodecCallStatus), value, true);
+                                break;
+                            case "Direction":
+                                activeCallItems[callId].Direction =
+                                    (eCodecCallDirection)Enum.Parse(typeof(eCodecCallDirection), value, true);
+                                break;
+                            case "PlacedOnHold":
+                                activeCallItems[callId].IsOnHold = bool.Parse(value);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.Console(0, this, "Failed parsing the call status:{0}", ex);
+                    }
+
+                    if (!changedCallItems.ContainsKey(callId))
+                    {
+                        changedCallItems.Add(callId, activeCall);
+                    }
+                }
             }
 
             CallIsIncoming.FireUpdate();

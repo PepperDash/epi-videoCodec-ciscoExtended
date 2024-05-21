@@ -114,6 +114,7 @@
     <Compile Include="V2\CiscoDoNotDisturb.cs" />
     <Compile Include="V2\CiscoFarEndCamera.cs" />
     <Compile Include="V2\CiscoJoinMap.cs" />
+    <Compile Include="V2\CiscoLayouts.cs" />
     <Compile Include="V2\CiscoNearEndCamera.cs" />
     <Compile Include="V2\CiscoPresentation.cs" />
     <Compile Include="V2\CiscoRecents.cs" />
@@ -124,6 +125,7 @@
     <Compile Include="V2\CiscoSelfView.cs" />
     <Compile Include="V2\CiscoStandby.cs" />
     <Compile Include="V2\FeedbackDebugExt.cs" />
+    <Compile Include="V2\Utils.cs" />
     <Compile Include="WebexPinRequestHandler.cs" />
     <Compile Include="BookingsDataClasses.cs" />
     <Compile Include="CallHistoryDataClasses.cs" />
