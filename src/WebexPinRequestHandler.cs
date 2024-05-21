@@ -237,7 +237,7 @@ namespace epi_videoCodec_ciscoExtended
 
             var pinEntered = request.Call.AuthenticationResponse.PinEntered;
 
-            if (pinEntered != null)
+            if (pinEntered != null && pinEntered.AuthenticatingPin.Value == "False")
             {
                 var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
 
