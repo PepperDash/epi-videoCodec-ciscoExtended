@@ -1437,7 +1437,7 @@ namespace epi_videoCodec_ciscoExtended
 
         private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
         {
-            Debug.Console(0, this, "PhonebookSyncState_InitialSyncCompleted");
+            Debug.Console(1, this, "PhonebookSyncState_InitialSyncCompleted");
             if (DirectoryRoot == null) return;
             OnDirectoryResultReturned(DirectoryRoot);
         }
@@ -2782,7 +2782,7 @@ ConnectorID: {2}"
 
                 if (callStatusEnum == eCodecCallStatus.OnHold)
                 {
-                    Debug.Console(0, this, "Enum Says On Hold!!!!!");
+                    Debug.Console(1, this, "Enum Says On Hold!!!!!");
                     callPlacedOnHold = true;
                 }
 
@@ -2819,7 +2819,7 @@ ConnectorID: {2}"
 			sb.AppendFormat("Direction : {0}{1}", callData.Direction, newLine);
 			sb.AppendFormat("Duraion : {0}{1}", callData.Duration, newLine);
 			sb.AppendFormat("IsOnHold : {0}{1}", callData.IsOnHold, newLine);
-            Debug.Console(0, this, sb.ToString());
+            Debug.Console(2, this, sb.ToString());
         }
 
         public eCodecCallType ConvertToTypeEnum(string s)
@@ -3028,7 +3028,7 @@ ConnectorID: {2}"
                     if (!changeDetected) continue;
 
                     SetSelfViewMode();
-                    Debug.Console(0, this, "On Call ID {1} Status Change - Status == {0}", tempActiveCall.Status, tempActiveCall.Id);
+                    Debug.Console(1, this, "On Call ID {1} Status Change - Status == {0}", tempActiveCall.Status, tempActiveCall.Id);
                     OnCallStatusChange(tempActiveCall);
                     ListCalls();
                     CodecPollLayouts();
@@ -4759,9 +4759,9 @@ ConnectorID: {2}"
         /// <param name="directory"></param>
         private void PrintDirectory(CodecDirectory directory)
         {
-            Debug.Console(0, this, "Attempting to Print Directory");
+            Debug.Console(1, this, "Attempting to Print Directory");
             if (directory == null) return;
-            Debug.Console(0, this, "Directory Results:\n");
+            Debug.Console(1, this, "Directory Results:\n");
 
             foreach (var item in directory.CurrentDirectoryResults)
             {
@@ -6061,7 +6061,7 @@ ConnectorID: {2}"
                 FarEndRoomPresets.Add(new CodecRoomPreset(i, label, true, false));
             }
 
-            Debug.Console(0, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
+            Debug.Console(1, this, "Selected Camera has key {0} and name {1}", Cameras.First().Key, Cameras.First().Name);
 
             SelectedCamera = Cameras.First();
             SelectCamera(SelectedCamera.Key);// call the method to select the camera and ensure the feedbacks get updated.
