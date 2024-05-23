@@ -185,14 +185,14 @@ namespace epi_videoCodec_ciscoExtended.V2
                         {
                             case "DetectedConnector":
                                 camera.Connector = Convert.ToInt32(value);
-                                Debug.Console(1, this, "Camera:{0} | DetectedConnector {1}", cameraIndex, value);
+                                // Debug.Console(1, this, "Camera:{0} | DetectedConnector {1}", cameraIndex, value);
                                 break;
                             case "Capabilities Options":
                                 camera.SetCapabilites(value);
-                                Debug.Console(1, this, "Camera:{0} | Capabilities {1}", cameraIndex, value);
+                                // Debug.Console(1, this, "Camera:{0} | Capabilities {1}", cameraIndex, value);
                                 break;
                             default:
-                                Debug.Console(1, this, "Camera:{0} | Property:{1} = {2}", cameraIndex, property, value);
+                                // Debug.Console(1, this, "Camera:{0} | Property:{1} = {2}", cameraIndex, property, value);
                                 break;
                         }
                     }

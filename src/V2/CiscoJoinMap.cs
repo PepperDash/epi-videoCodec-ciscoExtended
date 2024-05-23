@@ -4,8 +4,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 {
     public class CiscoJoinMap : JoinMapBaseAdvanced
     {
-        [JoinName("IsOnline")]
-        public JoinDataComplete IsOnline = new JoinDataComplete(
+        [JoinName("IsOnline")] public JoinDataComplete IsOnline = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 1,
@@ -18,8 +17,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DtmfJoins")]
-        public JoinDataComplete DtmfJoins = new JoinDataComplete(
+        [JoinName("DtmfJoins")] public JoinDataComplete DtmfJoins = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 11,
@@ -32,8 +30,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DtmfStar")]
-        public JoinDataComplete DtmfStar = new JoinDataComplete(
+        [JoinName("DtmfStar")] public JoinDataComplete DtmfStar = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 21,
@@ -46,8 +43,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DtmfPound")]
-        public JoinDataComplete DtmfPound = new JoinDataComplete(
+        [JoinName("DtmfPound")] public JoinDataComplete DtmfPound = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 22,
@@ -60,8 +56,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NumberOfActiveCalls")]
-        public JoinDataComplete NumberOfActiveCalls = new JoinDataComplete(
+        [JoinName("NumberOfActiveCalls")] public JoinDataComplete NumberOfActiveCalls = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 25,
@@ -74,8 +69,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("EndAllCalls")]
-        public JoinDataComplete EndAllCalls = new JoinDataComplete(
+        [JoinName("EndAllCalls")] public JoinDataComplete EndAllCalls = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 24,
@@ -88,8 +82,8 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("CallIsConnectedOrConnecting")]
-        public JoinDataComplete CallIsConnectedOrConnecting = new JoinDataComplete(
+        [JoinName("CallIsConnectedOrConnecting")] public JoinDataComplete CallIsConnectedOrConnecting = new JoinDataComplete
+            (
             new JoinData
             {
                 JoinNumber = 31,
@@ -102,8 +96,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("CallIsIncoming")]
-        public JoinDataComplete CallIsIncoming = new JoinDataComplete(
+        [JoinName("CallIsIncoming")] public JoinDataComplete CallIsIncoming = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 50,
@@ -116,8 +109,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("AnswerIncoming")]
-        public JoinDataComplete AnswerIncoming = new JoinDataComplete(
+        [JoinName("AnswerIncoming")] public JoinDataComplete AnswerIncoming = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 51,
@@ -130,8 +122,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("RejectIncoming")]
-        public JoinDataComplete RejectIncoming = new JoinDataComplete(
+        [JoinName("RejectIncoming")] public JoinDataComplete RejectIncoming = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 52,
@@ -144,8 +135,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("IncomingName")]
-        public JoinDataComplete IncomingName = new JoinDataComplete(
+        [JoinName("IncomingName")] public JoinDataComplete IncomingName = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 51,
@@ -158,8 +148,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("IncomingNumber")]
-        public JoinDataComplete IncomingNumber = new JoinDataComplete(
+        [JoinName("IncomingNumber")] public JoinDataComplete IncomingNumber = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 52,
@@ -172,8 +161,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("HangUpCall")]
-        public JoinDataComplete HangUpCall = new JoinDataComplete(
+        [JoinName("HangUpCall")] public JoinDataComplete HangUpCall = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 81,
@@ -186,8 +174,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("JoinAllCalls")]
-        public JoinDataComplete JoinAllCalls = new JoinDataComplete(
+        [JoinName("JoinAllCalls")] public JoinDataComplete JoinAllCalls = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 90,
@@ -200,8 +187,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("JoinCall")]
-        public JoinDataComplete JoinCall = new JoinDataComplete(
+        [JoinName("JoinCall")] public JoinDataComplete JoinCall = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 91,
@@ -214,8 +200,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("HoldAllCalls")]
-        public JoinDataComplete HoldAllCalls = new JoinDataComplete(
+        [JoinName("HoldAllCalls")] public JoinDataComplete HoldAllCalls = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 220,
@@ -228,8 +213,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("HoldCall")]
-        public JoinDataComplete HoldCall = new JoinDataComplete(
+        [JoinName("HoldCall")] public JoinDataComplete HoldCall = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 221,
@@ -242,8 +226,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("ResumeAllCalls")]
-        public JoinDataComplete ResumeAllCalls = new JoinDataComplete(
+        [JoinName("ResumeAllCalls")] public JoinDataComplete ResumeAllCalls = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 230,
@@ -256,8 +239,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("ResumeCall")]
-        public JoinDataComplete ResumeCall = new JoinDataComplete(
+        [JoinName("ResumeCall")] public JoinDataComplete ResumeCall = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 231,
@@ -270,8 +252,8 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndPresentationSource")]
-        public JoinDataComplete NearEndPresentationSource = new JoinDataComplete(
+        [JoinName("NearEndPresentationSource")] public JoinDataComplete NearEndPresentationSource = new JoinDataComplete
+            (
             new JoinData
             {
                 JoinNumber = 201,
@@ -284,8 +266,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("NearEndPresentationStart")]
-        public JoinDataComplete NearEndPresentationStart = new JoinDataComplete(
+        [JoinName("NearEndPresentationStart")] public JoinDataComplete NearEndPresentationStart = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 201,
@@ -298,8 +279,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndPresentationStop")]
-        public JoinDataComplete NearEndPresentationStop = new JoinDataComplete(
+        [JoinName("NearEndPresentationStop")] public JoinDataComplete NearEndPresentationStop = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 202,
@@ -312,8 +292,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("StandbyOn")]
-        public JoinDataComplete StandbyOn = new JoinDataComplete(
+        [JoinName("StandbyOn")] public JoinDataComplete StandbyOn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 246,
@@ -326,8 +305,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("StandbyOff")]
-        public JoinDataComplete StandbyOff = new JoinDataComplete(
+        [JoinName("StandbyOff")] public JoinDataComplete StandbyOff = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 247,
@@ -340,8 +318,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("EnteringStandby")]
-        public JoinDataComplete EnteringStandby = new JoinDataComplete(
+        [JoinName("EnteringStandby")] public JoinDataComplete EnteringStandby = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 248,
@@ -354,8 +331,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("SearchIsBusy")]
-        public JoinDataComplete SearchIsBusy = new JoinDataComplete(
+        [JoinName("SearchIsBusy")] public JoinDataComplete SearchIsBusy = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 100,
@@ -368,8 +344,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("MicMuteOn")]
-        public JoinDataComplete MicMuteOn = new JoinDataComplete(
+        [JoinName("MicMuteOn")] public JoinDataComplete MicMuteOn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 171,
@@ -382,8 +357,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("MicMuteOff")]
-        public JoinDataComplete MicMuteOff = new JoinDataComplete(
+        [JoinName("MicMuteOff")] public JoinDataComplete MicMuteOff = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 172,
@@ -396,8 +370,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("MicMuteToggle")]
-        public JoinDataComplete MicMuteToggle = new JoinDataComplete(
+        [JoinName("MicMuteToggle")] public JoinDataComplete MicMuteToggle = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 173,
@@ -410,8 +383,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("VolumeUp")]
-        public JoinDataComplete VolumeUp = new JoinDataComplete(
+        [JoinName("VolumeUp")] public JoinDataComplete VolumeUp = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 174,
@@ -424,8 +396,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("VolumeDown")]
-        public JoinDataComplete VolumeDown = new JoinDataComplete(
+        [JoinName("VolumeDown")] public JoinDataComplete VolumeDown = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 175,
@@ -438,8 +409,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("Volume")]
-        public JoinDataComplete Volume = new JoinDataComplete(
+        [JoinName("Volume")] public JoinDataComplete Volume = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 174,
@@ -452,8 +422,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("VolumeMuteOn")]
-        public JoinDataComplete VolumeMuteOn = new JoinDataComplete(
+        [JoinName("VolumeMuteOn")] public JoinDataComplete VolumeMuteOn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 176,
@@ -466,8 +435,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("VolumeMuteOff")]
-        public JoinDataComplete VolumeMuteOff = new JoinDataComplete(
+        [JoinName("VolumeMuteOff")] public JoinDataComplete VolumeMuteOff = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 177,
@@ -480,8 +448,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("VolumeMuteToggle")]
-        public JoinDataComplete VolumeMuteToggle = new JoinDataComplete(
+        [JoinName("VolumeMuteToggle")] public JoinDataComplete VolumeMuteToggle = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 178,
@@ -494,8 +461,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DoNotDisturbOn")]
-        public JoinDataComplete DoNotDisturbOn = new JoinDataComplete(
+        [JoinName("DoNotDisturbOn")] public JoinDataComplete DoNotDisturbOn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 241,
@@ -508,8 +474,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DoNotDisturbOff")]
-        public JoinDataComplete DoNotDisturbOff = new JoinDataComplete(
+        [JoinName("DoNotDisturbOff")] public JoinDataComplete DoNotDisturbOff = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 242,
@@ -522,8 +487,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DoNotDisturbToggle")]
-        public JoinDataComplete DoNotDisturbToggle = new JoinDataComplete(
+        [JoinName("DoNotDisturbToggle")] public JoinDataComplete DoNotDisturbToggle = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 243,
@@ -566,8 +530,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             });
          * */
 
-        [JoinName("SelfviewToggle")]
-        public JoinDataComplete SelfviewToggle = new JoinDataComplete(
+        [JoinName("SelfviewToggle")] public JoinDataComplete SelfviewToggle = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 141,
@@ -581,8 +544,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             });
 
 
-        [JoinName("NearEndCameraUp")]
-        public JoinDataComplete NearEndCameraUp = new JoinDataComplete(
+        [JoinName("NearEndCameraUp")] public JoinDataComplete NearEndCameraUp = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 111,
@@ -595,8 +557,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraDown")]
-        public JoinDataComplete NearEndCameraDown = new JoinDataComplete(
+        [JoinName("NearEndCameraDown")] public JoinDataComplete NearEndCameraDown = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 112,
@@ -609,8 +570,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraLeft")]
-        public JoinDataComplete NearEndCameraLeft = new JoinDataComplete(
+        [JoinName("NearEndCameraLeft")] public JoinDataComplete NearEndCameraLeft = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 113,
@@ -623,8 +583,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraRight")]
-        public JoinDataComplete NearEndCameraRight = new JoinDataComplete(
+        [JoinName("NearEndCameraRight")] public JoinDataComplete NearEndCameraRight = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 114,
@@ -637,8 +596,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraZoomIn")]
-        public JoinDataComplete NearEndCameraZoomIn = new JoinDataComplete(
+        [JoinName("NearEndCameraZoomIn")] public JoinDataComplete NearEndCameraZoomIn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 115,
@@ -651,8 +609,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraZoomOut")]
-        public JoinDataComplete NearEndCameraZoomOut = new JoinDataComplete(
+        [JoinName("NearEndCameraZoomOut")] public JoinDataComplete NearEndCameraZoomOut = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 116,
@@ -665,8 +622,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraFocusIn")]
-        public JoinDataComplete NearEndCameraFocusIn = new JoinDataComplete(
+        [JoinName("NearEndCameraFocusIn")] public JoinDataComplete NearEndCameraFocusIn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 117,
@@ -679,8 +635,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("NearEndCameraFocusOut")]
-        public JoinDataComplete NearEndCameraFocusOut = new JoinDataComplete(
+        [JoinName("NearEndCameraFocusOut")] public JoinDataComplete NearEndCameraFocusOut = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 121,
@@ -694,8 +649,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             });
 
 
-        [JoinName("FarEndCameraUp")]
-        public JoinDataComplete FarEndCameraUp = new JoinDataComplete(
+        [JoinName("FarEndCameraUp")] public JoinDataComplete FarEndCameraUp = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 122,
@@ -708,8 +662,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("FarEndCameraDown")]
-        public JoinDataComplete FarEndCameraDown = new JoinDataComplete(
+        [JoinName("FarEndCameraDown")] public JoinDataComplete FarEndCameraDown = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 123,
@@ -722,8 +675,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("FarEndCameraLeft")]
-        public JoinDataComplete FarEndCameraLeft = new JoinDataComplete(
+        [JoinName("FarEndCameraLeft")] public JoinDataComplete FarEndCameraLeft = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 124,
@@ -736,8 +688,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("FarEndCameraRight")]
-        public JoinDataComplete FarEndCameraRight = new JoinDataComplete(
+        [JoinName("FarEndCameraRight")] public JoinDataComplete FarEndCameraRight = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 125,
@@ -750,8 +701,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("FarEndCameraZoomIn")]
-        public JoinDataComplete FarEndCameraZoomIn = new JoinDataComplete(
+        [JoinName("FarEndCameraZoomIn")] public JoinDataComplete FarEndCameraZoomIn = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 126,
@@ -764,8 +714,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("FarEndCameraZoomOut")]
-        public JoinDataComplete FarEndCameraZoomOut = new JoinDataComplete(
+        [JoinName("FarEndCameraZoomOut")] public JoinDataComplete FarEndCameraZoomOut = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 127,
@@ -779,8 +728,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             });
 
 
-        [JoinName("SpeakerTrackEnabled")]
-        public JoinDataComplete SpeakerTrackEnabled = new JoinDataComplete(
+        [JoinName("SpeakerTrackEnabled")] public JoinDataComplete SpeakerTrackEnabled = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 131,
@@ -793,8 +741,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("SpeakerTrackDisabled")]
-        public JoinDataComplete SpeakerTrackDisabled = new JoinDataComplete(
+        [JoinName("SpeakerTrackDisabled")] public JoinDataComplete SpeakerTrackDisabled = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 132,
@@ -807,8 +754,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("SpeakerTrackAvailable")]
-        public JoinDataComplete SpeakerTrackAvailable = new JoinDataComplete(
+        [JoinName("SpeakerTrackAvailable")] public JoinDataComplete SpeakerTrackAvailable = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 143,
@@ -821,8 +767,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("ManualDial")]
-        public JoinDataComplete ManualDial = new JoinDataComplete(
+        [JoinName("ManualDial")] public JoinDataComplete ManualDial = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 71,
@@ -835,8 +780,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("DialNumber")]
-        public JoinDataComplete DialNumber = new JoinDataComplete(
+        [JoinName("DialNumber")] public JoinDataComplete DialNumber = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 1,
@@ -849,8 +793,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("CallStatusXSig")]
-        public JoinDataComplete CallStatusXSig = new JoinDataComplete(
+        [JoinName("CallStatusXSig")] public JoinDataComplete CallStatusXSig = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 2,
@@ -863,8 +806,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("DirectoryXSig")]
-        public JoinDataComplete DirectoryXSig = new JoinDataComplete(
+        [JoinName("DirectoryXSig")] public JoinDataComplete DirectoryXSig = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 101,
@@ -877,8 +819,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("SearchDirectory")]
-        public JoinDataComplete SearchDirectory = new JoinDataComplete(
+        [JoinName("SearchDirectory")] public JoinDataComplete SearchDirectory = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 100,
@@ -891,8 +832,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("DirectoryNumberOfRows")]
-        public JoinDataComplete DirectoryNumberOfRows = new JoinDataComplete(
+        [JoinName("DirectoryNumberOfRows")] public JoinDataComplete DirectoryNumberOfRows = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 101,
@@ -905,8 +845,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("DirectorySelectContact")]
-        public JoinDataComplete DirectorySelectContact = new JoinDataComplete(
+        [JoinName("DirectorySelectContact")] public JoinDataComplete DirectorySelectContact = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 101,
@@ -919,8 +858,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("SelectedContactName")]
-        public JoinDataComplete SelectedContactName = new JoinDataComplete(
+        [JoinName("SelectedContactName")] public JoinDataComplete SelectedContactName = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 102,
@@ -933,8 +871,8 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("DirectorySelectContactMethod")]
-        public JoinDataComplete DirectorySelectContactMethod = new JoinDataComplete(
+        [JoinName("DirectorySelectContactMethod")] public JoinDataComplete DirectorySelectContactMethod = new JoinDataComplete
+            (
             new JoinData
             {
                 JoinNumber = 103,
@@ -947,36 +885,35 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("SelectedDirectoryItemNumberOfContactMethods")]
-        public JoinDataComplete SelectedDirectoryItemNumberOfContactMethods = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 102,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "SelectedDirectoryItemNumberOfContactMethods",
-                JoinCapabilities = eJoinCapabilities.ToSIMPL,
-                JoinType = eJoinType.Analog
-            });
+        [JoinName("SelectedDirectoryItemNumberOfContactMethods")] public JoinDataComplete
+            SelectedDirectoryItemNumberOfContactMethods = new JoinDataComplete(
+                new JoinData
+                {
+                    JoinNumber = 102,
+                    JoinSpan = 1
+                },
+                new JoinMetadata
+                {
+                    Description = "SelectedDirectoryItemNumberOfContactMethods",
+                    JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                    JoinType = eJoinType.Analog
+                });
 
-        [JoinName("SelectedDirectoryItemContactMethodsXsig")]
-        public JoinDataComplete SelectedDirectoryItemContactMethodsXsig = new JoinDataComplete(
-            new JoinData
-            {
-                JoinNumber = 103,
-                JoinSpan = 1
-            },
-            new JoinMetadata
-            {
-                Description = "SelectedDirectoryItemContactMethodsXsig",
-                JoinCapabilities = eJoinCapabilities.ToSIMPL,
-                JoinType = eJoinType.Analog
-            });
+        [JoinName("SelectedDirectoryItemContactMethodsXsig")] public JoinDataComplete
+            SelectedDirectoryItemContactMethodsXsig = new JoinDataComplete(
+                new JoinData
+                {
+                    JoinNumber = 103,
+                    JoinSpan = 1
+                },
+                new JoinMetadata
+                {
+                    Description = "SelectedDirectoryItemContactMethodsXsig",
+                    JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                    JoinType = eJoinType.Analog
+                });
 
-        [JoinName("SelectedContactNumber")]
-        public JoinDataComplete SelectedContactNumber = new JoinDataComplete(
+        [JoinName("SelectedContactNumber")] public JoinDataComplete SelectedContactNumber = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 104,
@@ -989,8 +926,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("ClearPhonebookSearch")]
-        public JoinDataComplete ClearPhonebookSearch = new JoinDataComplete(
+        [JoinName("ClearPhonebookSearch")] public JoinDataComplete ClearPhonebookSearch = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 110,
@@ -1003,8 +939,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("DialSelectedContact")]
-        public JoinDataComplete DialSelectedContact = new JoinDataComplete(
+        [JoinName("DialSelectedContact")] public JoinDataComplete DialSelectedContact = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 106,
@@ -1018,8 +953,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             });
 
 
-        [JoinName("SelectRecentCall")]
-        public JoinDataComplete SelectRecentCall = new JoinDataComplete(
+        [JoinName("SelectRecentCall")] public JoinDataComplete SelectRecentCall = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 180,
@@ -1032,8 +966,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("SelectRecentName")]
-        public JoinDataComplete SelectRecentName = new JoinDataComplete(
+        [JoinName("SelectRecentName")] public JoinDataComplete SelectRecentName = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 171,
@@ -1046,8 +979,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("SelectRecentNumber")]
-        public JoinDataComplete SelectRecentNumber = new JoinDataComplete(
+        [JoinName("SelectRecentNumber")] public JoinDataComplete SelectRecentNumber = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 171,
@@ -1060,8 +992,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("Recents")]
-        public JoinDataComplete Recents = new JoinDataComplete(
+        [JoinName("Recents")] public JoinDataComplete Recents = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 181,
@@ -1074,8 +1005,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
-        [JoinName("CameraSelect")]
-        public JoinDataComplete CameraSelect = new JoinDataComplete(
+        [JoinName("CameraSelect")] public JoinDataComplete CameraSelect = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 60,
@@ -1088,8 +1018,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("CameraPresetActivate")]
-        public JoinDataComplete CameraPresetActivate = new JoinDataComplete(
+        [JoinName("CameraPresetActivate")] public JoinDataComplete CameraPresetActivate = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 121,
@@ -1102,8 +1031,8 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("FarEndCameraPresetActivate")]
-        public JoinDataComplete FarEndCameraPresetActivate = new JoinDataComplete(
+        [JoinName("FarEndCameraPresetActivate")] public JoinDataComplete FarEndCameraPresetActivate = new JoinDataComplete
+            (
             new JoinData
             {
                 JoinNumber = 122,
@@ -1116,8 +1045,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("CameraPresetStore")]
-        public JoinDataComplete CameraPresetStore = new JoinDataComplete(
+        [JoinName("CameraPresetStore")] public JoinDataComplete CameraPresetStore = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 123,
@@ -1130,8 +1058,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Analog
             });
 
-        [JoinName("Coms")]
-        public JoinDataComplete Coms = new JoinDataComplete(
+        [JoinName("Coms")] public JoinDataComplete Coms = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 5,
@@ -1144,8 +1071,59 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
+
+        [JoinName("ToggleLayout")]
+        public JoinDataComplete ToggleLayout = new JoinDataComplete(new JoinData()
+        {
+            JoinNumber = 142,
+            JoinSpan = 1
+        }, new JoinMetadata()
+        {
+            Description = "Toggle to the next available layout",
+            JoinCapabilities = eJoinCapabilities.FromSIMPL,
+            JoinType = eJoinType.Digital
+        });
+
+
+        [JoinName("CurrentLayout")]
+        public JoinDataComplete CurrentLayout =
+            new JoinDataComplete(new JoinData()
+            {
+                JoinNumber = 141,
+                JoinSpan = 1
+            }, new JoinMetadata()
+            {
+                Description = "Current Layout Fb",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("AvailableLayouts")]
+        public JoinDataComplete AvailableLayouts =
+            new JoinDataComplete(new JoinData()
+            {
+                JoinNumber = 142,
+                JoinSpan = 1
+            }, new JoinMetadata()
+            {
+                Description = "xSig of all available layouts",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("SelectLayout")] public JoinDataComplete SelectLayout = new JoinDataComplete(new JoinData()
+            {
+                JoinNumber = 142,
+                JoinSpan = 1
+            }, new JoinMetadata()
+            {
+                Description = "Select Layout by string",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
         public CiscoJoinMap(uint joinStart)
-            : base(joinStart, typeof(CiscoJoinMap))
+            : base(joinStart, typeof (CiscoJoinMap))
         {
         }
     }

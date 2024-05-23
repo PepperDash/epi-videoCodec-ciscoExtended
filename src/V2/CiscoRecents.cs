@@ -9,7 +9,6 @@ using PepperDash.Essentials.Devices.Common.VideoCodec;
 
 namespace epi_videoCodec_ciscoExtended.V2
 {
-
     public class CiscoRecents : CiscoRoomOsFeature, IHasEventSubscriptions, IHandlesResponses, IHasCallHistory, IHasPolls
     {
         private readonly CiscoRoomOsDevice parent;
@@ -30,7 +29,6 @@ namespace epi_videoCodec_ciscoExtended.V2
         internal readonly List<StringFeedback> Feedbacks;
         internal readonly StringFeedback SelectedRecentName;
         internal readonly StringFeedback SelectedRecentNumber;
-
 
         public CiscoRecents(CiscoRoomOsDevice parent) : base (parent.Key + "-Recents")
         {
@@ -94,6 +92,9 @@ namespace epi_videoCodec_ciscoExtended.V2
                 var result = callhistory.RecentCalls.ElementAtOrDefault(SelectedRecent - 1);
                 return result == null ? string.Empty : result.Number;
             });
+
+            SelectedRecentName.RegisterForDebug(this);
+            SelectedRecentNumber.RegisterForDebug(this);
         }
 
         public IEnumerable<string> Subscriptions { get; private set; }
@@ -144,32 +145,26 @@ namespace epi_videoCodec_ciscoExtended.V2
                 if (property.Equals("CallbackNumber"))
                 {
                     currentItem.CallbackNumber = new CiscoCallHistory.CallbackNumber { Value = value };
-                    Debug.Console(1, parent, "Recents Item:{0} | CallbackNumber {1}", itemIndex, value);
                 }
                 else if (property.Contains("DisplayName"))
                 {
                     currentItem.DisplayName = new CiscoCallHistory.DisplayName { Value = value };
-                    Debug.Console(1, parent, "Recents Item:{0} | DisplayName {1}", itemIndex, value);
                 }
                 else if (property.Contains("StartTime"))
                 {
                     currentItem.LastOccurrenceStartTime = new CiscoCallHistory.LastOccurrenceStartTime { Value = DateTime.Parse(value) };
-                    Debug.Console(1, parent, "Recents Item:{0} | StartTime {1}", itemIndex, value);
                 }
                 else if (property.Contains("DaysAgo"))
                 {
                     currentItem.LastOccurrenceDaysAgo = new CiscoCallHistory.LastOccurrenceDaysAgo { Value = value };
-                    Debug.Console(1, parent, "Recents Item:{0} | DaysAgo {1}", itemIndex, value);
                 }
                 else if (property.Contains("IsAcknowledged"))
                 {
                     currentItem.IsAcknowledged = new CiscoCallHistory.IsAcknowledged { Value = value };
-                    Debug.Console(1, parent, "Recents Item:{0} | IsAcknowledged {1}", itemIndex, value);
                 }
                 else if (property.Contains("OccurrenceType"))
                 {
                     currentItem.OccurrenceType = new CiscoCallHistory.OccurrenceType { Value = value };
-                    Debug.Console(1, parent, "Recents Item:{0} | OccurrenceType {1}", itemIndex, value);
                 }
                 else
                 {
