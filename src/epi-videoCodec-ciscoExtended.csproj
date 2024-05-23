@@ -106,7 +106,6 @@
     <Compile Include="DoNotDisturbHandler.cs" />
     <Compile Include="MessageProcessor.cs" />
     <Compile Include="UIExtensionsHandler.cs" />
-    <Compile Include="V2\CallStatusJoinMap.cs" />
     <Compile Include="V2\CiscoAudio.cs" />
     <Compile Include="V2\CiscoCallStatus.cs" />
     <Compile Include="V2\CiscoCameras.cs" />

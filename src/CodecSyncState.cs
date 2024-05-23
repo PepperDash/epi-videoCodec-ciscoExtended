@@ -39,6 +39,8 @@ namespace epi_videoCodec_ciscoExtended
                     var handler = InitialSyncCompleted;
                     if (handler != null)
                         handler(this, new EventArgs());
+
+                    Schedule();
                 }
                 _initialSyncComplete = value;
             }
@@ -233,12 +235,19 @@ namespace epi_videoCodec_ciscoExtended
                     {
                         Debug.Console(1, this, "Error processing sys action:{0}", ex);
                     }
+
+                    continue;
+                }
+
+                if (!_initialSyncComplete)
+                {
+                    _waitHandle.Wait();
                     continue;
                 }
 
 
                 Action cmd;
-                if (_commandActions.TryToDequeue(out cmd) && InitialSyncComplete)
+                if (_commandActions.TryToDequeue(out cmd))
                 {
                     try
                     {
@@ -248,10 +257,11 @@ namespace epi_videoCodec_ciscoExtended
                     {
                         Debug.Console(1, this, "Error processing usr action:{0}", ex);
                     }
-                    continue;
                 }
-
-                _waitHandle.Wait();
+                else
+                {
+                    _waitHandle.Wait();
+                }
             }
 
             return null;
