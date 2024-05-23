@@ -906,11 +906,13 @@ namespace epi_videoCodec_ciscoExtended
             {
                 BookingsRefreshTimer.Stop();
                 BookingsRefreshTimer.Dispose();
+                BookingsRefreshTimer = null;
             }
             if (PhonebookRefreshTimer != null)
             {
                 PhonebookRefreshTimer.Stop();
                 PhonebookRefreshTimer.Dispose();
+                PhonebookRefreshTimer = null;
             }
             if (_loginMessageReceivedTimer != null)
             {
@@ -927,6 +929,19 @@ namespace epi_videoCodec_ciscoExtended
                 _scheduleCheckTimer.Stop();
                 _scheduleCheckTimer.Dispose();
             }
+            if (_registrationCheckTimer != null)
+            {
+                _registrationCheckTimer.Stop();
+                _registrationCheckTimer.Dispose();
+                _registrationCheckTimer = null;
+            }
+            if (_brandingTimer != null)
+            {
+                _brandingTimer.Stop();
+                _brandingTimer.Dispose();
+                _brandingTimer = null;
+            }
+            
  
         }
         
@@ -1595,19 +1610,44 @@ ConnectorID: {2}"
 
             GetCallHistory();
 
-            PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+            if (PhonebookRefreshTimer == null)
+            {
+                PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+            }
+            else
+            {
+                PhonebookRefreshTimer.Reset();
+            }
+
+            
             // check each hour to see if the phonebook should be downloaded
             GetPhonebook(null);
 
-            BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+            if (BookingsRefreshTimer == null)
+            {
+                BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+            }
+            else
+            {
+                BookingsRefreshTimer.Reset();
+            }
+            
             // 15 minute timer to check for new booking info
             GetBookings(null);
 
             // Fire the ready event
             SetIsReady();
 
-            _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
-
+            if (_registrationCheckTimer == null)
+            {
+                _registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
+                Debug.Console(2, this, "xFeedback List Timer was null.  Created New");
+            }
+            else
+            {
+                _registrationCheckTimer.Reset(90000, 90000);
+                Debug.Console(2, this, "xFeedback List Timer existed.  Reset with same times");
+            }
         }
 
         public void SetCommDebug(string s)
@@ -1739,6 +1779,7 @@ ConnectorID: {2}"
                             SendText("xStatus");
                             SendText("xStatus SIP");
                             SendText("xStatus Call");
+                            CodecPollLayouts();
                         }
                     }
                     else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -1893,6 +1934,8 @@ ConnectorID: {2}"
 
         private void ClearLayouts()
         {
+            if (EnhancedLayouts)
+                return;
 
             var nullLayout = new CiscoCodecStatus.CurrentLayouts()
             {
@@ -1909,8 +1952,6 @@ ConnectorID: {2}"
             LocalLayoutFeedback.FireUpdate();
             OnAvailableLayoutsChanged(new List<CodecCommandWithLabel>());
             OnCurrentLayoutChanged(String.Empty);
-
-
         }
 
         private void RegisterSystemUnitEvents()
@@ -2300,7 +2341,6 @@ ConnectorID: {2}"
         {
             CameraAutoModeIsOnFeedback.FireUpdate();
             SpeakerTrackStatusOnFeedback.FireUpdate();
-            SpeakerTrackStatusOnFeedback.FireUpdate();
             PresenterTrackStatusNameFeedback.FireUpdate();
             PresenterTrackStatusOffFeedback.FireUpdate();
             PresenterTrackStatusFollowFeedback.FireUpdate();
@@ -2325,6 +2365,7 @@ ConnectorID: {2}"
                     SpeakerTrackAvailability = availabilityToken.ToString().ToLower() == "available";
                 if (statusToken != null)
                     SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
+
                 UpdateCameraAutoModeFeedbacks();
 
             }
@@ -2446,13 +2487,14 @@ ConnectorID: {2}"
 
         private void ParseLayoutToken(JToken layoutToken)
         {
+            Debug.Console(1, this, "Parsing Layout Token");
             //if ((_presentationLocalOnly || _presentationSource == 0) && (_incomingPresentation == IncomingPresentationStatus.False)) return;
             if (!_IsInPresentation)
             {
-                ClearLayouts();
-                return;
+                // ClearLayouts();
+                // return;
             }
-            Debug.Console(1, this, "Parsing Layout Token");
+
             if (String.IsNullOrEmpty(layoutToken.ToString())) return;
             UpdateCurrentLayout(layoutToken.SelectToken("ActiveLayout.Value"));
             UpdateLayoutList(layoutToken.SelectToken("AvailableLayouts"));
@@ -5150,64 +5192,6 @@ ConnectorID: {2}"
                 dndCodec.ToggleDoNotDisturbMode);
             trilist.SetSigFalseAction(joinMap.CameraPresetRecall.JoinNumber, CiscoRoomPresetRecall);
 
-            /*
-            trilist.SetSigFalseAction(joinMap.DialMeeting1.JoinNumber, () =>
-            {
-                const int mtg = 1;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting1.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting2.JoinNumber, () =>
-            {
-                const int mtg = 2;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting2.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting3.JoinNumber, () =>
-            {
-                const int mtg = 3;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting3.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-            trilist.SetSigFalseAction(joinMap.DialMeeting4.JoinNumber, () =>
-            {
-                const int mtg = 4;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting4.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-
-            trilist.SetSigFalseAction(joinMap.DialMeeting5.JoinNumber, () =>
-            {
-                const int mtg = 5;
-                const int index = mtg - 1;
-                Debug.Console(1, this,
-                    "Meeting {0} Selected (EISC dig-o{1}) > _currentMeetings[{2}].OrganizerId: {3}, Title: {4}",
-                    mtg, joinMap.DialMeeting5.JoinNumber, index, _currentMeetings[index].OrganizerId,
-                    _currentMeetings[index].Title);
-                if (_currentMeetings[index] != null)
-                    Dial(_currentMeetings[index]);
-            });
-             */
             trilist.SetSigFalseAction(joinMap.DialActiveMeeting.JoinNumber, () =>
             {
                 if (_currentMeeting == null) return;
@@ -5374,10 +5358,29 @@ ConnectorID: {2}"
             PresenterTrackStatusPersistentFeedback.LinkInputSig(
                 trilist.BooleanInput[joinMap.PresenterTrackPersistent.JoinNumber]);
 
+
+
             trilist.SetSigTrueAction(joinMap.PresenterTrackOff.JoinNumber, PresenterTrackOff);
             trilist.SetSigTrueAction(joinMap.PresenterTrackFollow.JoinNumber, PresenterTrackFollow);
             trilist.SetSigTrueAction(joinMap.PresenterTrackBackground.JoinNumber, PresenterTrackBackground);
             trilist.SetSigTrueAction(joinMap.PresenterTrackPersistent.JoinNumber, PresenterTrackPersistent);
+
+            SpeakerTrackStatusOnFeedback.LinkInputSig(trilist.BooleanInput[joinMap.SpeakerTrackOn.JoinNumber]);
+            SpeakerTrackStatusOnFeedback.LinkComplementInputSig(trilist.BooleanInput[joinMap.SpeakerTrackOff.JoinNumber]);
+
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackOn.JoinNumber, SpeakerTrackOn);
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackOff.JoinNumber, SpeakerTrackOff);
+            trilist.SetSigTrueAction(joinMap.SpeakerTrackToggle.JoinNumber, () => {
+                if (SpeakerTrackStatusOnFeedback.BoolValue)
+                {
+                    SpeakerTrackOff();
+                }
+                else
+                {
+                    SpeakerTrackOn();
+                }
+            });
+
 
             DirectorySearchInProgress.LinkInputSig(trilist.BooleanInput[joinMap.DirectorySearchBusy.JoinNumber]);
             PresentationActiveFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresentationActive.JoinNumber]);

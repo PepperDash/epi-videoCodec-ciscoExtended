@@ -63,6 +63,7 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
                 JoinType = eJoinType.Digital
             });
+
         [JoinName("SpeakerTrackAvailable")]
         public JoinDataComplete SpeakerTrackAvailable = new JoinDataComplete(
             new JoinData
@@ -76,6 +77,52 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.ToSIMPL,
                 JoinType = eJoinType.Digital
             });
+
+        [JoinName("SpeakerTrackOn")]
+        public JoinDataComplete SpeakerTrackOn = new JoinDataComplete(
+            new JoinData
+                {
+                    JoinNumber = 138,
+                    JoinSpan = 1
+                },
+            new JoinMetadata
+                {
+                    Description = "SpeakerTrack On Get/Set",
+                    JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                    JoinType = eJoinType.Digital
+                }
+            );
+
+        [JoinName("SpeakerTrackOff")]
+        public JoinDataComplete SpeakerTrackOff = new JoinDataComplete(
+            new JoinData
+                {
+                    JoinNumber = 139,
+                    JoinSpan = 1
+                },
+            new JoinMetadata
+                {
+                    Description = "SpeakerTrack Off Get/Set",
+                    JoinCapabilities = eJoinCapabilities.ToFromSIMPL,
+                    JoinType = eJoinType.Digital
+                }
+            );
+
+        [JoinName("SpeakerTrackToggle")]
+        public JoinDataComplete SpeakerTrackToggle = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 140,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "SpeakerTrack Toggle",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            }
+            );
+
 
         [JoinName("PresenterTrackAvailable")]
         public JoinDataComplete PresenterTrackAvailable = new JoinDataComplete(
