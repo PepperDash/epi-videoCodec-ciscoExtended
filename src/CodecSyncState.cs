@@ -236,8 +236,9 @@ namespace epi_videoCodec_ciscoExtended
                     continue;
                 }
 
+
                 Action cmd;
-                if (_commandActions.TryToDequeue(out cmd))
+                if (_commandActions.TryToDequeue(out cmd) && InitialSyncComplete)
                 {
                     try
                     {

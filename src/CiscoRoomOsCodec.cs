@@ -2060,24 +2060,34 @@ ConnectorID: {2}"
 
         private void RegisterH323Configuration()
         {
+            const string unknown = "unknown";
             try
             {
-                CodecConfiguration.Configuration.H323.H323Alias.E164.ValueChangedAction += () =>
-                    {
-                        var e164 = CodecConfiguration.Configuration.H323.H323Alias.E164.Value.NullIfEmpty() ?? "unknown";
+                CodecConfiguration
+                    .Configuration
+                    .H323
+                    .H323Alias
+                    .E164
+                    .ValueChangedAction += () =>
+                                       {
+                                           var e164 =
+                                               CodecConfiguration
+                                                   .Configuration
+                                                   .H323.H323Alias
+                                                   .E164.Value;
                         OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323)
                         {
-                            E164Alias = e164,
+                            E164Alias = string.IsNullOrEmpty(e164) ? unknown : e164
                         });
 
                     };
 
                 CodecConfiguration.Configuration.H323.H323Alias.H323AliasId.ValueChangedAction += () =>
                 {
-                    var h323Id = CodecConfiguration.Configuration.H323.H323Alias.H323AliasId.Value.NullIfEmpty() ?? "unknown";
+                    var h323Id = CodecConfiguration.Configuration.H323.H323Alias.H323AliasId.Value;
                     OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.H323)
                     {
-                        H323Id = h323Id
+                        H323Id = string.IsNullOrEmpty(h323Id) ? unknown : h323Id
                     });
 
                 };
@@ -2279,10 +2289,9 @@ ConnectorID: {2}"
         {
             var myNetwork = networks.FirstOrDefault(i => i.NetworkId == "1");
             if (myNetwork == null) return;
-            var hostname = myNetwork.Cdp.DeviceId.Value.NullIfEmpty() ?? "Unknown";
-            var ipAddress = myNetwork.IPv4.Address.Value.NullIfEmpty() ?? "Unknown";
-            var macAddress = myNetwork.Ethernet.MacAddress.Value.NullIfEmpty()
-                             ?? "Unknown";
+            var hostname = (myNetwork.Cdp.DeviceId.Value ?? string.Empty).NullIfEmpty() ?? "Unknown";
+            var ipAddress = (myNetwork.IPv4.Address.Value ?? string.Empty).NullIfEmpty() ?? "Unknown";
+            var macAddress = (myNetwork.Ethernet.MacAddress.Value ?? string.Empty).NullIfEmpty() ?? "Unknown";
 
 
             OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
@@ -2315,7 +2324,7 @@ ConnectorID: {2}"
 
                 if (registrationItem != null)
                 {
-                    sipUri = registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
+                    sipUri = (registrationItem.SelectToken("URI.Value").ToString() ?? string.Empty).NullIfEmpty()
                              ?? "Unknown";
                     var match = Regex.Match(sipUri, @"(\d+)");
                     sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
@@ -2431,10 +2440,12 @@ ConnectorID: {2}"
                 foreach (var n in networkArray.Children<JObject>())
                 {
                     if (n.SelectToken("id").ToString() != "1") continue;
-                    var hostname = n.SelectToken("Cdp.DeviceId.Value").ToString().NullIfEmpty() ?? "Unknown";
-                    var ipAddress = n.SelectToken("IPv4.Address.Value").ToString().NullIfEmpty() ?? "Unknown";
-                    var macAddress = n.SelectToken("Ethernet.MacAddress.Value").ToString().NullIfEmpty()
-                                     ?? "Unknown";
+                    var hostname = (n.SelectToken("Cdp.DeviceId.Value").ToString() ?? string.Empty).NullIfEmpty() 
+                        ?? "Unknown";
+                    var ipAddress = (n.SelectToken("IPv4.Address.Value").ToString() ?? string.Empty).NullIfEmpty() 
+                        ?? "Unknown";
+                    var macAddress = (n.SelectToken("Ethernet.MacAddress.Value").ToString() ?? string.Empty).NullIfEmpty()
+                        ?? "Unknown";
                     OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
                     {
                         IpAddress = ipAddress
@@ -2460,7 +2471,7 @@ ConnectorID: {2}"
         private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
         {
             if (sipObject.Registrations.Count <= 0) return;
-            var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
+            var sipUri = (sipObject.Registrations.First().Uri.Value ?? string.Empty).NullIfEmpty() ?? "Unknown";
             var match = Regex.Match(sipUri, @"(\d+)");
             var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
             OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
