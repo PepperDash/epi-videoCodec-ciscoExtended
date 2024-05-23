@@ -223,7 +223,7 @@ namespace epi_videoCodec_ciscoExtended
 
                     foreach (Contact c in result.Contact)
                     {
-                        var contact = new DirectoryContact();
+                        var contact = new DirectoryContact {ParentFolderId = "root"};
 
                         if (string.IsNullOrEmpty(c.FolderId.Value))
                         {
@@ -277,6 +277,7 @@ namespace epi_videoCodec_ciscoExtended
 
                                 contact.ContactMethods.Add(tempContactMethod);
                             }
+
                             rootContacts.Add(contact);
                         }
                     }
@@ -346,6 +347,10 @@ namespace epi_videoCodec_ciscoExtended
                         if (c.FolderId != null)
                         {
                             contact.FolderId = c.FolderId.Value;
+                        }
+                        else
+                        {
+                            contact.FolderId = "root";
                         }
 
                         foreach (ContactMethod m in c.ContactMethod)

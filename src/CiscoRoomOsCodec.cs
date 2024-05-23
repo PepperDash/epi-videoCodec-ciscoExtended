@@ -2908,10 +2908,10 @@ ConnectorID: {2}"
 
         public bool MergeCallData(CodecActiveCallItem existingCallData, CodecActiveCallItem newCallData)
         {
-            Debug.Console(0, this, "Merging Call Data");
-            Debug.Console(0, this, "Existing : ");
+            Debug.Console(2, this, "Merging Call Data");
+            Debug.Console(2, this, "Existing : ");
             PrintCallItem(existingCallData);
-            Debug.Console(0, this, "New");
+            Debug.Console(2, this, "New");
             PrintCallItem(newCallData);
             bool valueChanged = false;
 
@@ -2921,8 +2921,8 @@ ConnectorID: {2}"
                 valueChanged = true;
             }
 
-            Debug.Console(1, "New Duration : {0}", newCallData.Duration.TotalSeconds);
-            Debug.Console(1, "Old Duration : {0}", existingCallData.Duration.TotalSeconds);
+            Debug.Console(2, "New Duration : {0}", newCallData.Duration.TotalSeconds);
+            Debug.Console(2, "Old Duration : {0}", existingCallData.Duration.TotalSeconds);
             if (existingCallData.Duration != newCallData.Duration &&
                 newCallData.Duration.Seconds != Int32.MaxValue)
             {
@@ -3389,7 +3389,8 @@ ConnectorID: {2}"
             if (!_syncState.InitialConfigurationMessageWasReceived)
             {
                 Debug.Console(0, this, "Sending Configuration");
-                SendText("xConfiguration");
+                SendText("xConfiguration conference");
+                SendText("xConfiguration h323");
             }
             if (_syncState.FeedbackWasRegistered) return;
             Debug.Console(0, this, "Sending Feedback");
@@ -3491,6 +3492,7 @@ ConnectorID: {2}"
                 } 
                 if (_syncState.InitialConfigurationMessageWasReceived) return;
                 Debug.Console(2, this, "InitialConfig Received");
+
                 _syncState.InitialConfigurationMessageReceived();
                 if (!_syncState.InitialSoftwareVersionMessageWasReceived)
                 {
@@ -3593,8 +3595,7 @@ ConnectorID: {2}"
             }
             catch (Exception ex)
             {
-
-                Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex.Message);
+                Debug.Console(0, this, "Exception in ParsePhonebookNumberOfContacts : {0}", ex);
                 if (ex.InnerException == null) return;
                 Debug.Console(0, this, "Inner Exception in ParsePhonebookNumberOfContacts : {0}", ex.InnerException.Message);
             }
@@ -3784,11 +3785,14 @@ ConnectorID: {2}"
         {
             try
             {
-                return obj["ResultId"].ToString();
+                JToken result;
+                return obj.TryGetValue("ResultId", out result)
+                    ? result.Value<string>()
+                    : string.Empty;
             }
             catch (Exception ex)
             {
-                return Guid.Empty.ToString();
+                return string.Empty;
             }
         }
 
@@ -4455,8 +4459,7 @@ ConnectorID: {2}"
 
                 if (ex is JsonReaderException)
                 {
-                    Debug.Console(1, this, "Received malformed response from codec.");
-
+                    Debug.Console(1, this, "Received malformed response from codec:{0}", response);
                     //Communication.Disconnect();
 
                     //Initialize();
