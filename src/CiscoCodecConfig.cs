@@ -3,7 +3,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
 using Newtonsoft.Json;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+using Extensions = epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Extensions;
 
 namespace epi_videoCodec_ciscoExtended
 {
