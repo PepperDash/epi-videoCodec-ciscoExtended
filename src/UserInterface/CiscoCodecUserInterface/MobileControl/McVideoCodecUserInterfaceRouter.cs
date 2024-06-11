@@ -114,9 +114,12 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 HandleRoomCombineScenarioChanged();       
             };
 
-			//subscribe to events for routing buttons from codec ui to mobile control
-			_combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged +=
-				Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler;
+			if (_combinerHandler.EssentialsRoomCombiner != null)
+			{
+				//subscribe to events for routing buttons from codec ui to mobile control
+				_combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged +=
+					Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler;
+			}
 
 			_extensionsHandler.UiExtensionsClickedEvent +=
 				VideoCodecUiExtensionsClickedMcEventHandler;

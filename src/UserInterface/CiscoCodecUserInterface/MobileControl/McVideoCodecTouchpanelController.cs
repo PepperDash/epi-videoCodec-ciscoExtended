@@ -91,14 +91,14 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 					return;
 				}
 				var bridge = Mc.GetRoomMessenger(_props.DefaultRoomKey);
-				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Got Bridge: {bridge.RoomName}", this);
 				if (bridge == null)
 				{
 					Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] No Mobile Control bridge for {_props.DefaultRoomKey} found ", this);
 					return;
 				}
+                Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Got Bridge: {bridge.RoomName}", this);
 
-				_bridge = bridge;
+                _bridge = bridge;
 				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Setting AppUrl", this);
 
 				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Mobile Control Room Bridge Found {_bridge.Key}", this);
