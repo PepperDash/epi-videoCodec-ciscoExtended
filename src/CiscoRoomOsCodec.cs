@@ -713,7 +713,10 @@ namespace epi_videoCodec_ciscoExtended
 			UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
 			_comms = comm;
 
-			CrestronEnvironment.ProgramStatusEventHandler += a =>
+
+
+
+            CrestronEnvironment.ProgramStatusEventHandler += a =>
 			{
 				if (a != eProgramStatusEventType.Stopping)
 					return;
@@ -1091,6 +1094,7 @@ namespace epi_videoCodec_ciscoExtended
 				if (!String.IsNullOrEmpty(args.IpAddress))
 				{
 					DeviceInfo.IpAddress = args.IpAddress;
+					UpdateDeviceInfo();
 				}
 			}
 		}
@@ -1699,10 +1703,10 @@ namespace epi_videoCodec_ciscoExtended
 			{
 				//RegisterSystemUnitEvents();
 				//RegisterSipEvents();
-				//RegisterNetworkEvents();
-				//RegisterVideoEvents();
-				//RegisterConferenceEvents();
-				RegisterRoomPresetEvents();
+				RegisterNetworkEvents();
+                /*RegisterVideoEvents();*/
+                //RegisterConferenceEvents();
+                RegisterRoomPresetEvents();
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
 				RegisterDisconnectEvents();
@@ -1712,7 +1716,23 @@ namespace epi_videoCodec_ciscoExtended
 				if (socket != null)
 				{
 					socket.ConnectionChange += socket_ConnectionChange;
-				}
+
+                    var ssh = socket as GenericSshClient;
+
+                    if (ssh != null)
+                    {
+                        DeviceInfo.IpAddress = ssh.Hostname;
+                        DeviceInfo.HostName = ssh.Hostname;
+                    }
+
+                    var tcp = socket as GenericTcpIpClient;
+
+                    if (tcp != null)
+                    {
+                        DeviceInfo.IpAddress = tcp.Hostname;
+                        DeviceInfo.HostName = tcp.Hostname;
+                    }
+                }
 
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
@@ -2599,7 +2619,9 @@ ConnectorID: {2}",
 		{
 			CodecStatus.Status.NetworkCount.ValueChangedAction += () =>
 			{
-				if (CodecStatus.Status.NetworkCount.Value <= 0)
+				Debug.Console(2, this, "CodecStatus.Status.NetworkCount.ValueChangedAction");
+                Debug.Console(2, this, "CodecStatus.Status.NetworkCount.Value = {0}", CodecStatus.Status.NetworkCount.Value);
+                if (CodecStatus.Status.NetworkCount.Value <= 0)
 					return;
 				ParseNetworkList(CodecStatus.Status.Networks);
 			};
@@ -7293,7 +7315,7 @@ ConnectorID: {2}",
 		#endregion
 
 
-		public DeviceInfo DeviceInfo { get; set; }
+		public DeviceInfo DeviceInfo { get; private set; }
 
 		public event DeviceInfoChangeHandler DeviceInfoChanged;
 

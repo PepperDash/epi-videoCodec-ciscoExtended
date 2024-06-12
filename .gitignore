@@ -360,3 +360,4 @@ MigrationBackup/
 .vscode/settings.json
 .vscode
 .config/dotnet-tools.json
+*.DS_Store
