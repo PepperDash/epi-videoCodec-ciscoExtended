@@ -219,14 +219,13 @@ namespace epi_videoCodec_ciscoExtended
 
         public void ParseAuthenticationResponse(JToken token)
         {
-            var request = token.ToObject<AuthenticationResponseObject>();
-            if (request.Call == null || request.Call.AuthenticationResponse == null)
+            var response = token.ToObject<AuthenticationResponseObject>();
+            if (response.Call == null || response.Call.AuthenticationResponse == null)
                 return;
 
-            Debug.Console(1, _parent, "Parsing Auth Response object: {0}", JsonConvert.SerializeObject(request));
+            Debug.Console(1, _parent, "Parsing Auth Response object: {0}", JsonConvert.SerializeObject(response));
 
-            var pinError = request.Call.AuthenticationResponse.PinError;
-
+            var pinError = response.Call.AuthenticationResponse.PinError;
             if (pinError != null)
             {
                 PinIncorrect.Start();
@@ -235,37 +234,86 @@ namespace epi_videoCodec_ciscoExtended
                 return;
             }
 
-            var pinEntered = request.Call.AuthenticationResponse.PinEntered;
+			// TODO [ ] Review refactor, additional updates may be required to handle Webex Webinars
+			// - below resolves issues preventing Host/Guests to connect in standard calls
+            var pinEntered = response.Call.AuthenticationResponse.PinEntered;
+	        if (pinEntered == null)
+	        {
+				Debug.Console(1, _parent, "Pin Entered: null");
+		        return;
+	        }
 
-            if (pinEntered != null && pinEntered.AuthenticatingPin.Value == "False")
-            {
-                var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
+			var role = response.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
+	        if (string.IsNullOrEmpty(role))
+	        {
+				Debug.Console(1, _parent, "Participant Role: null");
+		        return;
+	        }
+			
+			Debug.Console(1, _parent, "Pin Entered: {0}", pinEntered);
+			Debug.Console(1, _parent, "Authenticating Pin Value: {0}", pinEntered.AuthenticatingPin.Value);
+	        
+			Debug.Console(1, _parent, "Joining as {0}", role);
 
-                if (!String.IsNullOrEmpty(role) && role == "Guest")
-                {
-                    JoinedAsGuest.Start();
-                    JoinedAsAttendee.Start();
-                    _pin = string.Empty;
-                    Debug.Console(1, _parent, "Joined as {0}", role);
-                    return;
-                }
+	        switch (role)
+	        {
+				case("Guest"):
+		        {
+					JoinedAsGuest.Start();
+					JoinedAsAttendee.Start();
+			        _pin = string.Empty;
+			        break;
+		        }
+				case("Host"):
+		        {
+					JoinedAsHost.Start();
+			        _pin = string.Empty;
+			        break;
+		        }
+				case("Panelist"):
+		        {
+					JoinedAsPanelist.Start();
+			        _pin = string.Empty;
+			        break;
+		        }
+				default:
+		        {
+					Debug.Console(1, _parent, "Unhandled role: {0}", role);
+			        break;
+		        }
+	        }
 
-                if (!String.IsNullOrEmpty(role) && role == "Host")
-                {
-                    JoinedAsHost.Start();
-                    _pin = string.Empty;
-                    Debug.Console(1, _parent, "Joined as {0}", role);
-                    return;
-                }
+			Debug.Console(1, _parent, "Joined as {0}", role);
 
-                if (!String.IsNullOrEmpty(role) && role == "Panelist")
-                {
-                    JoinedAsPanelist.Start();
-                    _pin = string.Empty;
-                    Debug.Console(1, _parent, "Joined as {0}", role);
-                    return;
-                }
-            }
+	        //if (pinEntered != null && pinEntered.AuthenticatingPin.Value == "False")
+	        //{
+	        //    var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
+
+	        //    if (!String.IsNullOrEmpty(role) && role == "Guest")
+	        //    {
+	        //        JoinedAsGuest.Start();
+	        //        JoinedAsAttendee.Start();
+	        //        _pin = string.Empty;
+	        //        Debug.Console(1, _parent, "Joined as {0}", role);
+	        //        return;
+	        //    }
+
+	        //    if (!String.IsNullOrEmpty(role) && role == "Host")
+	        //    {
+	        //        JoinedAsHost.Start();
+	        //        _pin = string.Empty;
+	        //        Debug.Console(1, _parent, "Joined as {0}", role);
+	        //        return;
+	        //    }
+
+	        //    if (!String.IsNullOrEmpty(role) && role == "Panelist")
+	        //    {
+	        //        JoinedAsPanelist.Start();
+	        //        _pin = string.Empty;
+	        //        Debug.Console(1, _parent, "Joined as {0}", role);
+	        //        return;
+	        //    }
+	        //}
         }
 
         public void JoinAsGuest()
