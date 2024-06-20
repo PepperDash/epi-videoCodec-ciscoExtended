@@ -87,7 +87,9 @@ namespace epi_videoCodec_ciscoExtended
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			IRouting,
+			//IRouting,
+			IRoutingInputs,
+			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,
 			IHasCodecRoomPresets,
@@ -687,9 +689,16 @@ namespace epi_videoCodec_ciscoExtended
 
 		// **___________________________________________________________________**
 
-		public RoutingInputPort CodecOsdIn { get; private set; }
-		public RoutingInputPort HdmiIn2 { get; private set; }
+		//public RoutingInputPort CodecOsdIn { get; private set; }
+
+        public RoutingInputPort HdmiIn1 { get; private set; }
+        public RoutingInputPort HdmiIn2 { get; private set; }
 		public RoutingInputPort HdmiIn3 { get; private set; }
+		public RoutingInputPort HdmiIn4 { get; private set; }
+		public RoutingInputPort HdmiIn5 { get; private set; }
+		public RoutingInputPort SdiInput { get; private set; }
+
+
 		public RoutingOutputPort HdmiOut1 { get; private set; }
 		public RoutingOutputPort HdmiOut2 { get; private set; }
 
@@ -957,27 +966,55 @@ namespace epi_videoCodec_ciscoExtended
 			//Set Feedback Actions
 			SetFeedbackActions();
 
-			CodecOsdIn = new RoutingInputPort(
-				RoutingPortNames.CodecOsd,
-				eRoutingSignalType.Audio | eRoutingSignalType.Video,
-				eRoutingPortConnectionType.Hdmi,
-				new Action(StopSharing),
-				this
-			);
-			HdmiIn2 = new RoutingInputPort(
-				RoutingPortNames.HdmiIn2,
+			//CodecOsdIn = new RoutingInputPort(
+			//	RoutingPortNames.CodecOsd,
+			//	eRoutingSignalType.Audio | eRoutingSignalType.Video,
+			//	eRoutingPortConnectionType.Hdmi,
+			//	new Action(StopSharing),
+			//	this
+			//);
+            HdmiIn1 = new RoutingInputPort(
+				RoutingPortNames.HdmiIn1,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
 				eRoutingPortConnectionType.Hdmi,
 				new Action(SelectPresentationSource1),
+				this
+			);
+            HdmiIn2 = new RoutingInputPort(
+				RoutingPortNames.HdmiIn2,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				new Action(SelectPresentationSource2),
 				this
 			);
 			HdmiIn3 = new RoutingInputPort(
 				RoutingPortNames.HdmiIn3,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
 				eRoutingPortConnectionType.Hdmi,
-				new Action(SelectPresentationSource2),
+				new Action(() => SelectPresentationSource(3)),
 				this
 			);
+            HdmiIn4 = new RoutingInputPort(
+				RoutingPortNames.HdmiIn4,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				new Action(() => SelectPresentationSource(4)),
+				this
+			);
+            HdmiIn5 = new RoutingInputPort(
+                RoutingPortNames.HdmiIn5,
+                eRoutingSignalType.Audio | eRoutingSignalType.Video,
+                eRoutingPortConnectionType.Hdmi,
+                new Action(() => SelectPresentationSource(5)),
+                this
+            );
+			SdiInput = new RoutingInputPort(
+				RoutingPortNames.SdiIn,
+				eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Sdi,
+				new Action(() => SelectPresentationSource(6)),
+				this
+				);
 			HdmiOut1 = new RoutingOutputPort(
 				RoutingPortNames.HdmiOut1,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -993,11 +1030,15 @@ namespace epi_videoCodec_ciscoExtended
 				this
 			);
 
-			InputPorts.Add(CodecOsdIn);
+			//InputPorts.Add(CodecOsdIn);
+			InputPorts.Add(HdmiIn1);
 			InputPorts.Add(HdmiIn2);
 			InputPorts.Add(HdmiIn3);
+			InputPorts.Add(HdmiIn4);
+			InputPorts.Add(HdmiIn5);
 			OutputPorts.Add(HdmiOut1);
-			CreateOsdSource();
+			OutputPorts.Add(HdmiOut2);
+			//CreateOsdSource();
 
 			ExternalSourceListEnabled = props.ExternalSourceListEnabled;
 			ExternalSourceInputPort = props.ExternalSourceInputPort;
@@ -1479,13 +1520,13 @@ namespace epi_videoCodec_ciscoExtended
 			}
 		}
 
-		private void CreateOsdSource()
-		{
-			OsdSource = new DummyRoutingInputsDevice(Key + "[osd]");
-			DeviceManager.AddDevice(OsdSource);
-			var tl = new TieLine(OsdSource.AudioVideoOutputPort, CodecOsdIn);
-			TieLineCollection.Default.Add(tl);
-		}
+		//private void CreateOsdSource()
+		//{
+		//	OsdSource = new DummyRoutingInputsDevice(Key + "[osd]");
+		//	DeviceManager.AddDevice(OsdSource);
+		//	var tl = new TieLine(OsdSource.AudioVideoOutputPort, CodecOsdIn);
+		//	TieLineCollection.Default.Add(tl);
+		//}
 
 		public void InitializeBranding(string roomKey)
 		{
@@ -5770,6 +5811,7 @@ ConnectorID: {2}",
 			SelectPresentationSource(3);
 		}
 
+		
 		public override void StartSharing()
 		{
 			if (_desiredPresentationSource > 0)
