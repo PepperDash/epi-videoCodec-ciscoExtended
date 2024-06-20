@@ -1036,6 +1036,7 @@ namespace epi_videoCodec_ciscoExtended
 			InputPorts.Add(HdmiIn3);
 			InputPorts.Add(HdmiIn4);
 			InputPorts.Add(HdmiIn5);
+			InputPorts.Add(SdiInput);
 			OutputPorts.Add(HdmiOut1);
 			OutputPorts.Add(HdmiOut2);
 			//CreateOsdSource();
