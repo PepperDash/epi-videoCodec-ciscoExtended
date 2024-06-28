@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
+using System.Security.Cryptography.X509Certificates;
 
 namespace PepperDash.Essentials.Touchpanel
 {
@@ -23,28 +24,9 @@ namespace PepperDash.Essentials.Touchpanel
                 return;
             }
 
-           // AddAction($"/fullStatus", (id, context) => SendFullStatus());
-
             AddAction($"/closeWebViewController", (id, context) => _appControl.CloseWebViewController());
-
-            //_appControl.WebViewOpenFeedback.OutputChange += (s, a) =>
-            //{
-            //    PostStatusMessage(JToken.FromObject(new
-            //    {
-            //        appOpen = a.BoolValue
-            //    }));
-            //};
         }
 
-        //private void SendFullStatus()
-        //{
-        //    var message = new TswAppStateMessage
-        //    {
-        //        AppOpen = _appControl.AppOpenFeedback.BoolValue,
-        //    };
-
-        //    PostStatusMessage(message);
-        //}
     }
 
     //public class VideoCodecUserInterfaceAppStateMessage : DeviceStateMessageBase

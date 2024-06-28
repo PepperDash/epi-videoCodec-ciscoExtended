@@ -1,10 +1,5 @@
-﻿using PepperDash.Essentials.Core;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
+﻿using PepperDash.Core;
+using PepperDash.Essentials.Core;
 namespace epi_videoCodec_ciscoExtended.Interfaces
 {
     internal enum eCiscoCameraMode
@@ -17,7 +12,7 @@ namespace epi_videoCodec_ciscoExtended.Interfaces
     /// <summary>
     /// Describes the available tracking modes for a Cisco codec
     /// </summary>
-    internal interface ISpeakerTrack
+    public interface ISpeakerTrack : IKeyed
     {
         bool SpeakerTrackAvailability { get; }
 
@@ -29,7 +24,7 @@ namespace epi_videoCodec_ciscoExtended.Interfaces
         void SpeakerTrackOn();
     }
 
-    internal interface IPresenterTrack
+    public interface IPresenterTrack : IKeyed
     {
         bool PresenterTrackAvailability { get; }
 

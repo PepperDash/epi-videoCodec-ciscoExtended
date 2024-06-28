@@ -9,6 +9,7 @@ using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Crestron.SimplSharpPro.Diagnostics;
+using epi_videoCodec_ciscoExtended.Interfaces;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -87,7 +88,6 @@ namespace epi_videoCodec_ciscoExtended
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			//IRouting,
 			IRoutingInputs,
 			IRoutingSource,
 			IHasCodecCameras,
@@ -104,7 +104,9 @@ namespace epi_videoCodec_ciscoExtended
 			IDeviceInfoProvider,
 			IHasPhoneDialing,
 			ICiscoCodecUiExtensionsController,
-			ICiscoCodecCameraConfig
+			ICiscoCodecCameraConfig,
+			ISpeakerTrack,
+			IPresenterTrack
     {
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
@@ -1697,7 +1699,20 @@ namespace epi_videoCodec_ciscoExtended
 			CodecSchedule.MeetingsListHasChanged += (sender, args) => { };
 			CodecSchedule.MeetingEventChange += (sender, args) => { };
 
-			return base.CustomActivate();
+            var mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
+
+            if (mc == null)
+            {
+                return base.CustomActivate();
+            }
+
+			var speakerTrackMessenger = new ISpeakerTrackMessenger($"speakerTrack-{Key}", $"/device/{Key}", this);
+			mc.AddDeviceMessenger(speakerTrackMessenger);
+
+			var presenterTrackMessenger = new IPresenterTrackMessenger($"presenterTrack-{Key}", $"/device/{Key}", this);
+			mc.AddDeviceMessenger(presenterTrackMessenger);
+
+            return base.CustomActivate();
 		}
 
 		private void CiscoCodec_CameraTrackingCapabilitiesChanged(
