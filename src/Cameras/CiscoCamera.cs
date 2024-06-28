@@ -188,7 +188,7 @@ namespace epi_videoCodec_ciscoExtended
         /// <param name="key"></param>
         /// <param name="name"></param>
         /// <param name="props"></param>
-        public CiscoCamera(string key, string name, CiscoCodecPropertiesConfig props)
+        public CiscoCamera(string key, string name, CiscoCodecCameraPropertiesConfig props)
             : base(key, name)
         {
             SerialNumber = props.SerialNumber;
@@ -384,7 +384,7 @@ namespace epi_videoCodec_ciscoExtended
         }
     }
 
-    public class CiscoCodecPropertiesConfig
+    public class CiscoCodecCameraPropertiesConfig
     {
         [JsonProperty("defaultParentCodecKey")]
         public string DefaultParentCodecKey { get; set; }
@@ -395,7 +395,7 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("serialNumber")]
         public string SerialNumber { get; set; }
 
-        [JsonProperty("macAddress")]
+        [JsonProperty("hardwareId")]
         public string HardwareID { get; set; }
 
         [JsonProperty("macAddress")]

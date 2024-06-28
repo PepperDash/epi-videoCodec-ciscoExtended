@@ -18,7 +18,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             Debug.Console(1, "Factory Attempting to create new Cisco Camera Device");
 
-            var props = Newtonsoft.Json.JsonConvert.DeserializeObject<CiscoCodecPropertiesConfig>(dc.Properties.ToString());
+            var props = Newtonsoft.Json.JsonConvert.DeserializeObject<CiscoCodecCameraPropertiesConfig>(dc.Properties.ToString());
             return new CiscoCamera(dc.Key, dc.Name, props);
         }
     }
