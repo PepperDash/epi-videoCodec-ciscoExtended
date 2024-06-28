@@ -27,8 +27,8 @@ using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using Serilog.Events;
-using static Crestron.SimplSharpPro.DM.Audio;
 using Feedback = PepperDash.Essentials.Core.Feedback;
+
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -103,8 +103,9 @@ namespace epi_videoCodec_ciscoExtended
 			IJoinCalls,
 			IDeviceInfoProvider,
 			IHasPhoneDialing,
-			ICiscoCodecUiExtensionsController
-	{
+			ICiscoCodecUiExtensionsController,
+			ICiscoCodecCameraConfig
+    {
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
 		private event EventHandler<MinuteChangedEventArgs> MinuteChanged;
@@ -6927,34 +6928,6 @@ ConnectorID: {2}",
             }
 			else
 			{
-				/*
-                // Setup all the cameras
-                for (int i = 0; i < camCount; i++)
-                {
-                    var cam = CodecStatus.Status.Cameras.CameraList[i];
-
-                    var CiscoCallId = (uint) i;
-                    var name = string.Format("CameraList {0}", CiscoCallId);
-
-                    // Check for a config object that matches the camera number
-                    var camInfo = cameraInfo.FirstOrDefault(c => c.CameraNumber == i + 1);
-                    if (camInfo != null)
-                    {
-                        CiscoCallId = (uint) camInfo.SourceId;
-                        name = camInfo.Name;
-                    }
-
-                    var key = string.Format("{0}-camera{1}", Key, CiscoCallId);
-                    var camera = new CiscoCamera(key, name, this, CiscoCallId);
-
-                    if (cam.StatusCapabilities != null)
-                    {
-                        camera.SetCapabilites(cam.StatusCapabilities.Options.Value);
-                    }
-
-                    Cameras.Add(camera);
-                }
-                 */
 				if (CodecStatus.Status.Cameras.CameraList == null)
 					return;
 				foreach (var item in CodecStatus.Status.Cameras.CameraList)
@@ -7134,9 +7107,28 @@ ConnectorID: {2}",
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 		}
 
-		#region IHasCodecCameras Members
+		#region ICiscoCodecCameraConfig Members
 
-		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
+		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
+		{
+            SendText($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
+        }
+
+        public void SetCameraName(uint videoConnectorId, string name)
+		{ 
+			SendText($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: {name}");
+        }
+
+        public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
+		{ 
+			SendText($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
+		}
+
+        #endregion
+
+        #region IHasCodecCameras Members
+
+        public event EventHandler<CameraSelectedEventArgs> CameraSelected;
 
 		public List<CameraBase> Cameras { get; private set; }
 
