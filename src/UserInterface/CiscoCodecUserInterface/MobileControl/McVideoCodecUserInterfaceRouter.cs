@@ -218,21 +218,24 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
                     if (_mcTpController.EnableLockoutPoll)
                     {
-                        // Start the timer when lockout occurs
-                        _lockoutPollTimer = new System.Timers.Timer(
-                            _props?.Lockout?.PollIntervalMs > 0 ? _props.Lockout.PollIntervalMs : 5000
-                        );
-                        _lockoutPollTimer.AutoReset = true;
-                        _lockoutPollTimer.Enabled = true;
+						// Start the timer when lockout occurs
+						if (_lockoutPollTimer == null)
+						{
+							_lockoutPollTimer = new System.Timers.Timer(
+								_props?.Lockout?.PollIntervalMs > 0 ? _props.Lockout.PollIntervalMs : 5000
+							);
+							_lockoutPollTimer.Enabled = false;
+                            _lockoutPollTimer.AutoReset = true;
+                        }
+                        _lockoutPollTimer.Start();
                         _lockoutPollTimer.Elapsed += (s, a) =>
                         {
+							Debug.LogMessage(LogEventLevel.Verbose, "Lockout Poll Timer Elapsed", null, null);
                             if (!_mcTpController.LockedOut)
                             {
+                                Debug.LogMessage(LogEventLevel.Verbose, $"_mcTpController.LockedOut: {_mcTpController.LockedOut}", null, null);
                                 //if not in lockout state and was previously locked out
-                                ClearCiscoCodecUiWebViewController();
-                                _extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
-                                _lockoutPollTimer.Enabled = false;
-                                _lockoutPollTimer.Dispose();
+								CancelLockoutTimer();
                                 return;
                             }
                             _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
@@ -242,8 +245,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     return;
                 }
 
-                _extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
-                _mcTpController.LockedOut = false;
+				CancelLockoutTimer();
                 Debug.LogMessage(
                     LogEventLevel.Debug,
                     $"ui with default room key {_thisUisDefaultRoomKey} is not locked out",
@@ -266,6 +268,16 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     null
                 );
             }
+        }
+
+		private void CancelLockoutTimer()
+		{
+			Debug.LogMessage(LogEventLevel.Verbose, $"Canceling Lockout Poll Timer for: {_mcTpController.Key}", null, _mcTpController.Key);
+            _extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
+            _mcTpController.LockedOut = false;
+            ClearCiscoCodecUiWebViewController();
+            _lockoutPollTimer.Stop();
+            _lockoutPollTimer.Dispose();
         }
 
 		public void LockoutUiWebViewChanagedEventHandler(object sender, UiWebViewChanagedEventArgs args)
