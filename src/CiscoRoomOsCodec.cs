@@ -6957,7 +6957,7 @@ ConnectorID: {2}",
 					if(existingCamera != null)
 					{
 						existingCamera.SetParentCodec(this);
-						if (UInt32.TryParse(item.CameraId, out var id))
+						if (uint.TryParse(item.CameraId, out var id))
 						{
 							existingCamera.SetCameraId(Convert.ToUInt16(id));
 						}
@@ -7111,17 +7111,17 @@ ConnectorID: {2}",
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
 		{
-            SendText($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
+            EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
         }
 
         public void SetCameraName(uint videoConnectorId, string name)
-		{ 
-			SendText($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: {name}");
+		{
+            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: {name}");
         }
 
         public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
-		{ 
-			SendText($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
+		{
+            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
 		}
 
         #endregion
