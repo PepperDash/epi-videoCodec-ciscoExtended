@@ -216,8 +216,8 @@ namespace epi_videoCodec_ciscoExtended
 
         private void SetupOutputPort()
         {
+            OutputPorts.Add(new RoutingOutputPort(RoutingPortNames.AnyOut, eRoutingSignalType.Video, eRoutingPortConnectionType.Hdmi, null, this));
             OutputPorts.Add(new RoutingOutputPort(RoutingPortNames.AnyVideoOut, eRoutingSignalType.Video, eRoutingPortConnectionType.Hdmi, null, this));
-
         }
 
         public void SetCameraId(uint id)
