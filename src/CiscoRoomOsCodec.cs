@@ -1817,7 +1817,10 @@ namespace epi_videoCodec_ciscoExtended
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/DoNotDisturb"
-				+ Delimiter
+                + Delimiter
+                + prefix
+                + "/Status/Cameras/Camera"
+                + Delimiter
 				+ prefix
 				+ "/Status/Cameras/SpeakerTrack"
 				+ Delimiter
@@ -1868,7 +1871,10 @@ namespace epi_videoCodec_ciscoExtended
 				+ Delimiter
 				+ prefix
 				+ "/Event/CameraPresetListUpdated"
-				+ Delimiter
+                + Delimiter
+                + prefix
+                + "/Event/Peripherals"
+                + Delimiter
 				+ prefix
 				+ "/Event/Conference/Call/AuthenticationResponse"
 				+ Delimiter
@@ -1905,7 +1911,8 @@ namespace epi_videoCodec_ciscoExtended
 					}
 				);
 			}
-			// Check for camera config info first
+
+			// Check for camera config info 
 			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
 			{
 				Debug.Console(0, this, "Reading codec cameraInfo from config properties.");
@@ -6910,8 +6917,14 @@ ConnectorID: {2}",
 				}
 
 				Cameras.Add(internalCamera);
-				//DeviceManager.AddDevice(internalCamera);
-			}
+
+                var existingInternalCamera = DeviceManager.GetDeviceForKey(internalCamera.Key);
+
+                if (existingInternalCamera == null)
+                {
+                    DeviceManager.AddDevice(internalCamera);
+                }
+            }
 			else
 			{
 				/*
@@ -6964,24 +6977,51 @@ ConnectorID: {2}",
 						name = camInfo.Name;
 					}
 
-					var key = string.Format("{0}-camera{1}", Key, camId);
-					var camera = new CiscoCamera(key, name, this, camId, sourceId);
+					var existingCameras = DeviceManager.AllDevices.OfType<CiscoCamera>();
 
-					if (cam.Capabilities != null)
+					var existingCamera = existingCameras.FirstOrDefault(c => c.SerialNumber == item.SerialNumber.Value);
+
+					if(existingCamera != null)
 					{
-						camera.SetCapabilites(cam.Capabilities.Options.Value);
-					}
+						existingCamera.SetParentCodec(this);
+						if (UInt32.TryParse(item.CameraId, out var id))
+						{
+							existingCamera.SetCameraId(Convert.ToUInt16(id));
+						}
+						Cameras.Add(existingCamera);
+                        continue;
+                    }
 
-					Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
+                    var key = string.Format("{0}-camera{1}", Key, camId);
+                    var camera = new CiscoCamera(key, name, this, camId, sourceId);
+
+                    if (cam.Capabilities != null)
+                    {
+                        camera.SetCapabilites(cam.Capabilities.Options.Value);
+                    }
+
+                    Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
 					Cameras.Add(camera);
-				}
+
+                    if (existingCamera == null)
+                    {
+                        DeviceManager.AddDevice(camera);
+                    }
+                }
 			}
 
 			// Add the far end camera
 			var farEndCamera = new CiscoFarEndCamera(Key + "-cameraFar", "Far End", this);
 			Cameras.Add(farEndCamera);
 
-			SelectedCameraFeedback = new StringFeedback(() => SelectedCamera.Key);
+            var existingFarEndCamera = DeviceManager.GetDeviceForKey(farEndCamera.Key);
+
+            if (existingFarEndCamera == null)
+            {
+                DeviceManager.AddDevice(farEndCamera);
+            }
+
+            SelectedCameraFeedback = new StringFeedback(() => SelectedCamera.Key);
 
 			ControllingFarEndCameraFeedback = new BoolFeedback(
 				() => SelectedCamera is IAmFarEndCamera

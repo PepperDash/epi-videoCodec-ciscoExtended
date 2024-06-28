@@ -57,6 +57,9 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("UiBranding")]
         public BrandingLogoProperties UiBranding { get; set; }
 
+        [JsonProperty("enableCameraConfigFromRoomCameraList")]
+        public bool EnableCameraConfigFromRoomCameraList { get; set; }
+
         [JsonProperty("cameraInfo")]
         public List<CameraInfo> CameraInfo { get; set; }
 

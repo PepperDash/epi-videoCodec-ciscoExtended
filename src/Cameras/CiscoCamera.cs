@@ -1,4 +1,8 @@
 ﻿using Crestron.SimplSharpPro.DeviceSupport;
+using Newtonsoft.Json;
+using PepperDash.Core;
+using PepperDash.Core.Logging;
+using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Bridges;
 using PepperDash.Essentials.Devices.Common.Cameras;
 
@@ -131,6 +135,10 @@ namespace epi_videoCodec_ciscoExtended
 
         public uint SourceId { get; private set; }
 
+        public string SerialNumber { get; private set; }
+
+        public string MacAddress { get; private set; }
+
         private bool isPanning;
 
         private bool isTilting;
@@ -163,12 +171,63 @@ namespace epi_videoCodec_ciscoExtended
             PanSpeed = 7;
             TiltSpeed = 7;
             ZoomSpeed = 7;
+
+            SetupOutputPort();
         }
 
         public CiscoCamera(string key, string name, CiscoCodec codec, uint id, uint sourceId)
             : this(key, name, codec, id)
         {
             SourceId = sourceId;
+        }
+
+
+        /// <summary>
+        /// Constructor for a camera that is part of a codec with multiple cameras and where camera config may be set by room based on room configuration scenarios
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="name"></param>
+        /// <param name="props"></param>
+        public CiscoCamera(string key, string name, CiscoCodecPropertiesConfig props)
+            : base(key, name)
+        {
+            SerialNumber = props.SerialNumber;
+            MacAddress = props.MacAddress;
+
+            // Default to all capabilties
+            Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom | eCameraCapabilities.Focus;
+
+            CameraId = props.DefaultCameraId;
+
+            SetupOutputPort();
+
+            // add pre activation action to set the codec based on the default parent device key
+            AddPreActivationAction(() =>
+            {
+                var codec = DeviceManager.GetDeviceForKey(props.DefaultParentCodecKey) as CiscoCodec;
+
+                if (codec == null)
+                {
+                    this.LogError("WARNING: Parent codec with key '{parentCodecKey}' not found for camera '{Key}'", props.DefaultParentCodecKey, Key);
+                }
+                ParentCodec = codec;
+            });
+        }
+
+        private void SetupOutputPort()
+        {
+            OutputPorts.Add(new RoutingOutputPort(RoutingPortNames.AnyVideoOut, eRoutingSignalType.Video, eRoutingPortConnectionType.Hdmi, null, this));
+
+        }
+
+        public void SetCameraId(uint id)
+        {
+            CameraId = id;
+        }
+
+        public void SetParentCodec(CiscoCodec codec)
+        {
+            ParentCodec = codec;
         }
 
         //  Takes a string from the camera capabilities value and converts from "ptzf" to enum bitmask
@@ -323,5 +382,29 @@ namespace epi_videoCodec_ciscoExtended
         {
             LinkCameraToApi(this, trilist, joinStart, joinMapKey, bridge);
         }
+    }
+
+    public class CiscoCodecPropertiesConfig
+    {
+        [JsonProperty("defaultParentCodecKey")]
+        public string DefaultParentCodecKey { get; set; }
+
+        [JsonProperty("defaultCameraId")]
+        public uint DefaultCameraId { get; set; }
+
+        [JsonProperty("serialNumber")]
+        public string SerialNumber { get; set; }
+
+        [JsonProperty("macAddress")]
+        public string HardwareID { get; set; }
+
+        [JsonProperty("macAddress")]
+        public string MacAddress { get; set; }
+
+        [JsonProperty("flipImage")]
+        public bool? FlipImage { get; set; }
+
+        [JsonProperty("sourceId")]
+        public uint SourceId { get; set; }
     }
 }
