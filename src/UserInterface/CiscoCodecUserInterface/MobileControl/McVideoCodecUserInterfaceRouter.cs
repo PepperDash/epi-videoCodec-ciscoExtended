@@ -222,7 +222,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                             _lockoutPollTimer.Enabled = false;
                             _lockoutPollTimer.AutoReset = true;
                         }
-                        _lockoutPollTimer.Start();
+
                         _lockoutPollTimer.Elapsed += (s, a) =>
                         {
                             Debug.LogMessage(LogEventLevel.Verbose, "Lockout Poll Timer Elapsed", null, null);
@@ -235,6 +235,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                             }
                             _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
                         };
+
+                        _lockoutPollTimer.Start();
                         return;
                     }
                     return;
