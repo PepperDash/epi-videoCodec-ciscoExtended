@@ -7131,7 +7131,12 @@ ConnectorID: {2}",
 
         public void SetCameraName(uint videoConnectorId, string name)
 		{
-            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: {name}");
+            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
+        }
+
+        public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
+        {
+            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
         }
 
         public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
