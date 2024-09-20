@@ -911,6 +911,7 @@ namespace epi_videoCodec_ciscoExtended
 			{
 				const string pollString =
 					"xstatus systemunit\r"
+					+ "xstatus cameras\r"
 					+ "xstatus sip/registration\r"
 					+ "xStatus Audio Volume\r";
 
@@ -1948,23 +1949,12 @@ namespace epi_videoCodec_ciscoExtended
 					Debug.Console(
 						0,
 						this,
-						"Codec reports {0} cameras",
+						"Codec reports {0} camera(s)",
 						CodecStatus.Status.Cameras.CameraList.Count
 					);
 
 					foreach (var camera in CodecStatus.Status.Cameras.CameraList)
 					{
-						Debug.Console(
-							0,
-							this,
-							@"Camera CiscoCallId: {0}
-Name: {1}
-ConnectorID: {2}",
-							camera.CameraId,
-							camera.Manufacturer.Value,
-							camera.Model.Value
-						);
-
 						var id = Convert.ToUInt16(camera.CameraId);
 						var newCamera = cameraInfo.FirstOrDefault(o => o.CameraNumber == id);
 						if (newCamera != null)
@@ -1985,7 +1975,7 @@ ConnectorID: {2}",
 					Debug.Console(
 						0,
 						this,
-						"Successfully got cameraInfo for {0} cameras from codec.",
+						"Got cameraInfo for {0} cameras from codec.",
 						cameraInfo.Count
 					);
 
@@ -2153,9 +2143,10 @@ ConnectorID: {2}",
 
 						if (!SyncState.InitialStatusMessageWasReceived)
 						{
-							SendText("xStatus");
+							SendText("xStatus Cameras");
 							SendText("xStatus SIP");
 							SendText("xStatus Call");
+							SendText("xStatus");
 						}
 					}
 					else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -3987,7 +3978,7 @@ ConnectorID: {2}",
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
 			var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
 			var systemUnitToken = statusToken.SelectToken("SystemUnit");
-			var cameraToken = statusToken.SelectToken("Cameras");
+			var cameraToken = statusToken.SelectToken("Cameras.Camera");
 			var speakerTrackToken = statusToken.SelectToken("Cameras.SpeakerTrack");
 			var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
 			var networkToken = statusToken.SelectToken("Network");
@@ -4005,7 +3996,8 @@ ConnectorID: {2}",
 				Debug.Console(2, this, "{0}", errorToken.ToString());
 				return;
 			}
-			JsonConvert.PopulateObject(statusToken.ToString(), status);
+			
+			JsonConvert.PopulateObject(serializedToken, status);
 
 			if(status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
 			{
@@ -4050,8 +4042,12 @@ ConnectorID: {2}",
 			}
 			if (cameraToken != null)
 			{
-				//ParseCameraToken(cameraToken);
-				PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
+				CodecStatus.Status.Cameras.CameraList = cameraToken.ToObject<List<CiscoCodecStatus.Camera>>();
+				
+				Debug.Console(1,
+					this,
+					"Number of cameras:{0}",
+					Cameras?.Count ?? 0);
 			}
 			if (speakerTrackToken != null)
 			{
@@ -4101,12 +4097,13 @@ ConnectorID: {2}",
 			{
 				ParseRoomPresetList(status.RoomPresets);
 			}
-			else
-			{
-				JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
-			}
+			
+			// we don't want to do this... this will expand lists infinitely
+			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
+
 			if (SyncState.InitialStatusMessageWasReceived)
 				return;
+			
 			SyncState.InitialStatusMessageReceived();
 
 			if (!SyncState.InitialConfigurationMessageWasReceived)
@@ -4623,13 +4620,7 @@ ConnectorID: {2}",
 						var obj = JObject.Load(jReader);
 
 						var resultId = ParseResultId(obj);
-
-						Debug.Console(
-							2,
-							this,
-							"Deserialize Response - Parsed ResultID = {0}",
-							resultId
-						);
+						
 						ParseStatusObject(JTokenValidInObject(obj, "Status"));
 						ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
 						ParseEventObject(JTokenValidInObject(obj, "Event"));
@@ -6910,8 +6901,11 @@ ConnectorID: {2}",
 			// Add the internal camera
 			Cameras = new List<CameraBase>();
 
-			var camCount = CodecStatus.Status.Cameras.CameraList.Count;
-			Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
+			var camCount = cameraInfo.Count;
+			Debug.Console(0, 
+				this, 
+				"Setting up cameras from info:{0}", 
+				JsonConvert.SerializeObject(cameraInfo, Formatting.Indented));
 
 			// Deal with the case of 1 or no reported cameras
 			if (camCount <= 1)
@@ -6933,7 +6927,11 @@ ConnectorID: {2}",
 				}
 
 				Cameras.Add(internalCamera);
-
+				Debug.Console(0, 
+					this, 
+					"Adding camera to camera list:{0}", 
+					internalCamera.Key);
+				
                 var existingInternalCamera = DeviceManager.GetDeviceForKey(internalCamera.Key);
 
                 if (existingInternalCamera == null)
@@ -7000,6 +6998,11 @@ ConnectorID: {2}",
 
 			// Add the far end camera
 			var farEndCamera = new CiscoFarEndCamera(Key + "-cameraFar", "Far End", this);
+			Debug.Console(0, 
+				this, 
+				"Adding camera to camera list:{0}", 
+				farEndCamera.Key);
+			
 			Cameras.Add(farEndCamera);
 
             var existingFarEndCamera = DeviceManager.GetDeviceForKey(farEndCamera.Key);
@@ -7033,7 +7036,7 @@ ConnectorID: {2}",
 				Cameras.First().Key,
 				Cameras.First().Name
 			);
-
+			
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 		}
