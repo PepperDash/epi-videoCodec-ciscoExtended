@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
-using Crestron.SimplSharpPro.Diagnostics;
 using epi_videoCodec_ciscoExtended.Interfaces;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using Newtonsoft.Json;
@@ -22,11 +20,9 @@ using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceInfo;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using PepperDash.Essentials.Core.Queues;
-using PepperDash.Essentials.Core.Routing;
 using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
-using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
 
@@ -4042,12 +4038,66 @@ namespace epi_videoCodec_ciscoExtended
 			}
 			if (cameraToken != null)
 			{
-				CodecStatus.Status.Cameras.CameraList = cameraToken.ToObject<List<CiscoCodecStatus.Camera>>();
+				var listWasUpdated = false;
+				var cameraInfo = cameraToken.ToObject<List<JObject>>();
 				
+				foreach (var cam in cameraInfo)
+				{
+					var modernId = cam.SelectToken("CameraId")?.ToString();
+					var legacyId = cam.SelectToken("id")?.ToString();
+					var camId = string.IsNullOrEmpty(modernId) ? legacyId : modernId;
+					
+					if (string.IsNullOrEmpty(camId))
+					{
+						Debug.Console(1,
+							this,
+							"CameraId and id are null or empty. Skipping camera.");
+						continue;
+					}
+					
+					Debug.Console(1,
+						this,
+						"Parsing camera id:{0}",
+						camId);
+					
+					var existingCam = 
+						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+
+					if (existingCam == null)
+					{
+						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
+						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+					}
+					else
+					{
+						JsonConvert.PopulateObject(
+							cam.ToString(), 
+							existingCam, 
+							new JsonSerializerSettings
+							{
+								NullValueHandling = NullValueHandling.Ignore, 
+								MissingMemberHandling = MissingMemberHandling.Ignore,
+							});
+					}
+					
+					listWasUpdated = true;
+				}
+
 				Debug.Console(1,
 					this,
 					"Number of cameras:{0}",
-					Cameras?.Count ?? 0);
+					CodecStatus.Status.Cameras.CameraList.Count);
+				
+				if (listWasUpdated)
+				{
+					foreach (var cam in CodecStatus.Status.Cameras.CameraList)
+					{
+						Debug.Console(0,
+							this,
+							"Camera:{0} connected:{1} serial:{2}",
+							cam.CameraId, cam.Connected?.Value ?? "false", cam.SerialNumber?.Value ?? "null");
+					}
+				}
 			}
 			if (speakerTrackToken != null)
 			{
@@ -7129,21 +7179,25 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
 		{
+			Debug.Console(1, this, "Setting the serial number of camera {0} to {1}", cameraId, serialNumber);
             EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
         }
 
         public void SetCameraName(uint videoConnectorId, string name)
 		{
+			Debug.Console(1, this, "Setting the name of video connector {0} to {1}", videoConnectorId, name);
             EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
         }
 
         public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
         {
+	        Debug.Console(1, this, "Setting the camera id of video connector {0} to {1}", videoConnectorId, inputCameraId);
             EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
         }
 
         public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
+			Debug.Console(1, this, "Setting the source type of video connector {0} to {1}", videoConnectorId, sourceType);
             EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
 		}
 
