@@ -4087,15 +4087,22 @@ namespace epi_videoCodec_ciscoExtended
 					this,
 					"Number of cameras:{0}",
 					CodecStatus.Status.Cameras.CameraList.Count);
-				
+
 				if (listWasUpdated)
 				{
+					Debug.Console(1,
+							this,
+							"Connected Cameras:{0}", 
+							CodecStatus.Status.Cameras.CameraList.Count(c => 
+								c.Connected?.Value.ToLower() == "true"));
+
 					foreach (var cam in CodecStatus.Status.Cameras.CameraList)
 					{
-						Debug.Console(0,
+						Debug.Console(1,
 							this,
 							"Camera:{0} connected:{1} serial:{2}",
-							cam.CameraId, cam.Connected?.Value ?? "false", cam.SerialNumber?.Value ?? "null");
+							cam.CameraId, cam.Connected?.Value ?? "false", 
+							cam.SerialNumber?.Value ?? "null");
 					}
 				}
 			}
