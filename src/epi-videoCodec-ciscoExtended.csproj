@@ -103,12 +103,10 @@
     <Reference Include="System.Data" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DoNotDisturbHandler.cs" />
-    <Compile Include="MessageProcessor.cs" />
-    <Compile Include="UIExtensionsHandler.cs" />
     <Compile Include="V2\CiscoAudio.cs" />
     <Compile Include="V2\CiscoCallStatus.cs" />
     <Compile Include="V2\CiscoCameras.cs" />
+    <Compile Include="V2\CiscoCodecConfig.cs" />
     <Compile Include="V2\CiscoDirectory.cs" />
     <Compile Include="V2\CiscoDoNotDisturb.cs" />
     <Compile Include="V2\CiscoFarEndCamera.cs" />
@@ -124,26 +122,9 @@
     <Compile Include="V2\CiscoSelfView.cs" />
     <Compile Include="V2\CiscoStandby.cs" />
     <Compile Include="V2\FeedbackDebugExt.cs" />
+    <Compile Include="V2\IHasCiscoCodecLayouts.cs" />
     <Compile Include="V2\Utils.cs" />
-    <Compile Include="WebexPinRequestHandler.cs" />
-    <Compile Include="BookingsDataClasses.cs" />
-    <Compile Include="CallHistoryDataClasses.cs" />
-    <Compile Include="CiscoCodecFactory.cs" />
-    <Compile Include="CiscoCodecJoinMap.cs" />
-    <Compile Include="CiscoCodecPhonebookDataClasses.cs" />
-    <Compile Include="CiscoCamera.cs" />
-    <Compile Include="CiscoCodecRequest.cs" />
-    <Compile Include="CiscoRoomOsCodec.cs" />
-    <Compile Include="CiscoCodecConfig.cs" />
-    <Compile Include="CiscoWebsocketClient.cs" />
-    <Compile Include="CodecSyncState.cs" />
-    <Compile Include="HttpApiServerExtended.cs" />
-    <Compile Include="IHasCiscoCodecLayouts.cs" />
-    <Compile Include="BlockingUnboundedQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="xConfiguration.cs" />
-    <Compile Include="xEvent.cs" />
-    <Compile Include="xStatus.cs" />
     <None Include="Properties\ControlSystem.cfg" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CompactFramework.CSharp.targets" />
