@@ -1,10 +1,7 @@
-﻿using Crestron.SimplSharpPro.UI;
-using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface;
-using PepperDash.Core;
+﻿using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
-using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using PepperDash.Essentials.Touchpanel;
 using Serilog.Events;
 using System;
@@ -13,150 +10,147 @@ using Feedback = PepperDash.Essentials.Core.Feedback;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl
 {
-	public class McVideoCodecTouchpanelController : CiscoCodecUserInterface, IMcCiscoCodecUserInterfaceAppControl, IMobileControlTouchpanelController
-	{
-		private readonly McVideoCodecUserInterfaceConfig _props;
-		private IMobileControlRoomMessenger _bridge;
-		private IMobileControl Mc;
-		private string _appUrl;
+    public class McVideoCodecTouchpanelController : CiscoCodecUserInterface, IMcCiscoCodecUserInterfaceAppControl, IMobileControlTouchpanelController
+    {
+        private readonly McVideoCodecUserInterfaceConfig _props;
+        private IMobileControlRoomMessenger _bridge;
+        private IMobileControl Mc;
+        private string _appUrl;
 
-		public StringFeedback AppUrlFeedback { get; private set; }
-		private readonly StringFeedback QrCodeUrlFeedback;
-		private readonly StringFeedback McServerUrlFeedback;
-		private readonly StringFeedback UserCodeFeedback;
+        public StringFeedback AppUrlFeedback { get; private set; }
+        private readonly StringFeedback QrCodeUrlFeedback;
+        private readonly StringFeedback McServerUrlFeedback;
+        private readonly StringFeedback UserCodeFeedback;
 
-		public FeedbackCollection<Feedback> Feedbacks { get; private set; }
+        public FeedbackCollection<Feedback> Feedbacks { get; private set; }
 
-		public string DefaultRoomKey => _props.DefaultRoomKey;
+        public string DefaultRoomKey => _props.DefaultRoomKey;
 
-		public bool UseDirectServer => _props.UseDirectServer;
+        public bool UseDirectServer => _props.UseDirectServer;
 
-		bool IMobileControlTouchpanelController.ZoomRoomController => false;
+        bool IMobileControlTouchpanelController.ZoomRoomController => false;
 
-		//public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
+        //public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
 
-		private McVideoCodecUserInterfaceRouter _router;
+        private McVideoCodecUserInterfaceRouter _router;
 
-		public McVideoCodecTouchpanelController(DeviceConfig config) : base(config)
-		{
-			Debug.LogMessage(LogEventLevel.Debug, "McTouchpanelController Constructor", this);
-			_props = ParseConfigProps<McVideoCodecUserInterfaceConfig>(config);
+        public McVideoCodecTouchpanelController(DeviceConfig config) : base(config)
+        {
+            Debug.LogMessage(LogEventLevel.Debug, "McTouchpanelController Constructor", this);
+            _props = ParseConfigProps<McVideoCodecUserInterfaceConfig>(config);
 
-			AddPostActivationAction(PostActivateSubscribeForMobileControlUpdates);
+            AddPostActivationAction(PostActivateSubscribeForMobileControlUpdates);
 
-			AppUrlFeedback = new StringFeedback(() => _appUrl);
-			QrCodeUrlFeedback = new StringFeedback(() => _bridge?.QrCodeUrl);
-			McServerUrlFeedback = new StringFeedback(() => _bridge?.McServerUrl);
-			UserCodeFeedback = new StringFeedback(() => _bridge?.UserCode);
+            AppUrlFeedback = new StringFeedback(() => _appUrl);
+            QrCodeUrlFeedback = new StringFeedback(() => _bridge?.QrCodeUrl);
+            McServerUrlFeedback = new StringFeedback(() => _bridge?.McServerUrl);
+            UserCodeFeedback = new StringFeedback(() => _bridge?.UserCode);
 
-			Feedbacks = new FeedbackCollection<Feedback>
-			{
-				AppUrlFeedback, QrCodeUrlFeedback, McServerUrlFeedback, UserCodeFeedback
-			};
-		}
-		public override bool CustomActivate()
-		{
-			Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Activate", this);
-			Mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
+            Feedbacks = new FeedbackCollection<Feedback>
+            {
+                AppUrlFeedback, QrCodeUrlFeedback, McServerUrlFeedback, UserCodeFeedback
+            };
+        }
+        public override bool CustomActivate()
+        {
+            Debug.LogMessage(LogEventLevel.Debug, "Activate", this);
+            Mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
 
-			if (Mc == null)
-			{
-				return base.CustomActivate();
-			}
+            if (Mc == null)
+            {
+                return base.CustomActivate();
+            }
 
-			var messenger = new McVideoCodecUserInterfaceControlMessenger(string.Format("appControlMessenger-{0}", Key), string.Format("/device/{0}", Key), this);
+            var messenger = new McVideoCodecUserInterfaceControlMessenger(string.Format("appControlMessenger-{0}", Key), string.Format("/device/{0}", Key), this);
 
-			Mc.AddDeviceMessenger(messenger);
+            Mc.AddDeviceMessenger(messenger);
 
-			//Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, $"mc.ClientAppUrl: {Mc.ClientAppUrl.MaskQParamTokenInUrl()}", this);
+            //Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, $"mc.ClientAppUrl: {Mc.ClientAppUrl.MaskQParamTokenInUrl()}", this);
 
-			return base.CustomActivate();
-		}
+            return base.CustomActivate();
+        }
 
-		private void PostActivateSubscribeForMobileControlUpdates()
-		{
-			try
-			{
+        private void PostActivateSubscribeForMobileControlUpdates()
+        {
+            try
+            {
 
-				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] SubscribeForMobileControlUpdates", this);
-				//foreach (var dev in DeviceManager.AllDevices)
-				//{
-				//	Debug.Console(0, this, $"{dev.Key}:{dev.GetType().Name}");
-				//}
+                Debug.LogMessage(LogEventLevel.Debug, "SubscribeForMobileControlUpdates", this);
 
-				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] GetBridge. DefaultRoomKey: {_props.DefaultRoomKey}", this);
-				if (Mc == null)
-				{
-					Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Mc is null", this);
-					return;
-				}
-				var bridge = Mc.GetRoomMessenger(_props.DefaultRoomKey);
-				if (bridge == null)
-				{
-					Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] No Mobile Control bridge for {_props.DefaultRoomKey} found ", this);
-					return;
-				}
-                Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Got Bridge: {bridge.RoomName}", this);
+                Debug.LogMessage(LogEventLevel.Debug, "GetBridge. DefaultRoomKey: {defaultRoomKey}", this, _props.DefaultRoomKey);
+                if (Mc == null)
+                {
+                    Debug.LogMessage(LogEventLevel.Debug, "Mc is null", this);
+                    return;
+                }
+                var bridge = Mc.GetRoomMessenger(_props.DefaultRoomKey);
+                if (bridge == null)
+                {
+                    Debug.LogMessage(LogEventLevel.Debug, "No Mobile Control bridge for {defaultRoomKey} found ", this, _props.DefaultRoomKey);
+                    return;
+                }
+                Debug.LogMessage(LogEventLevel.Debug, "Got Bridge: {roomName}", this, bridge.RoomName);
 
                 _bridge = bridge;
-				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Setting AppUrl", this);
+                Debug.LogMessage(LogEventLevel.Debug, "Setting AppUrl", this);
 
-				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] Mobile Control Room Bridge Found {_bridge.Key}", this);
+                Debug.LogMessage(LogEventLevel.Debug, "Mobile Control Room Bridge Found {bridgeKey}", this, _bridge?.Key);
 
-				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Subscribing to Mobile Control Events: UserCodeChanged", this);
-				_bridge.UserCodeChanged += UpdateFeedbacks;
+                Debug.LogMessage(LogEventLevel.Debug, "Subscribing to Mobile Control Events: UserCodeChanged", this);
+                _bridge.UserCodeChanged += UpdateFeedbacks;
 
-				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Subscribing to Mobile Control Events: AppUrlChanged", this);
+                Debug.LogMessage(LogEventLevel.Debug, "Subscribing to Mobile Control Events: AppUrlChanged", this);
 
-				//SetAppUrl here fixing AppUrlFeedback.StringValue null after initial event
-				_bridge.AppUrlChanged += (s, a) => { Debug.Console(0, this, "[McTouchpanelController] AppURL changed"); UpdateFeedbacks(s, a);
-					SetAppUrl(_bridge.AppUrl);
-				}; 
-				
-				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] Building McVideoCodecUserInterfaceRouter", this);
-				_router = new McVideoCodecUserInterfaceRouter(this, _bridge, _props);
-				_router.Activate(this);
-				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] SubscribeForMobileControlUpdates success", this);
-			}
-			catch (Exception e)
-			{
-				Debug.LogMessage(e, "SubscribeForMobileControlUpdates Error", this);
-				Debug.LogMessage(LogEventLevel.Debug, e.StackTrace, this);
-			}
-		}
+                //SetAppUrl here fixing AppUrlFeedback.StringValue null after initial event
+                _bridge.AppUrlChanged += (s, a) =>
+                {
+                    Debug.LogMessage(LogEventLevel.Information, "AppURL changed", this); UpdateFeedbacks(s, a);
+                    SetAppUrl(_bridge.AppUrl);
+                };
 
-		public void SetAppUrl(string url)
-		{
-			try
-			{
-				Debug.LogMessage(LogEventLevel.Debug, $"Setting AppUrl to: {url}", this);
-				_appUrl = url;
-				AppUrlFeedback.FireUpdate();
-			}
-			catch (Exception e)
-			{
-				Debug.LogMessage(e, "SetAppUrl Error", this);
-			}
-		}
+                Debug.LogMessage(LogEventLevel.Debug, "Building McVideoCodecUserInterfaceRouter", this);
+                _router = new McVideoCodecUserInterfaceRouter(this, _bridge, _props);
+                _router.Activate(this);
+                Debug.LogMessage(LogEventLevel.Debug, "SubscribeForMobileControlUpdates success", this);
+            }
+            catch (Exception e)
+            {
+                Debug.LogMessage(e, "SubscribeForMobileControlUpdates Error", this);
+            }
+        }
 
-		private void UpdateFeedbacks(object sender, EventArgs args)
-		{
-			UpdateFeedbacks();
-		}
+        public void SetAppUrl(string url)
+        {
+            try
+            {
+                Debug.LogMessage(LogEventLevel.Debug, "Setting AppUrl to: {url}", this, url);
+                _appUrl = url;
+                AppUrlFeedback.FireUpdate();
+            }
+            catch (Exception e)
+            {
+                Debug.LogMessage(e, "SetAppUrl Error", this);
+            }
+        }
 
-		private void UpdateFeedbacks()
-		{
-			foreach (var feedback in Feedbacks) { feedback.FireUpdate(); }
-		}
+        private void UpdateFeedbacks(object sender, EventArgs args)
+        {
+            UpdateFeedbacks();
+        }
 
-		public void CloseWebViewController()
-		{
-			_router.ClearCiscoCodecUiWebViewController();
-		}
+        private void UpdateFeedbacks()
+        {
+            foreach (var feedback in Feedbacks) { feedback.FireUpdate(); }
+        }
 
-		public void CloseWebViewOsd()
-		{
-			_router.ClearCiscoCodecUiWebViewOsd();
-		}
-	}
+        public void CloseWebViewController()
+        {
+            _router.ClearCiscoCodecUiWebViewController();
+        }
+
+        public void CloseWebViewOsd()
+        {
+            _router.ClearCiscoCodecUiWebViewOsd();
+        }
+    }
 }

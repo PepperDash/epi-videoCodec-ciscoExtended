@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
-using Crestron.SimplSharpPro.Diagnostics;
 using epi_videoCodec_ciscoExtended.Interfaces;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using Newtonsoft.Json;
@@ -22,11 +20,9 @@ using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceInfo;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using PepperDash.Essentials.Core.Queues;
-using PepperDash.Essentials.Core.Routing;
 using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
-using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
 
@@ -107,7 +103,7 @@ namespace epi_videoCodec_ciscoExtended
 			ICiscoCodecCameraConfig,
 			ISpeakerTrack,
 			IPresenterTrack
-    {
+	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
 		private event EventHandler<MinuteChangedEventArgs> MinuteChanged;
@@ -694,8 +690,8 @@ namespace epi_videoCodec_ciscoExtended
 
 		//public RoutingInputPort CodecOsdIn { get; private set; }
 
-        public RoutingInputPort HdmiIn1 { get; private set; }
-        public RoutingInputPort HdmiIn2 { get; private set; }
+		public RoutingInputPort HdmiIn1 { get; private set; }
+		public RoutingInputPort HdmiIn2 { get; private set; }
 		public RoutingInputPort HdmiIn3 { get; private set; }
 		public RoutingInputPort HdmiIn4 { get; private set; }
 		public RoutingInputPort HdmiIn5 { get; private set; }
@@ -728,12 +724,12 @@ namespace epi_videoCodec_ciscoExtended
 
 
 
-            CrestronEnvironment.ProgramStatusEventHandler += a =>
-			{
-				if (a != eProgramStatusEventType.Stopping)
-					return;
-				EndGracefully();
-			};
+			CrestronEnvironment.ProgramStatusEventHandler += a =>
+{
+	if (a != eProgramStatusEventType.Stopping)
+		return;
+	EndGracefully();
+};
 
 			CrestronEnvironment.SystemEventHandler += a =>
 			{
@@ -911,6 +907,7 @@ namespace epi_videoCodec_ciscoExtended
 			{
 				const string pollString =
 					"xstatus systemunit\r"
+					+ "xstatus cameras\r"
 					+ "xstatus sip/registration\r"
 					+ "xStatus Audio Volume\r";
 
@@ -976,20 +973,20 @@ namespace epi_videoCodec_ciscoExtended
 			//	new Action(StopSharing),
 			//	this
 			//);
-            HdmiIn1 = new RoutingInputPort(
-				RoutingPortNames.HdmiIn1,
-				eRoutingSignalType.Audio | eRoutingSignalType.Video,
-				eRoutingPortConnectionType.Hdmi,
-				new Action(SelectPresentationSource1),
-				this
-			);
-            HdmiIn2 = new RoutingInputPort(
-				RoutingPortNames.HdmiIn2,
-				eRoutingSignalType.Audio | eRoutingSignalType.Video,
-				eRoutingPortConnectionType.Hdmi,
-				new Action(SelectPresentationSource2),
-				this
-			);
+			HdmiIn1 = new RoutingInputPort(
+	RoutingPortNames.HdmiIn1,
+	eRoutingSignalType.Audio | eRoutingSignalType.Video,
+	eRoutingPortConnectionType.Hdmi,
+	new Action(SelectPresentationSource1),
+	this
+);
+			HdmiIn2 = new RoutingInputPort(
+	RoutingPortNames.HdmiIn2,
+	eRoutingSignalType.Audio | eRoutingSignalType.Video,
+	eRoutingPortConnectionType.Hdmi,
+	new Action(SelectPresentationSource2),
+	this
+);
 			HdmiIn3 = new RoutingInputPort(
 				RoutingPortNames.HdmiIn3,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -997,20 +994,20 @@ namespace epi_videoCodec_ciscoExtended
 				new Action(() => SelectPresentationSource(3)),
 				this
 			);
-            HdmiIn4 = new RoutingInputPort(
-				RoutingPortNames.HdmiIn4,
-				eRoutingSignalType.Audio | eRoutingSignalType.Video,
-				eRoutingPortConnectionType.Hdmi,
-				new Action(() => SelectPresentationSource(4)),
-				this
+			HdmiIn4 = new RoutingInputPort(
+	RoutingPortNames.HdmiIn4,
+	eRoutingSignalType.Audio | eRoutingSignalType.Video,
+	eRoutingPortConnectionType.Hdmi,
+	new Action(() => SelectPresentationSource(4)),
+	this
+);
+			HdmiIn5 = new RoutingInputPort(
+					RoutingPortNames.HdmiIn5,
+					eRoutingSignalType.Audio | eRoutingSignalType.Video,
+					eRoutingPortConnectionType.Hdmi,
+					new Action(() => SelectPresentationSource(5)),
+					this
 			);
-            HdmiIn5 = new RoutingInputPort(
-                RoutingPortNames.HdmiIn5,
-                eRoutingSignalType.Audio | eRoutingSignalType.Video,
-                eRoutingPortConnectionType.Hdmi,
-                new Action(() => SelectPresentationSource(5)),
-                this
-            );
 			SdiInput = new RoutingInputPort(
 				RoutingPortNames.SdiIn,
 				eRoutingSignalType.Video,
@@ -1548,7 +1545,7 @@ namespace epi_videoCodec_ciscoExtended
 				DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomMessenger;
 
 #else
-            var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomBridge;
+			var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomBridge;
 
 #endif
 			if (!String.IsNullOrEmpty(_brandingUrl))
@@ -1616,7 +1613,7 @@ namespace epi_videoCodec_ciscoExtended
 #if SERIES4
 		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
 #else
-        private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
+		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
 #endif
 		{
 			if (roomMessenger == null)
@@ -1699,12 +1696,12 @@ namespace epi_videoCodec_ciscoExtended
 			CodecSchedule.MeetingsListHasChanged += (sender, args) => { };
 			CodecSchedule.MeetingEventChange += (sender, args) => { };
 
-            var mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
+			var mc = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
 
-            if (mc == null)
-            {
-                return base.CustomActivate();
-            }
+			if (mc == null)
+			{
+				return base.CustomActivate();
+			}
 
 			var speakerTrackMessenger = new ISpeakerTrackMessenger($"speakerTrack-{Key}", $"/device/{Key}", this);
 			mc.AddDeviceMessenger(speakerTrackMessenger);
@@ -1712,7 +1709,7 @@ namespace epi_videoCodec_ciscoExtended
 			var presenterTrackMessenger = new IPresenterTrackMessenger($"presenterTrack-{Key}", $"/device/{Key}", this);
 			mc.AddDeviceMessenger(presenterTrackMessenger);
 
-            return base.CustomActivate();
+			return base.CustomActivate();
 		}
 
 		private void CiscoCodec_CameraTrackingCapabilitiesChanged(
@@ -1762,9 +1759,9 @@ namespace epi_videoCodec_ciscoExtended
 				//RegisterSystemUnitEvents();
 				//RegisterSipEvents();
 				RegisterNetworkEvents();
-                /*RegisterVideoEvents();*/
-                //RegisterConferenceEvents();
-                RegisterRoomPresetEvents();
+				/*RegisterVideoEvents();*/
+				//RegisterConferenceEvents();
+				RegisterRoomPresetEvents();
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
 				RegisterDisconnectEvents();
@@ -1775,22 +1772,22 @@ namespace epi_videoCodec_ciscoExtended
 				{
 					socket.ConnectionChange += socket_ConnectionChange;
 
-                    var ssh = socket as GenericSshClient;
+					var ssh = socket as GenericSshClient;
 
-                    if (ssh != null)
-                    {
-                        DeviceInfo.IpAddress = ssh.Hostname;
-                        DeviceInfo.HostName = ssh.Hostname;
-                    }
+					if (ssh != null)
+					{
+						DeviceInfo.IpAddress = ssh.Hostname;
+						DeviceInfo.HostName = ssh.Hostname;
+					}
 
-                    var tcp = socket as GenericTcpIpClient;
+					var tcp = socket as GenericTcpIpClient;
 
-                    if (tcp != null)
-                    {
-                        DeviceInfo.IpAddress = tcp.Hostname;
-                        DeviceInfo.HostName = tcp.Hostname;
-                    }
-                }
+					if (tcp != null)
+					{
+						DeviceInfo.IpAddress = tcp.Hostname;
+						DeviceInfo.HostName = tcp.Hostname;
+					}
+				}
 
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
@@ -1833,10 +1830,10 @@ namespace epi_videoCodec_ciscoExtended
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/DoNotDisturb"
-                + Delimiter
-                + prefix
-                + "/Status/Cameras/Camera"
-                + Delimiter
+								+ Delimiter
+								+ prefix
+								+ "/Status/Cameras/Camera"
+								+ Delimiter
 				+ prefix
 				+ "/Status/Cameras/SpeakerTrack"
 				+ Delimiter
@@ -1887,10 +1884,10 @@ namespace epi_videoCodec_ciscoExtended
 				+ Delimiter
 				+ prefix
 				+ "/Event/CameraPresetListUpdated"
-                + Delimiter
-                + prefix
-                + "/Event/Peripherals"
-                + Delimiter
+								+ Delimiter
+								+ prefix
+								+ "/Event/Peripherals"
+								+ Delimiter
 				+ prefix
 				+ "/Event/Conference/Call/AuthenticationResponse"
 				+ Delimiter
@@ -1948,23 +1945,12 @@ namespace epi_videoCodec_ciscoExtended
 					Debug.Console(
 						0,
 						this,
-						"Codec reports {0} cameras",
+						"Codec reports {0} camera(s)",
 						CodecStatus.Status.Cameras.CameraList.Count
 					);
 
 					foreach (var camera in CodecStatus.Status.Cameras.CameraList)
 					{
-						Debug.Console(
-							0,
-							this,
-							@"Camera CiscoCallId: {0}
-Name: {1}
-ConnectorID: {2}",
-							camera.CameraId,
-							camera.Manufacturer.Value,
-							camera.Model.Value
-						);
-
 						var id = Convert.ToUInt16(camera.CameraId);
 						var newCamera = cameraInfo.FirstOrDefault(o => o.CameraNumber == id);
 						if (newCamera != null)
@@ -1985,7 +1971,7 @@ ConnectorID: {2}",
 					Debug.Console(
 						0,
 						this,
-						"Successfully got cameraInfo for {0} cameras from codec.",
+						"Got cameraInfo for {0} cameras from codec.",
 						cameraInfo.Count
 					);
 
@@ -2153,9 +2139,10 @@ ConnectorID: {2}",
 
 						if (!SyncState.InitialStatusMessageWasReceived)
 						{
-							SendText("xStatus");
+							SendText("xStatus Cameras");
 							SendText("xStatus SIP");
 							SendText("xStatus Call");
+							SendText("xStatus");
 						}
 					}
 					else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -2685,8 +2672,8 @@ ConnectorID: {2}",
 			CodecStatus.Status.NetworkCount.ValueChangedAction += () =>
 			{
 				Debug.Console(2, this, "CodecStatus.Status.NetworkCount.ValueChangedAction");
-                Debug.Console(2, this, "CodecStatus.Status.NetworkCount.Value = {0}", CodecStatus.Status.NetworkCount.Value);
-                if (CodecStatus.Status.NetworkCount.Value <= 0)
+				Debug.Console(2, this, "CodecStatus.Status.NetworkCount.Value = {0}", CodecStatus.Status.NetworkCount.Value);
+				if (CodecStatus.Status.NetworkCount.Value <= 0)
 					return;
 				ParseNetworkList(CodecStatus.Status.Networks);
 			};
@@ -3987,7 +3974,7 @@ ConnectorID: {2}",
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
 			var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
 			var systemUnitToken = statusToken.SelectToken("SystemUnit");
-			var cameraToken = statusToken.SelectToken("Cameras");
+			var cameraToken = statusToken.SelectToken("Cameras.Camera");
 			var speakerTrackToken = statusToken.SelectToken("Cameras.SpeakerTrack");
 			var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
 			var networkToken = statusToken.SelectToken("Network");
@@ -4005,9 +3992,10 @@ ConnectorID: {2}",
 				Debug.Console(2, this, "{0}", errorToken.ToString());
 				return;
 			}
-			JsonConvert.PopulateObject(statusToken.ToString(), status);
 
-			if(status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
+			JsonConvert.PopulateObject(serializedToken, status);
+
+			if (status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
 			{
 				CiscoCodecUiExtensionsHandler?.ParseStatus(status.UserInterface.WebViews);
 			}
@@ -4050,8 +4038,73 @@ ConnectorID: {2}",
 			}
 			if (cameraToken != null)
 			{
-				//ParseCameraToken(cameraToken);
-				PopulateObjectWithToken(statusToken, "Cameras", CodecStatus.Status.Cameras);
+				var listWasUpdated = false;
+				var cameraInfo = cameraToken.ToObject<List<JObject>>();
+
+				foreach (var cam in cameraInfo)
+				{
+					var modernId = cam.SelectToken("CameraId")?.ToString();
+					var legacyId = cam.SelectToken("id")?.ToString();
+					var camId = string.IsNullOrEmpty(modernId) ? legacyId : modernId;
+
+					if (string.IsNullOrEmpty(camId))
+					{
+						Debug.Console(1,
+							this,
+							"CameraId and id are null or empty. Skipping camera.");
+						continue;
+					}
+
+					Debug.Console(1,
+						this,
+						"Parsing camera id:{0}",
+						camId);
+
+					var existingCam =
+						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+
+					if (existingCam == null)
+					{
+						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
+						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+					}
+					else
+					{
+						JsonConvert.PopulateObject(
+							cam.ToString(),
+							existingCam,
+							new JsonSerializerSettings
+							{
+								NullValueHandling = NullValueHandling.Ignore,
+								MissingMemberHandling = MissingMemberHandling.Ignore,
+							});
+					}
+
+					listWasUpdated = true;
+				}
+
+				Debug.Console(1,
+					this,
+					"Number of cameras:{0}",
+					CodecStatus.Status.Cameras.CameraList.Count);
+
+				if (listWasUpdated)
+				{
+					Debug.Console(1,
+							this,
+							"Connected Cameras:{0}",
+							CodecStatus.Status.Cameras.CameraList.Count(c =>
+								c.Connected?.Value.ToLower() == "true"));
+
+					foreach (var cam in CodecStatus.Status.Cameras.CameraList)
+					{
+						Debug.Console(1,
+							this,
+							"Camera:{0} connected:{1} serial:{2}",
+							cam.CameraId, cam.Connected?.Value ?? "false",
+							cam.SerialNumber?.Value ?? "--empty---");
+					}
+				}
 			}
 			if (speakerTrackToken != null)
 			{
@@ -4101,12 +4154,13 @@ ConnectorID: {2}",
 			{
 				ParseRoomPresetList(status.RoomPresets);
 			}
-			else
-			{
-				JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
-			}
+
+			// we don't want to do this... this will expand lists infinitely
+			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
+
 			if (SyncState.InitialStatusMessageWasReceived)
 				return;
+
 			SyncState.InitialStatusMessageReceived();
 
 			if (!SyncState.InitialConfigurationMessageWasReceived)
@@ -4624,12 +4678,6 @@ ConnectorID: {2}",
 
 						var resultId = ParseResultId(obj);
 
-						Debug.Console(
-							2,
-							this,
-							"Deserialize Response - Parsed ResultID = {0}",
-							resultId
-						);
 						ParseStatusObject(JTokenValidInObject(obj, "Status"));
 						ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
 						ParseEventObject(JTokenValidInObject(obj, "Event"));
@@ -5835,7 +5883,7 @@ ConnectorID: {2}",
 			SelectPresentationSource(3);
 		}
 
-		
+
 		public override void StartSharing()
 		{
 			if (_desiredPresentationSource > 0)
@@ -6910,8 +6958,11 @@ ConnectorID: {2}",
 			// Add the internal camera
 			Cameras = new List<CameraBase>();
 
-			var camCount = CodecStatus.Status.Cameras.CameraList.Count;
-			Debug.Console(0, this, "THERE ARE {0} CAMERAS", camCount);
+			var camCount = cameraInfo.Count;
+			Debug.Console(0,
+				this,
+				"Setting up cameras from info:{0}",
+				JsonConvert.SerializeObject(cameraInfo, Formatting.Indented));
 
 			// Deal with the case of 1 or no reported cameras
 			if (camCount <= 1)
@@ -6933,14 +6984,18 @@ ConnectorID: {2}",
 				}
 
 				Cameras.Add(internalCamera);
+				Debug.Console(0,
+					this,
+					"Adding camera to camera list:{0}",
+					internalCamera.Key);
 
-                var existingInternalCamera = DeviceManager.GetDeviceForKey(internalCamera.Key);
+				var existingInternalCamera = DeviceManager.GetDeviceForKey(internalCamera.Key);
 
-                if (existingInternalCamera == null)
-                {
-                    DeviceManager.AddDevice(internalCamera);
-                }
-            }
+				if (existingInternalCamera == null)
+				{
+					DeviceManager.AddDevice(internalCamera);
+				}
+			}
 			else
 			{
 				if (CodecStatus.Status.Cameras.CameraList == null)
@@ -6969,7 +7024,7 @@ ConnectorID: {2}",
 
 					var existingCamera = existingCameras.FirstOrDefault(c => c.SerialNumber == item.SerialNumber.Value);
 
-					if(existingCamera != null)
+					if (existingCamera != null)
 					{
 						existingCamera.SetParentCodec(this);
 						if (uint.TryParse(item.CameraId, out var id))
@@ -6977,39 +7032,44 @@ ConnectorID: {2}",
 							existingCamera.SetCameraId(Convert.ToUInt16(id));
 						}
 						Cameras.Add(existingCamera);
-                        continue;
-                    }
+						continue;
+					}
 
-                    var key = string.Format("{0}-camera{1}", Key, camId);
-                    var camera = new CiscoCamera(key, name, this, camId, sourceId);
+					var key = string.Format("{0}-camera{1}", Key, camId);
+					var camera = new CiscoCamera(key, name, this, camId, sourceId);
 
-                    if (cam.Capabilities != null)
-                    {
-                        camera.SetCapabilites(cam.Capabilities.Options.Value);
-                    }
+					if (cam.Capabilities != null)
+					{
+						camera.SetCapabilites(cam.Capabilities.Options.Value);
+					}
 
-                    Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
+					Debug.Console(0, this, "Adding Camera {0}", camera.CameraId);
 					Cameras.Add(camera);
 
-                    if (existingCamera == null)
-                    {
-                        DeviceManager.AddDevice(camera);
-                    }
-                }
+					if (existingCamera == null)
+					{
+						DeviceManager.AddDevice(camera);
+					}
+				}
 			}
 
 			// Add the far end camera
 			var farEndCamera = new CiscoFarEndCamera(Key + "-cameraFar", "Far End", this);
+			Debug.Console(0,
+				this,
+				"Adding camera to camera list:{0}",
+				farEndCamera.Key);
+
 			Cameras.Add(farEndCamera);
 
-            var existingFarEndCamera = DeviceManager.GetDeviceForKey(farEndCamera.Key);
+			var existingFarEndCamera = DeviceManager.GetDeviceForKey(farEndCamera.Key);
 
-            if (existingFarEndCamera == null)
-            {
-                DeviceManager.AddDevice(farEndCamera);
-            }
+			if (existingFarEndCamera == null)
+			{
+				DeviceManager.AddDevice(farEndCamera);
+			}
 
-            SelectedCameraFeedback = new StringFeedback(() => SelectedCamera.Key);
+			SelectedCameraFeedback = new StringFeedback(() => SelectedCamera.Key);
 
 			ControllingFarEndCameraFeedback = new BoolFeedback(
 				() => SelectedCamera is IAmFarEndCamera
@@ -7126,24 +7186,33 @@ ConnectorID: {2}",
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
 		{
-            EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
-        }
-
-        public void SetCameraName(uint videoConnectorId, string name)
-		{
-            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: {name}");
-        }
-
-        public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
-		{
-            EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
+			Debug.Console(1, this, "Setting the serial number of camera {0} to {1}", cameraId, serialNumber);
+			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
 		}
 
-        #endregion
+		public void SetCameraName(uint videoConnectorId, string name)
+		{
+			Debug.Console(1, this, "Setting the name of video connector {0} to {1}", videoConnectorId, name);
+			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
+		}
 
-        #region IHasCodecCameras Members
+		public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
+		{
+			Debug.Console(1, this, "Setting the camera id of video connector {0} to {1}", videoConnectorId, inputCameraId);
+			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
+		}
 
-        public event EventHandler<CameraSelectedEventArgs> CameraSelected;
+		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
+		{
+			Debug.Console(1, this, "Setting the source type of video connector {0} to {1}", videoConnectorId, sourceType);
+			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
+		}
+
+		#endregion
+
+		#region IHasCodecCameras Members
+
+		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
 
 		public List<CameraBase> Cameras { get; private set; }
 
