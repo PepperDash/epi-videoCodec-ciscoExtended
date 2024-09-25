@@ -79,10 +79,10 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
 			{
 
 				Debug.LogMessage(LogEventLevel.Debug, "[McTouchpanelController] SubscribeForMobileControlUpdates", this);
-				foreach (var dev in DeviceManager.AllDevices)
-				{
-					Debug.Console(0, this, $"{dev.Key}:{dev.GetType().Name}");
-				}
+				//foreach (var dev in DeviceManager.AllDevices)
+				//{
+				//	Debug.Console(0, this, $"{dev.Key}:{dev.GetType().Name}");
+				//}
 
 				Debug.LogMessage(LogEventLevel.Debug, $"[McTouchpanelController] GetBridge. DefaultRoomKey: {_props.DefaultRoomKey}", this);
 				if (Mc == null)

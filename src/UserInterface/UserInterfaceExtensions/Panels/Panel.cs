@@ -16,6 +16,10 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         /// </summary>
         internal void OnClickedEvent() { ClickedEvent?.Invoke(this, EventArgs.Empty); }
 
+        /// <summary>
+        /// Determines the order of the panels.  Values are 1-9999.  0 is not valid. Lower numbers are displayed first.
+        /// <!-- 1-9999 -->
+        /// </summary>
         [XmlElement("Order")]
         [JsonProperty("order")]
         public ushort Order { get; set; }
