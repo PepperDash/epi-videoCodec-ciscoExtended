@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "types": {
-    "ciscoCodecEq": {
+    "ciscoRoomOs": {
       "type": "object",
       "properties": {
         "properties": {
@@ -10,6 +10,42 @@
         }
       }
     },
+    "ciscoRoomBar": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoRoomBarPro": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoCodecEq": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoCodecPro": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
     "ciscoRoomOsMobileControl": {
       "type": "object",
       "properties": {
