@@ -40,7 +40,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         /// the list or select Custom to use a custom icon that has been
         /// uploaded to the device.
         /// </summary>
-        string Icon { get; }
+        eCiscoPanelIcons Icon { get; }
 
         /// <summary>
         /// The unique identifier of the uploaded custom icon.

@@ -2,6 +2,7 @@
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
+using static epi_videoCodec_ciscoExtended.CiscoCodecConfiguration;
 
 
 namespace epi_videoCodec_ciscoExtended
@@ -12,7 +13,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             MinimumEssentialsFrameworkVersion = "1.15.2";
 
-            TypeNames = new List<string>() { "ciscoRoomOS" };
+            TypeNames = new List<string>() { "ciscoRoomOS", "ciscoRoomBar", "ciscoRoomBarPro", "ciscoCodecEq", "ciscoCodecPro" };
         }
 
         public override EssentialsDevice BuildDevice(DeviceConfig dc)

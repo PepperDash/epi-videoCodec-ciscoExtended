@@ -700,8 +700,9 @@ namespace epi_videoCodec_ciscoExtended
 
 		public RoutingOutputPort HdmiOut1 { get; private set; }
 		public RoutingOutputPort HdmiOut2 { get; private set; }
+        public RoutingOutputPort HdmiOut3 { get; private set; }
 
-		public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
+        public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
 
 		private readonly IBasicCommunication _comms;
 
@@ -1029,9 +1030,16 @@ namespace epi_videoCodec_ciscoExtended
 				null,
 				this
 			);
+            HdmiOut3 = new RoutingOutputPort(
+				RoutingPortNames.HdmiOut3,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				null,
+				this
+			);
 
-			//InputPorts.Add(CodecOsdIn);
-			InputPorts.Add(HdmiIn1);
+            //InputPorts.Add(CodecOsdIn);
+            InputPorts.Add(HdmiIn1);
 			InputPorts.Add(HdmiIn2);
 			InputPorts.Add(HdmiIn3);
 			InputPorts.Add(HdmiIn4);
@@ -1039,6 +1047,7 @@ namespace epi_videoCodec_ciscoExtended
 			InputPorts.Add(SdiInput);
 			OutputPorts.Add(HdmiOut1);
 			OutputPorts.Add(HdmiOut2);
+			OutputPorts.Add(HdmiOut3);
 			//CreateOsdSource();
 
 			ExternalSourceListEnabled = props.ExternalSourceListEnabled;

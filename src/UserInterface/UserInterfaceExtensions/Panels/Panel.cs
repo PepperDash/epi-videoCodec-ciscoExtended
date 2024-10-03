@@ -42,7 +42,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         /// </summary>
         [XmlElement("Icon")]
         [JsonProperty("icon")]
-        public string Icon { get; set; }
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public eCiscoPanelIcons Icon { get; set; }
 
         /// <summary>
         /// only needed for custom icons
@@ -64,4 +65,32 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
 		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
 
 	}
+
+    public enum eCiscoPanelIcons
+    {
+        Briefing,
+        Camera,
+        Concierge,
+        Disc,
+        Handset,
+        Help,
+        Helpdesk,
+        Home,
+        Hvac,
+        Info,
+        Input,
+        Language,
+        Laptop,
+        Lightbulb,
+        Media,
+        Microphone,
+        Power,
+        Proximity,
+        Record,
+        Spark,
+        Tv,
+        Webex,
+        General,
+        Custom
+    }
 }
