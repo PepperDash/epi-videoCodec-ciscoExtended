@@ -407,13 +407,7 @@ namespace epi_videoCodec_ciscoExtended
 		{
 			get
 			{
-				return () =>
-					CodecStatus
-						.Status
-						.StatusConference
-						.Presentation
-						.ModeValueProperty
-						.SendingBoolValue;
+				return () => PresentationActiveFeedback.BoolValue;
 			}
 		}
 
@@ -893,6 +887,8 @@ namespace epi_videoCodec_ciscoExtended
 			);
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
+
+			PresentationActiveFeedback.OutputChange += (o, a) => SharingContentIsOnFeedback.FireUpdate();
 
 			Communication = comm;
 
