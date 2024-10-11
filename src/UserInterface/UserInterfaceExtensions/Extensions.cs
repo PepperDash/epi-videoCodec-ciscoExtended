@@ -4,7 +4,6 @@ using System.Xml.Serialization;
 using epi_videoCodec_ciscoExtended.Xml;
 using PepperDash.Core;
 using Serilog.Events;
-using Crestron.SimplSharp;
 using System;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
 
@@ -28,6 +27,12 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         [XmlElement("Panel")]
         [JsonProperty("panels")]
         public List<Panel> Panels { get; set; }
+        
+        [XmlIgnore]
+        [JsonProperty("doNotSendXml")]
+        public bool SkipXml { get; set; } 
+        // Lets you skip sending the XML command on init if they are added externally
+        
         //other extensions later
 
         [JsonIgnore]
@@ -39,6 +44,16 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
             Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
             PanelsHandler = new PanelsHandler(parent, enqueueCommand, Panels);
             //Debug.LogMessage(LogEventLevel.Warning, xCommand(), parent);
+
+            if (SkipXml)
+            {
+                return;
+            }
+            
+            var xml = xCommand();
+            var message = "Sending XML data: " + xml;
+            
+            Debug.LogMessage(level: LogEventLevel.Debug, message: message, device: parent);
             enqueueCommand(xCommand());
         }
 
