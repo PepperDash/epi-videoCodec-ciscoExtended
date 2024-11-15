@@ -18,7 +18,7 @@ namespace epi_videoCodec_ciscoExtended.V2
     {
         private int searchinProgress;
 
-        private int phonebookResultsLimit = 10;
+        private uint phonebookResultsLimit = 10;
         private bool phoneBookIsLocal;
         private bool currentDirectoryIsNotRoot;
 
@@ -30,7 +30,12 @@ namespace epi_videoCodec_ciscoExtended.V2
 
         public CiscoDirectory(CiscoRoomOsDevice parent) : base(parent.Key + "-directory")
         {
+            
             this.parent = parent;
+
+
+            if (parent.phoneBookLimit != 0)
+                phonebookResultsLimit = parent.phoneBookLimit;
 
             SearchIsInProgress = new BoolFeedback("SearchInProgress", () => searchinProgress > 0);
 
@@ -56,7 +61,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                     : "\"" + searchString + "\"";
 
                 var phonebookMode = phoneBookIsLocal ? "Local" : "Corporate";
-
+                
                 var command = string.Format(
                     "xCommand Phonebook Search SearchString: {0} PhonebookType: {1} Limit: {2}",
                     nameToSearch, phonebookMode, phonebookResultsLimit);

@@ -32,6 +32,8 @@ namespace epi_videoCodec_ciscoExtended.V2
         internal readonly CiscoSelfView SelfView;
         internal readonly CiscoLayouts Layouts;
 
+        internal readonly uint phoneBookLimit;
+
         private readonly IBasicCommunication communications;
         private readonly IList<CiscoRoomOsFeature> features = new List<CiscoRoomOsFeature>();
         private readonly CTimer requestTimeout;
@@ -47,7 +49,8 @@ namespace epi_videoCodec_ciscoExtended.V2
         {
             username = props.Username ?? string.Empty;
             password = props.Password ?? string.Empty;
-
+            phoneBookLimit = props.PhonebookResultsLimit;
+           
             this.communications = communications;
 
             var gather = new CommunicationGather(communications, Delimiter);
