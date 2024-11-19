@@ -4,6 +4,7 @@ using PepperDash.Essentials.Devices.Common.Codec;
 
 using Newtonsoft.Json;
 using Extensions = epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Extensions;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -89,7 +90,10 @@ namespace epi_videoCodec_ciscoExtended
 		[JsonProperty("extensions")]
 		public Extensions Extensions { get; set; }
 
-		public CiscoCodecConfig()
+        [JsonProperty("emergency")]
+        public Emergency Emergency { get; set; }
+
+        public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
             PhonebookMode = "corporate";
@@ -140,5 +144,14 @@ namespace epi_videoCodec_ciscoExtended
 
         [JsonProperty("bridgeIndex")]
         public uint? BridgeIndex { get; set; }
+    }
+
+    public class Emergency
+    {
+        [JsonProperty("mobileControlPath")]
+        public bool MobileControlPath { get; set; }
+
+        [JsonProperty("uiWebViewDisplay")]
+        public UiWebViewDisplay UiWebViewDisplay { get; set; }
     }
 }

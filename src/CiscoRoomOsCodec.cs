@@ -25,6 +25,7 @@ using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 
 
 namespace epi_videoCodec_ciscoExtended
@@ -102,7 +103,8 @@ namespace epi_videoCodec_ciscoExtended
 			ICiscoCodecUiExtensionsController,
 			ICiscoCodecCameraConfig,
 			ISpeakerTrack,
-			IPresenterTrack
+			IPresenterTrack,
+			IEmergencyOSD
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
@@ -7555,6 +7557,22 @@ namespace epi_videoCodec_ciscoExtended
 		}
 
 		#endregion
+
+		public void ShowEmergencyMessage(string url)
+        {
+			string mode = _config.Emergency.UiWebViewDisplay.Mode;
+			string title = _config.Emergency.UiWebViewDisplay.Title;
+			string target = _config.Emergency.UiWebViewDisplay.Target;
+			string urlPath = url + _config.Emergency.MobileControlPath;
+			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
+			//coms.SendText(uwvd.xCommand());
+			EnqueueCommand(uwvd.xCommand());
+		}
+
+		public void HideEmergencyMessage()
+        {
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		}
 	}
 
 	#region
