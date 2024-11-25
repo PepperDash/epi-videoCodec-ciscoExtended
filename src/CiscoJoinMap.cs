@@ -1071,6 +1071,17 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Serial
             });
 
+        [JoinName("GetRecents")]
+        public JoinDataComplete GetRecents = new JoinDataComplete(new JoinData()
+        {
+            JoinNumber = 180,
+            JoinSpan = 1
+        }, new JoinMetadata()
+        {
+            Description = "Refreshes Recent History List",
+            JoinCapabilities = eJoinCapabilities.FromSIMPL,
+            JoinType = eJoinType.Digital
+        });
 
         [JoinName("ToggleLayout")]
         public JoinDataComplete ToggleLayout = new JoinDataComplete(new JoinData()

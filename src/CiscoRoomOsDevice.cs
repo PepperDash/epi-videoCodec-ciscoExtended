@@ -1023,6 +1023,10 @@ namespace epi_videoCodec_ciscoExtended.V2
             trilist.SetUShortSigAction(joinMap.SelectRecentCall.JoinNumber, value => Recents.SelectedRecent = value);
             Recents.SelectedRecentName.LinkInputSig(trilist.StringInput[joinMap.SelectRecentName.JoinNumber]);
             Recents.SelectedRecentNumber.LinkInputSig(trilist.StringInput[joinMap.SelectRecentNumber.JoinNumber]);
+            
+            trilist.SetSigTrueAction(joinMap.GetRecents.JoinNumber, () => Recents.RefreshHistoryList());
+
+            
 
             for (var x = 0; x < joinMap.Recents.JoinSpan; ++x)
             {
@@ -1046,6 +1050,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             trilist.SetSigTrueAction(joinMap.DoNotDisturbOff.JoinNumber, DeactivateDoNotDisturbMode);
             trilist.SetSigTrueAction(joinMap.DoNotDisturbToggle.JoinNumber, ToggleDoNotDisturbMode);
 
+         
             trilist.SetSigTrueAction(joinMap.ToggleLayout.JoinNumber, LocalLayoutToggle);
             trilist.SetStringSigAction(joinMap.SelectLayout.JoinNumber, LayoutSet);
             Layouts.LocalLayoutFeedback.LinkInputSig(trilist.StringInput[joinMap.CurrentLayout.JoinNumber]);

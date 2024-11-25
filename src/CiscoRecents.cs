@@ -27,7 +27,6 @@ namespace epi_videoCodec_ciscoExtended.V2
         }
 
 
-
         internal readonly List<StringFeedback> Feedbacks;
         internal readonly StringFeedback SelectedRecentName;
         internal readonly StringFeedback SelectedRecentNumber;
@@ -97,6 +96,14 @@ namespace epi_videoCodec_ciscoExtended.V2
 
             SelectedRecentName.RegisterForDebug(this);
             SelectedRecentNumber.RegisterForDebug(this);
+        }
+
+        public void RefreshHistoryList()
+        {
+             foreach (var feedback in Feedbacks)
+                {
+                    feedback.FireUpdate();
+                }
         }
 
         public IEnumerable<string> Subscriptions { get; private set; }

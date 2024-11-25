@@ -51,7 +51,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 var incoming =
                     activeCallItems.Values.FirstOrDefault(item => item.Direction == eCodecCallDirection.Incoming);
 
-                return incoming == null ? string.Empty : incoming.Name;
+                return incoming == null ? string.Empty : incoming.Name.Trim(new[] { ' ', '\"' }); ;
             });
 
             IncomingCallNumber = new StringFeedback("IncomingCallNumber", () =>
@@ -59,7 +59,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 var incoming =
                     activeCallItems.Values.FirstOrDefault(item => item.Direction == eCodecCallDirection.Incoming);
 
-                return incoming == null ? string.Empty : incoming.Number;
+                return incoming == null ? string.Empty : incoming.Number.Trim(new[] { ' ', '\"' }); ;
             });
 
             CallIsIncoming.RegisterForDebug(parent);
@@ -149,10 +149,10 @@ namespace epi_videoCodec_ciscoExtended.V2
                         switch (property)
                         {
                             case "DisplayName":
-                                activeCallItems[callId].Name = value;
+                                activeCallItems[callId].Name = value.Trim(new[] { ' ', '\"' }); ;
                                 break;
                             case "RemoteNumber":
-                                activeCallItems[callId].Number = value;
+                                activeCallItems[callId].Number = value.Trim(new[] { ' ', '\"' }); ;
                                 break;
                             case "CallType":
                                 activeCallItems[callId].Type =
