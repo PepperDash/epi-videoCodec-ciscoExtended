@@ -91,6 +91,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         Tv,
         Webex,
         General,
+        Sliders,
         Custom
     }
 }
