@@ -94,6 +94,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 _bridge = bridge;
                 Debug.LogMessage(LogEventLevel.Debug, "Setting AppUrl", this);
 
+                SetAppUrl(_bridge.AppUrl);
                 Debug.LogMessage(LogEventLevel.Debug, "Mobile Control Room Bridge Found {bridgeKey}", this, _bridge?.Key);
 
                 Debug.LogMessage(LogEventLevel.Debug, "Subscribing to Mobile Control Events: UserCodeChanged", this);

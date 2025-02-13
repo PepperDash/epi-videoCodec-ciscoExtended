@@ -354,6 +354,19 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     );
                     return;
                 }
+
+                if (!string.IsNullOrEmpty(mcPanel.Url))
+                {
+                    Debug.LogMessage(
+                        LogEventLevel.Debug,
+                        $"Sending URL to WebView: {mcPanel.Url}",
+                        this
+                    );
+
+
+                    return;
+                }
+
                 if (mcPanel.MobileControlPath == null || mcPanel.MobileControlPath.Length == 0)
                 {
                     Debug.LogMessage(
@@ -371,6 +384,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                         this
                     );
                 }
+
                 SendCiscoCodecUiToWebViewMcUrl(mcPanel.MobileControlPath, mcPanel.UiWebViewDisplay);
             }
             catch (Exception ex)
@@ -383,7 +397,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 );
             }
         }
-
+        
         /// <summary>
         /// Send the cisco ui to a webview with mc app url + path using the webViewConfig
         /// </summary>
@@ -465,6 +479,34 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                         webViewConfig.Mode != null
                             ? webViewConfig.Mode
                             : _defaultUiWebViewDisplayConfig.Mode
+                }
+            );
+        }
+        
+        /// <summary>
+        /// Send the cisco ui to a webview with url
+        /// </summary>
+        /// <param name="mcPath"></param>
+        /// <param name="webViewConfig"></param>
+        public void SendCiscoCodecUiToWebViewUrl(string url, UiWebViewDisplayConfig webViewConfig)
+        {
+            var uriBuilder = new UriBuilder(url);
+            var urlToUse = uriBuilder.ToString();
+
+            Debug.LogMessage(
+                LogEventLevel.Debug,
+                "[MobileControlClickedEvent] Sending URL: {0}",
+                this,
+                urlToUse
+            );
+
+            _extensionsHandler.UiWebViewDisplayAction?.Invoke(
+                new UiWebViewDisplayActionArgs()
+                {
+                    Title = webViewConfig.Title ?? _defaultUiWebViewDisplayConfig.Title,
+                    Url = urlToUse,
+                    Target = webViewConfig.Target ?? _defaultUiWebViewDisplayConfig.Target,
+                    Mode = webViewConfig.Mode ?? _defaultUiWebViewDisplayConfig.Mode
                 }
             );
         }
