@@ -56,9 +56,13 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [JsonProperty("name")]
         public string Name { get; set; }
 
-        [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonProperty("faderDeviceKey", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
-		public string Url { get; set; }
+		public string FaderDeviceKey { get; set; }
+
+        [JsonProperty("devJson", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+		public object DevJson { get; set; }
 
         [JsonProperty("mobileControlPath", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]

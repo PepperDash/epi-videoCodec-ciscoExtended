@@ -1,16 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml.Linq;
+using System.Text;
 using Crestron.SimplSharpPro.DeviceSupport;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using PepperDash.Core;
-using PepperDash.Core.JsonStandardObjects;
 using PepperDash.Essentials.Core;
-using PepperDash.Essentials.Core.Config;
-using PepperDash.Essentials.Core.Queues;
 
 //see comments at bottom for xCommand examples
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
@@ -24,25 +18,66 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
 
         public PanelsHandler(IKeyed parent, Action<string> enqueueCommand, List<Panel> config)
         {
-            Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "Constructing PanelsHandler", parent);
-            _parent = parent;
-            _panelConfigs = config;
-            EnqueueCommand = enqueueCommand;
-            if (config == null || config.Count == 0)
-            {
-                Debug.LogMessage(
-                    Serilog.Events.LogEventLevel.Information,
-                    "No Cisco Panels Configured {0}", _parent, config);
-                return;
-            }
-            else if (config.Any((p) => p.Order == 0))
-            {
-                Debug.LogMessage(Serilog.Events.LogEventLevel.Error,
-                "0 is an invalid order value. Must be >= 1 {0}.  PanelHandler will not be registered.  Please update order values in config.", _parent, config);
-                return;
-            }
+          Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "Constructing PanelsHandler", parent);
+          _parent = parent;
+          _panelConfigs = config;
+          EnqueueCommand = enqueueCommand;
 
-            RegisterFeedback();
+          if (config == null || config.Count == 0)
+          {
+            Debug.LogMessage(
+              Serilog.Events.LogEventLevel.Information,
+              "No Cisco Panels Configured {0}", _parent, config);
+
+            return;
+          }
+          
+          if (config.Any((p) => p.Order == 0))
+          {
+              Debug.LogMessage(
+                Serilog.Events.LogEventLevel.Error,
+                "0 is an invalid order value. Must be >= 1 {0}.  PanelHandler will not be registered.  Please update order values in config.", 
+                _parent, config);
+
+              return;
+          }
+
+          RegisterFeedback();
+
+          foreach (var p in config.Where(c => !string.IsNullOrEmpty(c.FaderDeviceKey)))
+          {
+            if (DeviceManager.GetDeviceForKey(p.FaderDeviceKey) is IBasicVolumeWithFeedback fader)
+            {
+              fader.MuteFeedback.OutputChange += (sender, args) => 
+              {
+                var command = args.BoolValue 
+                  ? GetColorCommand(p, "#FF5977")
+                  : GetColorCommand(p, "#FFFFFF");
+
+                enqueueCommand(command);
+              };
+            }
+          }
+        }
+
+        private static string GetColorCommand(Panel p, string color)
+        {
+            // xCommand UserInterface Extensions Panel Update Color: value Icon: value IconId: value Location: value Name: value PanelId: value Visibility: value
+            var sb = new StringBuilder("xCommand UserInterface Extensions Panel Update Color: ");
+            sb.Append(color);
+            sb.Append(" PanelId: " + p.PanelId);
+            sb.Append(" Icon: " + p.Icon);
+
+            if (!string.IsNullOrEmpty(p.Location))
+                sb.Append(" Location: " + p.Location);
+            if (!string.IsNullOrEmpty(p.Name))
+                sb.Append(" Name: " + "\"" + p.Name + "\"");
+            if (!string.IsNullOrEmpty(p.IconId))
+                sb.Append(" IconId: " + p.IconId);
+
+            sb.Append(" Visibility: Auto");
+
+            return sb.ToString();
         }
 
         public void ParseStatus(CiscoCodecEvents.Panel panel)

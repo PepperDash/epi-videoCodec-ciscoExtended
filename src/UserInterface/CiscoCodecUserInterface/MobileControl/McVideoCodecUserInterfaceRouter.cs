@@ -2,6 +2,7 @@
 using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.RoomCombiner;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
@@ -355,16 +356,16 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     return;
                 }
 
-                if (!string.IsNullOrEmpty(mcPanel.Url))
+                if (mcPanel.DevJson != null)
                 {
+                    var json = JsonConvert.SerializeObject(mcPanel.DevJson);
                     Debug.LogMessage(
                         LogEventLevel.Debug,
-                        $"Sending URL to WebView: {mcPanel.Url}",
+                        $"Running DevJson: {json}",
                         this
                     );
 
-
-                    return;
+                    DeviceJsonApi.DoDeviceActionWithJson(json);
                 }
 
                 if (mcPanel.MobileControlPath == null || mcPanel.MobileControlPath.Length == 0)
@@ -376,6 +377,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     );
                     return;
                 }
+
                 if (mcPanel.UiWebViewDisplay == null)
                 {
                     Debug.LogMessage(
