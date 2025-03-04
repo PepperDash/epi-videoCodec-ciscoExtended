@@ -1,6 +1,7 @@
 ﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.Xml.Serialization;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
@@ -68,7 +69,26 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
 		[XmlIgnore]
 		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
 
-	}
+        [JsonProperty("webviewProperties", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public List<WebviewProperties> WebviewProperties { get; set; }
+
+        }
+
+    public class WebviewProperties
+        {
+        [JsonProperty("mobileControlPath", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public string MobileControlPath { get; set; }
+
+        [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public string Url { get; set; }
+
+        [JsonProperty("uiWebViewDisplay", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
+        }
 
     public enum eCiscoPanelIcons
     {
