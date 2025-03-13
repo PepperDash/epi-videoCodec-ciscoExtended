@@ -104,7 +104,8 @@ namespace epi_videoCodec_ciscoExtended
 			ICiscoCodecCameraConfig,
 			ISpeakerTrack,
 			IPresenterTrack,
-			IEmergencyOSD
+			IEmergencyOSD,
+			IHasWebView
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
@@ -7558,6 +7559,17 @@ namespace epi_videoCodec_ciscoExtended
 
 		#endregion
 
+		public void ShowWebView(string url, string mobileControlPath, string mode, string title, string target)
+        {
+			string urlPath = url + mobileControlPath;
+			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
+			EnqueueCommand(uwvd.xCommand());
+		}
+
+		public void HideWebView()
+        {
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		}
 		public void ShowEmergencyMessage(string url)
         {
 			string mode = _config.Emergency.UiWebViewDisplay.Mode;
@@ -7565,7 +7577,6 @@ namespace epi_videoCodec_ciscoExtended
 			string target = _config.Emergency.UiWebViewDisplay.Target;
 			string urlPath = url + _config.Emergency.MobileControlPath;
 			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
-			//coms.SendText(uwvd.xCommand());
 			EnqueueCommand(uwvd.xCommand());
 		}
 
