@@ -7559,10 +7559,9 @@ namespace epi_videoCodec_ciscoExtended
 
 		#endregion
 
-		public void ShowWebView(string url, string mobileControlPath, string mode, string title, string target)
+		public void ShowWebView(string url, string mode, string title, string target)
         {
-			string urlPath = url + mobileControlPath;
-			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
+			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= url, Mode=mode, Title=title, Target=target };
 			EnqueueCommand(uwvd.xCommand());
 		}
 
