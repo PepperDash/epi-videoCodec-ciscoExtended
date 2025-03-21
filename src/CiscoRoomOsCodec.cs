@@ -279,6 +279,7 @@ namespace epi_videoCodec_ciscoExtended
 		public bool SpeakerTrackStatus { get; private set; }
 		public bool PresenterTrackAvailability { get; private set; }
 		public bool PresenterTrackStatus { get; private set; }
+		public bool WebviewIsVisible { get; private set; }
 		public string PresenterTrackStatusName { get; private set; }
 
 		private string _currentLayoutBacker;
@@ -1903,6 +1904,12 @@ namespace epi_videoCodec_ciscoExtended
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
+				+ "Status/UserInterface/WebView/Status"
+				+ Delimiter
+				+ prefix
+				+ "Status/Network/Ethernet/MacAddress"
+				+ Delimiter
+				+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
@@ -2802,6 +2809,38 @@ namespace epi_videoCodec_ciscoExtended
 			SpeakerTrackAvailableFeedback.FireUpdate();
 		}
 
+		private void ParseWebviewStatusToken(JToken webviewStatusToken)
+		{
+			try
+			{
+				if (String.IsNullOrEmpty(webviewStatusToken.ToString()))
+					return;
+				var webviewStatusObject = webviewStatusToken as JObject;
+				if (webviewStatusObject == null)
+					return;
+				var statusToken = webviewStatusObject.SelectToken("Status.Value");
+				if (statusToken != null)
+				{
+					var status = statusToken.ToString().ToLower();
+					if (!String.IsNullOrEmpty(status))
+					{
+						if (status == "visible")
+						{
+							WebviewIsVisible = true;
+						}
+						else if (status == "notvisible")
+						{
+							WebviewIsVisible = false;
+						}
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				Debug.Console(0, this, "Exception in ParseWebviewStatusToken : ");
+				Debug.Console(0, this, "{0}", e.Message);
+			}
+		}
 		private void ParseSpeakerTrackToken(JToken speakerTrackToken)
 		{
 			try
@@ -3988,6 +4027,7 @@ namespace epi_videoCodec_ciscoExtended
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
 			var conferenceToken = statusToken.SelectToken("Conference");
+			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 
@@ -4161,6 +4201,10 @@ namespace epi_videoCodec_ciscoExtended
 			if (status.RoomPresets != null)
 			{
 				ParseRoomPresetList(status.RoomPresets);
+			}
+			if (webViewStatusToken != null)
+			{
+				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
 
 			// we don't want to do this... this will expand lists infinitely

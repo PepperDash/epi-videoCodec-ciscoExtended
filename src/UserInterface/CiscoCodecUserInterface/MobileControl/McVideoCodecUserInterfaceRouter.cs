@@ -357,11 +357,20 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 }
                 if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
                 {
-                    foreach (var action in mcPanel.DeviceActions)
+                    foreach (DeviceActionWrapper action in mcPanel.DeviceActions)
                     {
+                        if (action == null)
+                        {
+                            Debug.LogMessage(
+                                LogEventLevel.Debug,
+                                "DeviceAction is null",
+                                this
+                            );
+                            continue;
+                        }
                         Debug.LogMessage(
                             LogEventLevel.Debug,
-                            $"Running DeviceAction {@action}", action
+                            $"Running DeviceAction {@action.MethodName}", action.MethodName
                         );
                         await DeviceJsonApi.DoDeviceActionAsync(action);
                     }
