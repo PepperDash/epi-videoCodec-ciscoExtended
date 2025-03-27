@@ -149,7 +149,7 @@ namespace epi_videoCodec_ciscoExtended
     public class Emergency
     {
         [JsonProperty("mobileControlPath")]
-        public bool MobileControlPath { get; set; }
+        public string MobileControlPath { get; set; }
 
         [JsonProperty("uiWebViewDisplay")]
         public UiWebViewDisplay UiWebViewDisplay { get; set; }
