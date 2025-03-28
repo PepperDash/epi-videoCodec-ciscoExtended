@@ -2746,7 +2746,10 @@ namespace epi_videoCodec_ciscoExtended
 			);
 
 			if (DeviceInfo == null)
+			{
+				Debug.Console(0, this, "ParseNetworkList: DeviceInfo == null");
 				return;
+			}
 			DeviceInfo.HostName = hostname;
 			DeviceInfo.IpAddress = ipAddress;
 			DeviceInfo.MacAddress = macAddress;
@@ -2927,11 +2930,11 @@ namespace epi_videoCodec_ciscoExtended
 					if (n.SelectToken("id").ToString() != "1")
 						continue;
 					var hostname =
-						n.SelectToken("Cdp.DeviceId.Value").ToString().NullIfEmpty() ?? "Unknown";
+						n.SelectToken("Cdp.DeviceId.Value")?.ToString().NullIfEmpty() ?? "Unknown";
 					var ipAddress =
-						n.SelectToken("IPv4.Address.Value").ToString().NullIfEmpty() ?? "Unknown";
+						n.SelectToken("IPv4.Address.Value")?.ToString().NullIfEmpty() ?? "Unknown";
 					var macAddress =
-						n.SelectToken("Ethernet.MacAddress.Value").ToString().NullIfEmpty()
+						n.SelectToken("Ethernet.MacAddress.Value")?.ToString().NullIfEmpty()
 						?? "Unknown";
 					OnCodecInfoChanged(
 						new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
