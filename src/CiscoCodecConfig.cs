@@ -3,6 +3,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
 using Newtonsoft.Json;
+using Extensions = epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Extensions;
 
 namespace epi_videoCodec_ciscoExtended
 {
@@ -56,6 +57,9 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("UiBranding")]
         public BrandingLogoProperties UiBranding { get; set; }
 
+        [JsonProperty("enableCameraConfigFromRoomCameraList")]
+        public bool EnableCameraConfigFromRoomCameraList { get; set; }
+
         [JsonProperty("cameraInfo")]
         public List<CameraInfo> CameraInfo { get; set; }
 
@@ -82,7 +86,10 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("Widgets")]
         public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
-        public CiscoCodecConfig()
+		[JsonProperty("extensions")]
+		public Extensions Extensions { get; set; }
+
+		public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
             PhonebookMode = "corporate";
