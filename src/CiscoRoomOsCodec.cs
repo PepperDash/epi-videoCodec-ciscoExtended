@@ -112,6 +112,7 @@ namespace epi_videoCodec_ciscoExtended
 		private event EventHandler<MinuteChangedEventArgs> MinuteChanged;
 		public event EventHandler<CodecInfoChangedEventArgs> CodecInfoChanged;
 		public event EventHandler<CameraTrackingCapabilitiesArgs> CameraTrackingCapabilitiesChanged;
+		public event EventHandler<WebViewStatusChangedEventArgs> WebViewStatusChanged;
 
 		public eCameraTrackingCapabilities CameraTrackingCapabilities { get; private set; }
 
@@ -2827,6 +2828,11 @@ namespace epi_videoCodec_ciscoExtended
 					var status = statusToken.ToString().ToLower();
 					if (!String.IsNullOrEmpty(status))
 					{
+						var handler = WebViewStatusChanged;
+						if (handler != null)
+						{
+							handler(this, new WebViewStatusChangedEventArgs(status));
+						}
 						if (status == "visible")
 						{
 							WebviewIsVisible = true;

@@ -35,8 +35,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PepperDash.Essentials.Plugin.MobileControl.Messengers" Version="4.3.0-feature-add-handler-for-logo-images.1" />
-    <PackageReference Include="PepperDashEssentials" Version="2.1.0-feature-IHasOsd.5" />
+    <PackageReference Include="PepperDashEssentials" Version="2.3.0-webview-eventhandler.1" />
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
   </ItemGroup>
 
