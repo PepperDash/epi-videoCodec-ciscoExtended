@@ -10,6 +10,7 @@ namespace epi_videoCodec_ciscoExtended
 {
     public class CiscoFarEndCamera : CameraBase, IHasCameraPtzControl, IAmFarEndCamera, IBridgeAdvanced
     {
+        [JsonIgnore]
         protected CiscoCodec ParentCodec { get; private set; }
 
         protected string CallId
@@ -111,6 +112,7 @@ namespace epi_videoCodec_ciscoExtended
         /// <summary>
         /// The codec this camera belongs to
         /// </summary>
+        [JsonIgnore]
         protected CiscoCodec ParentCodec { get; private set; }
 
         /// <summary>
