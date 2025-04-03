@@ -1,7 +1,9 @@
 ﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.Xml.Serialization;
+using PepperDash.Essentials.Core;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
 {
@@ -17,9 +19,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         internal void OnClickedEvent() { ClickedEvent?.Invoke(this, EventArgs.Empty); }
 
         /// <summary>
-        /// Determines the order of the panels.  Values are 1-9999.  0 is not valid. Lower numbers are displayed first.
-        /// <!-- 1-9999 -->
+        /// Determines the order of the panels.   Lower numbers are displayed first.
         /// </summary>
+        /// <remarks>Valid values are 1-9999.  0 is not valid.</remarks>
         [XmlElement("Order")]
         [JsonProperty("order")]
         public ushort Order { get; set; }
@@ -42,7 +44,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         /// </summary>
         [XmlElement("Icon")]
         [JsonProperty("icon")]
-        public string Icon { get; set; }
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public eCiscoPanelIcons Icon { get; set; }
 
         /// <summary>
         /// only needed for custom icons
@@ -55,13 +58,50 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [JsonProperty("name")]
         public string Name { get; set; }
 
+        [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+		public string Url { get; set; }
+
         [JsonProperty("mobileControlPath", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
 		public string MobileControlPath { get; set; }
 
-        [JsonProperty("uiWebViewDisplay", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonProperty("uiWebViewDisplays", NullValueHandling = NullValueHandling.Ignore)]
 		[XmlIgnore]
-		public UiWebViewDisplayConfig UiWebViewDisplay { get; set; }
+		public List<UiWebViewDisplayConfig> UiWebViewDisplays { get; set; }
 
-	}
+        [JsonProperty("deviceActions", NullValueHandling = NullValueHandling.Ignore)]
+		[XmlIgnore]
+		public List<DeviceActionWrapper> DeviceActions { get; set; }
+
+        }
+
+    public enum eCiscoPanelIcons
+    {
+        Briefing,
+        Camera,
+        Concierge,
+        Disc,
+        Handset,
+        Help,
+        Helpdesk,
+        Home,
+        Hvac,
+        Info,
+        Input,
+        Language,
+        Laptop,
+        Lightbulb,
+        Media,
+        Microphone,
+        Power,
+        Proximity,
+        Record,
+        Spark,
+        Tv,
+        Webex,
+        General,
+        Sliders,
+        Custom
+    }
 }

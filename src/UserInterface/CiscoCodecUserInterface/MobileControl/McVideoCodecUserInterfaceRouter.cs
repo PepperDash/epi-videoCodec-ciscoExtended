@@ -1,6 +1,7 @@
 ﻿using Crestron.SimplSharp.Net;
 using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.RoomCombiner;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
 using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
@@ -319,7 +320,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
             SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
         }
 
-        private void VideoCodecUiExtensionsClickedMcEventHandler(
+        private async void VideoCodecUiExtensionsClickedMcEventHandler(
             object sender,
             UiExtensionsClickedEventArgs e
         )
@@ -354,6 +355,43 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     );
                     return;
                 }
+                if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
+                {
+                    foreach (DeviceActionWrapper action in mcPanel.DeviceActions)
+                    {
+                        if (action == null)
+                        {
+                            Debug.LogMessage(
+                                LogEventLevel.Debug,
+                                "DeviceAction is null",
+                                this
+                            );
+                            continue;
+                        }
+                        Debug.LogMessage(
+                            LogEventLevel.Debug,
+                            $"Running DeviceAction {@action.MethodName}", action.MethodName
+                        );
+                        await DeviceJsonApi.DoDeviceActionAsync(action);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(mcPanel.Url))
+                {
+                    Debug.LogMessage(
+                        LogEventLevel.Debug,
+                        $"Sending URL to WebView: {mcPanel.Url}",
+                        this
+                    );
+
+                    foreach (UiWebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                    {
+                        SendCiscoCodecUiToWebViewUrl(mcPanel.Url, webView);
+                    }
+
+                    return;
+                }
+
                 if (mcPanel.MobileControlPath == null || mcPanel.MobileControlPath.Length == 0)
                 {
                     Debug.LogMessage(
@@ -363,7 +401,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     );
                     return;
                 }
-                if (mcPanel.UiWebViewDisplay == null)
+                if (mcPanel.UiWebViewDisplays == null)
                 {
                     Debug.LogMessage(
                         LogEventLevel.Debug,
@@ -371,7 +409,11 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                         this
                     );
                 }
-                SendCiscoCodecUiToWebViewMcUrl(mcPanel.MobileControlPath, mcPanel.UiWebViewDisplay);
+
+                foreach (UiWebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                {
+                    SendCiscoCodecUiToWebViewMcUrl(mcPanel.MobileControlPath, webView);
+                }
             }
             catch (Exception ex)
             {
@@ -382,6 +424,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                     this
                 );
             }
+
+
         }
 
         /// <summary>
@@ -391,7 +435,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
         /// <param name="webViewConfig"></param>
         public void SendCiscoCodecUiToWebViewMcUrl(
             string mcPath,
-            UiWebViewDisplayConfig webViewConfig
+            UiWebViewDisplayConfig webViewConfig, bool prependmcUrl = true
+
         )
         {
             Debug.LogMessage(
@@ -403,44 +448,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 this
             );
             // Parse the _appUrl into a Uri object
-            var appUrl = _mcTpController.AppUrlFeedback.StringValue;
-            if (appUrl == null)
-            {
-                Debug.LogMessage(
-                    LogEventLevel.Debug,
-                    "AppUrl is null, cannot send to WebView",
-                    this
-                );
-                return;
-            }
-            //var printableAppUrl = _mcTpController?.AppUrlFeedback?.StringValue?.MaskQParamTokenInUrl();
-            //Debug.LogMessage(
-            //    LogEventLevel.Debug,
-            //    $"SendCiscoCodecUiToWebViewMcUrl: {printableAppUrl}",
-            //    this
-            //);
+            var (url, printableUrl) = prependmcUrl ? GetMobileControlUrl(mcPath, webViewConfig) : (mcPath, mcPath);
 
-            UriBuilder uriBuilder = new UriBuilder(appUrl);
-
-            //check for qparams
-            var qparams = webViewConfig.QueryParams;
-            if (qparams != null)
-            {
-                var parameters = HttpUtility.ParseQueryString(uriBuilder.Query);
-                foreach (var item in qparams)
-                {
-                    parameters.Add(item.Key, item.Value);
-                }
-                uriBuilder.Query = parameters.ToString();
-            }
-
-            // Append suffix (i.e: "/lockout") to the path
-            uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + mcPath;
-
-            // Get the final URL
-            var url = uriBuilder.ToString();
-
-            var printableUrl = uriBuilder.ToString().MaskQParamTokenInUrl();
 
             Debug.LogMessage(
                 LogEventLevel.Debug,
@@ -465,6 +474,74 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                         webViewConfig.Mode != null
                             ? webViewConfig.Mode
                             : _defaultUiWebViewDisplayConfig.Mode
+                }
+            );
+        }
+
+        private (string, string) GetMobileControlUrl(string mcPath, UiWebViewDisplayConfig webViewConfig)
+        {
+            var appUrl = _mcTpController.AppUrlFeedback.StringValue;
+            if (appUrl == null)
+            {
+                Debug.LogMessage(
+                    LogEventLevel.Debug,
+                    "AppUrl is null, cannot send to WebView",
+                    this
+                );
+                return (string.Empty, string.Empty);
+            }
+            //var printableAppUrl = _mcTpController?.AppUrlFeedback?.StringValue?.MaskQParamTokenInUrl();
+            //Debug.LogMessage(
+            //    LogEventLevel.Debug,
+            //    $"SendCiscoCodecUiToWebViewMcUrl: {printableAppUrl}",
+            //    this
+            //);
+
+            var uriBuilder = new UriBuilder(appUrl);
+
+            //check for qparams
+            var qparams = webViewConfig.QueryParams;
+            if (qparams != null)
+            {
+                var parameters = HttpUtility.ParseQueryString(uriBuilder.Query);
+                foreach (var item in qparams)
+                {
+                    parameters.Add(item.Key, item.Value);
+                }
+                uriBuilder.Query = parameters.ToString();
+            }
+
+            // Append suffix (i.e: "/lockout") to the path
+            uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + mcPath;
+
+            // Get the final URL
+            return (uriBuilder.ToString(), uriBuilder.ToString().MaskQParamTokenInUrl());
+        }
+
+        /// <summary>
+        /// Send the cisco ui to a webview with url
+        /// </summary>
+        /// <param name="mcPath"></param>
+        /// <param name="webViewConfig"></param>
+        public void SendCiscoCodecUiToWebViewUrl(string url, UiWebViewDisplayConfig webViewConfig)
+        {
+            var uriBuilder = new UriBuilder(url);
+            var urlToUse = uriBuilder.ToString();
+
+            Debug.LogMessage(
+                LogEventLevel.Debug,
+                "[MobileControlClickedEvent] Sending URL: {0}",
+                this,
+                urlToUse
+            );
+
+            _extensionsHandler.UiWebViewDisplayAction?.Invoke(
+                new UiWebViewDisplayActionArgs()
+                {
+                    Title = webViewConfig.Title ?? _defaultUiWebViewDisplayConfig.Title,
+                    Url = urlToUse,
+                    Target = webViewConfig.Target ?? _defaultUiWebViewDisplayConfig.Target,
+                    Mode = webViewConfig.Mode ?? _defaultUiWebViewDisplayConfig.Mode
                 }
             );
         }

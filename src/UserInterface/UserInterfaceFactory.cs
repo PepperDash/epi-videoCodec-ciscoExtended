@@ -16,7 +16,7 @@ namespace epi_videoCodec_ciscoExtended
         {
             MinimumEssentialsFrameworkVersion = "2.0.0";
 
-            TypeNames = new List<string>() { "ciscoRoomOsMobileControl", "ciscoRoomOs" };
+            TypeNames = new List<string>() { "ciscoRoomOsMobileControl"};
         }
 
         public override EssentialsDevice BuildDevice(DeviceConfig dc)

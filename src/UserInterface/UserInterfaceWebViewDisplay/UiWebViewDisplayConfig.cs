@@ -30,5 +30,21 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
 
         [JsonProperty("queryParams", NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, string> QueryParams { get; set; }
-    }
+
+        // Static collection to hold all instances of UiWebViewDisplayConfig
+        private static List<UiWebViewDisplayConfig> _webViewConfigs = new List<UiWebViewDisplayConfig>();
+
+        // Constructor to add instances to the collection
+        public UiWebViewDisplayConfig()
+            {
+            _webViewConfigs.Add(this);
+            }
+
+        // Public method to get all instances
+        public static List<UiWebViewDisplayConfig> GetWebViewConfigs()
+            {
+            return _webViewConfigs;
+            }
+        }
+
 }

@@ -39,9 +39,10 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <PackageReference Include="PepperDashEssentials" Version="2.1.0" >
-		  <ExcludeAssets>runtime</ExcludeAssets>
-	  </PackageReference>    <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
+    <PackageReference Include="PepperDashEssentials" Version="2.3.0">
+	    <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
   </ItemGroup>
 
 </Project>

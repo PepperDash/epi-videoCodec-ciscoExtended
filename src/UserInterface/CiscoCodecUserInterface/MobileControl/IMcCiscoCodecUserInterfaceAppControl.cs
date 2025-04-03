@@ -1,5 +1,7 @@
-﻿using PepperDash.Core;
+﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Core;
 using PepperDash.Essentials.Core;
+using System.Collections.Generic;
 
 namespace PepperDash.Essentials.Touchpanel
 {
@@ -9,5 +11,9 @@ namespace PepperDash.Essentials.Touchpanel
 
         void CloseWebViewController();
         void CloseWebViewOsd();
-	}
+        void ShowWebViewOsd(string url);
+        void ShowWebViewOsd(string url, UiWebViewDisplayConfig webviewConfig);
+        void ShowWebViewOsd();
+
+        }
 }

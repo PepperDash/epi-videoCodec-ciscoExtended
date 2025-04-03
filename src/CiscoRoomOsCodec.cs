@@ -25,6 +25,7 @@ using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 
 
 namespace epi_videoCodec_ciscoExtended
@@ -102,13 +103,16 @@ namespace epi_videoCodec_ciscoExtended
 			ICiscoCodecUiExtensionsController,
 			ICiscoCodecCameraConfig,
 			ISpeakerTrack,
-			IPresenterTrack
+			IPresenterTrack,
+			IEmergencyOSD,
+			IHasWebView
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
 		private event EventHandler<MinuteChangedEventArgs> MinuteChanged;
 		public event EventHandler<CodecInfoChangedEventArgs> CodecInfoChanged;
 		public event EventHandler<CameraTrackingCapabilitiesArgs> CameraTrackingCapabilitiesChanged;
+		public event EventHandler<WebViewStatusChangedEventArgs> WebViewStatusChanged;
 
 		public eCameraTrackingCapabilities CameraTrackingCapabilities { get; private set; }
 
@@ -276,6 +280,7 @@ namespace epi_videoCodec_ciscoExtended
 		public bool SpeakerTrackStatus { get; private set; }
 		public bool PresenterTrackAvailability { get; private set; }
 		public bool PresenterTrackStatus { get; private set; }
+		public bool WebviewIsVisible { get; private set; }
 		public string PresenterTrackStatusName { get; private set; }
 
 		private string _currentLayoutBacker;
@@ -407,13 +412,7 @@ namespace epi_videoCodec_ciscoExtended
 		{
 			get
 			{
-				return () =>
-					CodecStatus
-						.Status
-						.StatusConference
-						.Presentation
-						.ModeValueProperty
-						.SendingBoolValue;
+				return () => PresentationActiveFeedback.BoolValue;
 			}
 		}
 
@@ -700,8 +699,9 @@ namespace epi_videoCodec_ciscoExtended
 
 		public RoutingOutputPort HdmiOut1 { get; private set; }
 		public RoutingOutputPort HdmiOut2 { get; private set; }
+        public RoutingOutputPort HdmiOut3 { get; private set; }
 
-		public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
+        public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
 
 		private readonly IBasicCommunication _comms;
 
@@ -893,6 +893,8 @@ namespace epi_videoCodec_ciscoExtended
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
 
+			PresentationActiveFeedback.OutputChange += (o, a) => SharingContentIsOnFeedback.FireUpdate();
+
 			Communication = comm;
 
 			if (props.CommunicationMonitorProperties != null)
@@ -1029,9 +1031,16 @@ namespace epi_videoCodec_ciscoExtended
 				null,
 				this
 			);
+            HdmiOut3 = new RoutingOutputPort(
+				RoutingPortNames.HdmiOut3,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				null,
+				this
+			);
 
-			//InputPorts.Add(CodecOsdIn);
-			InputPorts.Add(HdmiIn1);
+            //InputPorts.Add(CodecOsdIn);
+            InputPorts.Add(HdmiIn1);
 			InputPorts.Add(HdmiIn2);
 			InputPorts.Add(HdmiIn3);
 			InputPorts.Add(HdmiIn4);
@@ -1039,6 +1048,7 @@ namespace epi_videoCodec_ciscoExtended
 			InputPorts.Add(SdiInput);
 			OutputPorts.Add(HdmiOut1);
 			OutputPorts.Add(HdmiOut2);
+			OutputPorts.Add(HdmiOut3);
 			//CreateOsdSource();
 
 			ExternalSourceListEnabled = props.ExternalSourceListEnabled;
@@ -1895,6 +1905,12 @@ namespace epi_videoCodec_ciscoExtended
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
+				+ "Status/UserInterface/WebView/Status"
+				+ Delimiter
+				+ prefix
+				+ "Status/Network/Ethernet/MacAddress"
+				+ Delimiter
+				+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
@@ -2731,7 +2747,10 @@ namespace epi_videoCodec_ciscoExtended
 			);
 
 			if (DeviceInfo == null)
+			{
+				Debug.Console(0, this, "ParseNetworkList: DeviceInfo == null");
 				return;
+			}
 			DeviceInfo.HostName = hostname;
 			DeviceInfo.IpAddress = ipAddress;
 			DeviceInfo.MacAddress = macAddress;
@@ -2794,6 +2813,43 @@ namespace epi_videoCodec_ciscoExtended
 			SpeakerTrackAvailableFeedback.FireUpdate();
 		}
 
+		private void ParseWebviewStatusToken(JToken webviewStatusToken)
+		{
+			try
+			{
+				if (String.IsNullOrEmpty(webviewStatusToken.ToString()))
+					return;
+				var webviewStatusObject = webviewStatusToken as JObject;
+				if (webviewStatusObject == null)
+					return;
+				var statusToken = webviewStatusObject.SelectToken("Status.Value");
+				if (statusToken != null)
+				{
+					var status = statusToken.ToString().ToLower();
+					if (!String.IsNullOrEmpty(status))
+					{
+						var handler = WebViewStatusChanged;
+						if (handler != null)
+						{
+							handler(this, new WebViewStatusChangedEventArgs(status));
+						}
+						if (status == "visible")
+						{
+							WebviewIsVisible = true;
+						}
+						else if (status == "notvisible")
+						{
+							WebviewIsVisible = false;
+						}
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				Debug.Console(0, this, "Exception in ParseWebviewStatusToken : ");
+				Debug.Console(0, this, "{0}", e.Message);
+			}
+		}
 		private void ParseSpeakerTrackToken(JToken speakerTrackToken)
 		{
 			try
@@ -2880,11 +2936,11 @@ namespace epi_videoCodec_ciscoExtended
 					if (n.SelectToken("id").ToString() != "1")
 						continue;
 					var hostname =
-						n.SelectToken("Cdp.DeviceId.Value").ToString().NullIfEmpty() ?? "Unknown";
+						n.SelectToken("Cdp.DeviceId.Value")?.ToString().NullIfEmpty() ?? "Unknown";
 					var ipAddress =
-						n.SelectToken("IPv4.Address.Value").ToString().NullIfEmpty() ?? "Unknown";
+						n.SelectToken("IPv4.Address.Value")?.ToString().NullIfEmpty() ?? "Unknown";
 					var macAddress =
-						n.SelectToken("Ethernet.MacAddress.Value").ToString().NullIfEmpty()
+						n.SelectToken("Ethernet.MacAddress.Value")?.ToString().NullIfEmpty()
 						?? "Unknown";
 					OnCodecInfoChanged(
 						new CodecInfoChangedEventArgs(eCodecInfoChangeType.Network)
@@ -3980,6 +4036,7 @@ namespace epi_videoCodec_ciscoExtended
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
 			var conferenceToken = statusToken.SelectToken("Conference");
+			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 
@@ -4153,6 +4210,10 @@ namespace epi_videoCodec_ciscoExtended
 			if (status.RoomPresets != null)
 			{
 				ParseRoomPresetList(status.RoomPresets);
+			}
+			if (webViewStatusToken != null)
+			{
+				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
 
 			// we don't want to do this... this will expand lists infinitely
@@ -7550,6 +7611,31 @@ namespace epi_videoCodec_ciscoExtended
 		}
 
 		#endregion
+
+		public void ShowWebView(string url, string mode, string title, string target)
+        {
+			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= url, Mode=mode, Title=title, Target=target };
+			EnqueueCommand(uwvd.xCommand());
+		}
+
+		public void HideWebView()
+        {
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		}
+		public void ShowEmergencyMessage(string url)
+        {
+			string mode = _config.Emergency.UiWebViewDisplay.Mode;
+			string title = _config.Emergency.UiWebViewDisplay.Title;
+			string target = _config.Emergency.UiWebViewDisplay.Target;
+			string urlPath = url + _config.Emergency.MobileControlPath;
+			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
+			EnqueueCommand(uwvd.xCommand());
+		}
+
+		public void HideEmergencyMessage()
+        {
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		}
 	}
 
 	#region

@@ -35,6 +35,13 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
                     "No Cisco Panels Configured {0}", _parent, config);
                 return;
             }
+            else if (config.Any((p) => p.Order == 0))
+            {
+                Debug.LogMessage(Serilog.Events.LogEventLevel.Error,
+                "0 is an invalid order value. Must be >= 1 {0}.  PanelHandler will not be registered.  Please update order values in config.", _parent, config);
+                return;
+            }
+
             RegisterFeedback();
         }
 

@@ -1,4 +1,5 @@
-﻿using PepperDash.Core;
+﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
@@ -94,6 +95,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 _bridge = bridge;
                 Debug.LogMessage(LogEventLevel.Debug, "Setting AppUrl", this);
 
+                SetAppUrl(_bridge.AppUrl);
                 Debug.LogMessage(LogEventLevel.Debug, "Mobile Control Room Bridge Found {bridgeKey}", this, _bridge?.Key);
 
                 Debug.LogMessage(LogEventLevel.Debug, "Subscribing to Mobile Control Events: UserCodeChanged", this);
@@ -152,5 +154,30 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
         {
             _router.ClearCiscoCodecUiWebViewOsd();
         }
-    }
+
+        void IMcCiscoCodecUserInterfaceAppControl.CloseWebViewController()
+            {
+            _router.ClearCiscoCodecUiWebViewController();
+            }
+
+        void IMcCiscoCodecUserInterfaceAppControl.CloseWebViewOsd()
+            {
+            _router.ClearCiscoCodecUiWebViewOsd();
+            }
+
+        void IMcCiscoCodecUserInterfaceAppControl.ShowWebViewOsd()
+            {
+            throw new NotImplementedException();
+            }
+
+        void IMcCiscoCodecUserInterfaceAppControl.ShowWebViewOsd(string url)
+            {
+            throw new NotImplementedException();
+            }
+
+        void IMcCiscoCodecUserInterfaceAppControl.ShowWebViewOsd(string url, UiWebViewDisplayConfig webviewConfig)
+            {
+            _router.SendCiscoCodecUiToWebViewUrl(url, webviewConfig);
+            }
+        }
 }

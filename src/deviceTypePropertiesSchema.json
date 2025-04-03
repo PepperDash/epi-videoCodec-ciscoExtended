@@ -1,0 +1,517 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "types": {
+    "ciscoRoomOs": {
+      "type": "object",
+      "properties": {
+        "properties": {
+          "type": "object",
+          "$ref": "#/components/schemas/codecPropertiesConfig"
+        }
+      }
+    },
+    "ciscoRoomBar": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoRoomBarPro": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoCodecEq": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+      "ciscoCodecPro": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "object",
+            "$ref": "#/components/schemas/codecPropertiesConfig"
+          }
+        }
+      },
+    "ciscoRoomOsMobileControl": {
+      "type": "object",
+      "properties": {
+        "properties": {
+          "type": "object",
+          "$ref": "#/components/schemas/navigatorPropertiesConfig"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "codecPropertiesConfig": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "control": {
+            "type": "object",
+            "$ref": "https://raw.githubusercontent.com/PepperDash/schemaTest/refs/heads/development/basePropertiesSchemaConfigs/ControlPropertiesSchemaConfig.json?token=GHSAT0AAAAAACOYKWO6EFOXTMPHKF4AEKI4ZX4H7XQ"
+          },
+          "occupancy": {
+            "$id": "#root/properties/occupancy",
+            "title": "Occupancy",
+            "type": "object",
+            "required": ["available"],
+            "properties": {
+              "available": {
+                "$id": "#root/properties/occupancy/available",
+                "title": "Available",
+                "type": "boolean",
+                "examples": [true],
+                "default": true
+              }
+            },
+            "x-apidog-orders": ["available"]
+          },
+          "communicationMonitorProperties": {
+            "$id": "#root/properties/communicationMonitorProperties",
+            "title": "Communicationmonitorproperties",
+            "type": "object",
+            "required": [
+              "pollString",
+              "pollInterval",
+              "timeToWarning",
+              "timeToError"
+            ],
+            "properties": {
+              "pollString": {
+                "$id": "#root/properties/communicationMonitorProperties/pollString",
+                "title": "Poll String",
+                "type": "string",
+                "default": "",
+                "examples": ["xStatus SystemUnit Software Version\r"],
+                "pattern": "^.*$"
+              },
+              "pollInterval": {
+                "$id": "#root/properties/communicationMonitorProperties/pollInterval",
+                "title": "Poll Interval",
+                "type": "integer",
+                "examples": [30000],
+                "default": 0
+              },
+              "timeToWarning": {
+                "$id": "#root/properties/communicationMonitorProperties/timeToWarning",
+                "title": "Time to Warning",
+                "type": "integer",
+                "examples": [120000],
+                "default": 0
+              },
+              "timeToError": {
+                "$id": "#root/properties/communicationMonitorProperties/timeToError",
+                "title": "Time to Error",
+                "type": "integer",
+                "examples": [300000],
+                "default": 0
+              }
+            },
+            "x-apidog-orders": [
+              "pollString",
+              "pollInterval",
+              "timeToWarning",
+              "timeToError"
+            ]
+          },
+          "sharing": {
+            "$id": "#root/properties/sharing",
+            "title": "Sharing",
+            "type": "object",
+            "required": ["autoShareContentWhileInCall"],
+            "properties": {
+              "autoShareContentWhileInCall": {
+                "$id": "#root/properties/sharing/autoShareContentWhileInCall",
+                "title": "Auto Share Content While in Call",
+                "type": "boolean",
+                "examples": [false],
+                "default": true
+              }
+            },
+            "x-apidog-orders": ["autoShareContentWhileInCall"]
+          },
+          "phonebookMode": {
+            "type": "string",
+            "title": "Phonebook Mode",
+            "$id": "#root/properties/phonebookMode",
+            "default": "",
+            "examples": ["Corporate"],
+            "pattern": "^.*$",
+            "enum": ["Local", "Corporate"],
+            "x-apidog-enum": [
+              {
+                "value": "Local",
+                "name": "",
+                "description": ""
+              },
+              {
+                "value": "Corporate",
+                "name": "",
+                "description": ""
+              }
+            ]
+          },
+          "phonebookResultsLimit": {
+            "$id": "#root/properties/phonebookResultsLimit",
+            "title": "Phonebook Results Limit",
+            "type": "integer",
+            "examples": [1000],
+            "default": 0
+          },
+          "externalSourceListEnabled": {
+            "$id": "#root/properties/externalSourceListEnabled",
+            "title": "External Source List Enabled",
+            "type": "boolean",
+            "examples": [true],
+            "default": true
+          },
+          "externalSourceInputPort": {
+            "$id": "#root/properties/externalSourceInputPort",
+            "title": "External Source Input Port",
+            "type": "string",
+            "default": "",
+            "examples": ["HdmiIn2"],
+            "pattern": "^.*$",
+            "x-apidog-mock": "HdmiIn2"
+          },
+          "uiBranding": {
+            "$id": "#root/properties/uiBranding",
+            "title": "UI Branding",
+            "type": "object",
+            "required": ["enable", "brandingUrl"],
+            "properties": {
+              "enable": {
+                "$id": "#root/properties/uiBranding/enable",
+                "title": "Enable",
+                "type": "boolean",
+                "examples": [true],
+                "default": true
+              },
+              "brandingUrl": {
+                "$id": "#root/properties/uiBranding/brandingUrl",
+                "title": "Branding URL",
+                "type": "string",
+                "default": "",
+                "examples": [""],
+                "pattern": "^.*$"
+              }
+            },
+            "x-apidog-orders": ["enable", "brandingUrl"]
+          }
+        },
+        "required": [
+          "control",
+          "occupancy",
+          "sharing",
+          "phonebookMode",
+          "phonebookResultsLimit",
+          "externalSourceListEnabled",
+          "externalSourceInputPort",
+          "uiBranding"
+        ],
+        "x-apidog-orders": [
+          "control",
+          "occupancy",
+          "communicationMonitorProperties",
+          "sharing",
+          "phonebookMode",
+          "phonebookResultsLimit",
+          "externalSourceListEnabled",
+          "externalSourceInputPort",
+          "uiBranding"
+        ]
+      },
+      "codecPropertiesConfigAlt": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "control": {
+            "type": "object",
+            "$ref": "https://raw.githubusercontent.com/PepperDash/schemaTest/refs/heads/development/basePropertiesSchemaConfigs/ControlPropertiesSchemaConfig.json?token=GHSAT0AAAAAACOYKWO6EFOXTMPHKF4AEKI4ZX4H7XQ"
+          },
+          "occupancy": {
+            "$id": "#root/properties/occupancy",
+            "title": "Occupancy",
+            "type": "object",
+            "required": ["available"],
+            "properties": {
+              "available": {
+                "$id": "#root/properties/occupancy/available",
+                "title": "Available",
+                "type": "boolean",
+                "examples": [true],
+                "default": true
+              }
+            }
+          },
+          "communicationMonitorProperties": {
+            "$id": "#root/properties/communicationMonitorProperties",
+            "title": "Communicationmonitorproperties",
+            "type": "object",
+            "required": [
+              "pollString",
+              "pollInterval",
+              "timeToWarning",
+              "timeToError"
+            ],
+            "properties": {
+              "pollString": {
+                "$id": "#root/properties/communicationMonitorProperties/pollString",
+                "title": "Poll String",
+                "type": "string",
+                "default": "",
+                "examples": ["xStatus SystemUnit Software Version\r"],
+                "pattern": "^.*$"
+              },
+              "pollInterval": {
+                "$id": "#root/properties/communicationMonitorProperties/pollInterval",
+                "title": "Poll Interval",
+                "type": "integer",
+                "examples": [30000],
+                "default": 0
+              },
+              "timeToWarning": {
+                "$id": "#root/properties/communicationMonitorProperties/timeToWarning",
+                "title": "Time to Warning",
+                "type": "integer",
+                "examples": [120000],
+                "default": 0
+              },
+              "timeToError": {
+                "$id": "#root/properties/communicationMonitorProperties/timeToError",
+                "title": "Time to Error",
+                "type": "integer",
+                "examples": [300000],
+                "default": 0
+              }
+            }
+          },
+          "sharing": {
+            "$id": "#root/properties/sharing",
+            "title": "Sharing",
+            "type": "object",
+            "required": ["autoShareContentWhileInCall"],
+            "properties": {
+              "autoShareContentWhileInCall": {
+                "$id": "#root/properties/sharing/autoShareContentWhileInCall",
+                "title": "Auto Share Content While in Call",
+                "type": "boolean",
+                "examples": [false],
+                "default": true
+              }
+            }
+          },
+          "phonebookMode": {
+            "$id": "#root/properties/phonebookMode",
+            "title": "Phonebook Mode",
+            "type": "string",
+            "default": "",
+            "examples": ["Corporate"],
+            "pattern": "^.*$"
+          },
+          "phonebookResultsLimit": {
+            "$id": "#root/properties/phonebookResultsLimit",
+            "title": "Phonebook Results Limit",
+            "type": "integer",
+            "examples": [1000],
+            "default": 0
+          },
+          "externalSourceListEnabled": {
+            "$id": "#root/properties/externalSourceListEnabled",
+            "title": "External Source List Enabled",
+            "type": "boolean",
+            "examples": [true],
+            "default": true
+          },
+          "externalSourceInputPort": {
+            "$id": "#root/properties/externalSourceInputPort",
+            "title": "External Source Input Port",
+            "type": "string",
+            "default": "",
+            "examples": ["HdmiIn2"],
+            "pattern": "^.*$"
+          },
+          "uiBranding": {
+            "$id": "#root/properties/uiBranding",
+            "title": "UI Branding",
+            "type": "object",
+            "required": ["enable", "brandingUrl"],
+            "properties": {
+              "enable": {
+                "$id": "#root/properties/uiBranding/enable",
+                "title": "Enable",
+                "type": "boolean",
+                "examples": [true],
+                "default": true
+              },
+              "brandingUrl": {
+                "$id": "#root/properties/uiBranding/brandingUrl",
+                "title": "Branding URL",
+                "type": "string",
+                "default": "",
+                "examples": [""],
+                "pattern": "^.*$"
+              }
+            }
+          }
+        },
+        "required": [
+          "control",
+          "occupancy",
+          "communicationMonitorProperties",
+          "sharing",
+          "phonebookMode",
+          "phonebookResultsLimit",
+          "externalSourceListEnabled",
+          "externalSourceInputPort",
+          "uiBranding"
+        ]
+      },
+      "navigatorPropertiesConfig": {
+        "type": "object",
+        "properties": {
+          "defaultRoomKey": {
+            "type": "string"
+          },
+          "useDirectServer": {
+            "type": "boolean"
+          },
+          "videoCodecKey": {
+            "type": "string"
+          },
+          "enableLockoutPoll": {
+            "type": "boolean"
+          },
+          "lockout": {
+            "type": "object",
+            "properties": {
+              "mobileControlPath": {
+                "type": "string"
+              },
+              "uiWebViewDisplay": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "required": ["title", "mode", "target"],
+                "x-apidog-orders": ["title", "mode", "target"]
+              }
+            },
+            "required": ["mobileControlPath", "uiWebViewDisplay"],
+            "x-apidog-orders": ["mobileControlPath", "uiWebViewDisplay"]
+          },
+          "extensions": {
+            "type": "object",
+            "properties": {
+              "configId": {
+                "type": "integer"
+              },
+              "panels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "integer"
+                    },
+                    "panelId": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "mobileControlPath": {
+                      "type": "string"
+                    },
+                    "uiWebViewDisplay": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string"
+                        },
+                        "target": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["title", "mode", "target"],
+                      "x-apidog-orders": ["title", "mode", "target"]
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "panelId",
+                    "location",
+                    "icon",
+                    "name",
+                    "mobileControlPath",
+                    "uiWebViewDisplay"
+                  ],
+                  "x-apidog-orders": [
+                    "order",
+                    "panelId",
+                    "location",
+                    "icon",
+                    "name",
+                    "mobileControlPath",
+                    "uiWebViewDisplay"
+                  ]
+                }
+              }
+            },
+            "required": ["configId", "panels"],
+            "x-apidog-orders": ["configId", "panels"]
+          }
+        },
+        "required": [
+          "defaultRoomKey",
+          "useDirectServer",
+          "videoCodecKey",
+          "enableLockoutPoll",
+          "lockout",
+          "extensions"
+        ],
+        "x-apidog-orders": [
+          "defaultRoomKey",
+          "useDirectServer",
+          "videoCodecKey",
+          "enableLockoutPoll",
+          "lockout",
+          "extensions"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,197 @@
+[
+  {
+    "typeNames": ["ciscoRoomBar"],
+    "routingPorts": {
+      "inputs": [
+        {
+          "name": "hdmiIn1",
+          "label": "HDMI In 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "usbC",
+          "label": "USB-C",
+          "signalType": "AudioVideo",
+          "portConnectionType": "UsbC"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hdmiOut1",
+          "label": "HDMI Out 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut2",
+          "label": "HDMI Out 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        }
+      ]
+    },
+    "controlMethods": ["com", "ssh"],
+    "controlPorts": [
+    ]
+  },
+  {
+    "typeNames": ["ciscoRoomBarPro"],
+    "routingPorts": {
+      "inputs": [
+        {
+          "name": "hdmiIn1",
+          "label": "HDMI In 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "usbC",
+          "label": "USB-C",
+          "signalType": "AudioVideo",
+          "portConnectionType": "UsbC"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hdmiOut1",
+          "label": "HDMI Out 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut2",
+          "label": "HDMI Out 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut3",
+          "label": "HDMI Out 3",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        }
+      ]
+    },
+    "controlMethods": ["com", "ssh"],
+    "controlPorts": {}
+  },
+  {
+    "typeNames": ["ciscoCodecEq"],
+    "routingPorts": {
+      "inputs": [
+        {
+          "name": "hdmiIn1",
+          "label": "HDMI In 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn2",
+          "label": "HDMI In 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn3",
+          "label": "HDMI In 3",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "usbC",
+          "label": "USB-C",
+          "signalType": "AudioVideo",
+          "portConnectionType": "UsbC"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hdmiOut1",
+          "label": "HDMI Out 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut2",
+          "label": "HDMI Out 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut3",
+          "label": "HDMI Out 3",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        }
+      ]
+    },
+    "controlMethods": ["com", "ssh"],
+    "controlPorts": {}
+  },
+  {
+    "typeNames": ["ciscoCodecPro"],
+    "routingPorts": {
+      "inputs": [
+        {
+          "name": "hdmiIn1",
+          "label": "HDMI In 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn2",
+          "label": "HDMI In 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn3",
+          "label": "HDMI In 3",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn4",
+          "label": "HDMI In 4",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiIn5",
+          "label": "HDMI In 5",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "sdiIn",
+          "label": "SDI In",
+          "signalType": "Video",
+          "portConnectionType": "Sdi"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hdmiOut1",
+          "label": "HDMI Out 1",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut2",
+          "label": "HDMI Out 2",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        },
+        {
+          "name": "hdmiOut3",
+          "label": "HDMI Out 3",
+          "signalType": "AudioVideo",
+          "portConnectionType": "Hdmi"
+        }
+      ]
+    },
+    "controlMethods": ["com", "ssh"],
+    "controlPorts": {}
+  }
+]
