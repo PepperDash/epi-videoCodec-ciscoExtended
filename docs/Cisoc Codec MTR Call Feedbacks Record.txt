@@ -1,0 +1,257 @@
+Using username "pdtadmin".
+Keyboard-interactive authentication prompts from server:
+End of keyboard-interactive prompts from server
+
+Welcome to NYC Cisco
+Cisco Codec Release RoomOS 11.23.1.8 3963b07b5c5
+SW Release Date: 2024-12-12
+*r Login successful
+OK
+
+Last login from <unknown> at 2025-03-12 11:27:11
+
+xFeedback Register Event
+** end
+
+OK
+xFeedback Register Status
+** end
+
+
+
+//====================  OUT OF CALL SHARE ENDED  ====================//
+*e PresentationPreviewStopped Cause: userRequested
+*e PresentationPreviewStopped Instance: 2
+*e PresentationPreviewStopped LocalSource: 3
+** end
+//===================================================================//
+
+
+
+*s UserInterface LedControl Color: Green
+** end
+*s RoomAnalytics RoomInUse: False
+** end
+*s RoomAnalytics UltrasoundPresence: Yes
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AmbientTemperature: "21.3"
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AirQuality Index: "2.3"
+** end
+*s RoomAnalytics Sound Level A: 39
+** end
+*s RoomAnalytics Sound Level A: 40
+** end
+
+
+
+//====================  OUT OF CALL SHARE STARTED  ====================//
+*s Conference Presentation LocalInstance 2 SendingMode: LocalOnly
+*s Conference Presentation LocalInstance 2 Source: 3
+** end
+*e PresentationPreviewStarted Cause: userRequested
+*e PresentationPreviewStarted Instance: 2
+*e PresentationPreviewStarted LocalSource: 3
+** end
+*s UserInterface LedControl Color: Red
+** end
+*s RoomAnalytics RoomInUse: True
+** end
+*e PresentationPreviewStarted Cause: userRequested
+*e PresentationPreviewStarted Instance: 2
+*e PresentationPreviewStarted LocalSource: 3
+** end
+*s RoomAnalytics Sound Level A: 41
+** end
+//===================================================================//
+
+
+
+*s RoomAnalytics Sound Level A: 39
+** end
+*s RoomAnalytics Sound Level A: 40
+** end
+//====================  OUT OF CALL SHARE ENDED  ====================//
+*e PresentationPreviewStopped Cause: userRequested
+*e PresentationPreviewStopped Instance: 2
+*e PresentationPreviewStopped LocalSource: 3
+** end
+*s UserInterface LedControl Color: Green
+** end
+*s RoomAnalytics RoomInUse: False
+** end
+//===================================================================//
+
+
+*s RoomAnalytics AmbientNoise Level A: 38
+** end
+
+
+//====================  MTR CALL STARTED  ====================
+*s MicrosoftTeams Calling InCall: True
+** end
+*s RemoteAccess Availability Reason: InCallMtr
+*s RemoteAccess Availability State: Unavailable
+** end
+*s SystemUnit State NumberOfActiveCalls: 1
+*s SystemUnit State System: InCall
+** end
+*s UserInterface LedControl Color: Red
+** end
+*s RoomAnalytics RoomInUse: True
+** end
+*s Cameras SpeakerTrack State: BestOverview
+** end
+*s Cameras Camera 1 LightingConditions: Good
+** end
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+*s Cameras Camera 1 Position Zoom: 11800
+** end
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+*s Cameras SpeakerTrack State: Off
+** end
+*s Cameras SpeakerTrack State: BestOverview
+** end
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+===================================================================//
+
+
+
+//====================  IN MTR CALL SHARE STARTED  ====================
+NOTE: NO Events for InCall sharing
+*s RoomAnalytics Sound Level A: 39
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AmbientTemperature: "21.4"
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AirQuality Index: "2.4"
+** end
+*s RoomAnalytics Sound Level A: 41
+** end
+===================================================================//
+
+
+
+//====================  IN MTR CALL SHARE ENDED  ====================
+NOTE: NO Events for InCall sharing
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AmbientTemperature: "21.5"
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AirQuality Index: "2.5"
+** end
+*s RoomAnalytics Sound Level A: 41
+** end
+===================================================================//
+
+
+//====================  IN MTR CALL CAMERA VIDEO STOPPED  ====================
+*s RoomAnalytics Sound Level A: 40
+** end
+*s Cameras SpeakerTrack State: Off
+** end
+*s RoomAnalytics PeopleCount Current: -1
+** end
+*s RoomAnalytics Sound Level A: 42
+** end
+*s Cameras Camera 1 LightingConditions: Unknown
+** end
+===================================================================//
+
+
+//====================  IN MTR CALL CAMERA VIDEO STARTED  ====================
+*s RoomAnalytics Sound Level A: 40
+** end
+*s Cameras SpeakerTrack State: BestOverview
+** end
+*s Cameras Camera 1 LightingConditions: Good
+** end
+*s RoomAnalytics Sound Level A: 42
+** end
+*s RoomAnalytics PeopleCount Current: 0
+** end
+===================================================================//
+
+
+
+*s RoomAnalytics Sound Level A: 40
+** end
+*s RoomAnalytics Sound Level A: 39
+** end
+*s RoomAnalytics AmbientNoise Level A: 40
+*s RoomAnalytics Sound Level A: 43
+** end
+
+
+//====================  IN MTR CALL MIC MUTE ACTIVATED  ====================
+*e Audio MicrophonesMuteStatus Mute: "On"
+** end
+*s Audio Microphones Mute: On
+** end
+*s Audio Input Connectors Ethernet 1 Mute: On
+** end
+*s RoomAnalytics AmbientNoise Level A: 39
+*s RoomAnalytics Sound Level A: 41
+** end
+===================================================================//
+
+
+
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AmbientTemperature: "21.7"
+** end
+*s Peripherals ConnectedDevice 1001 RoomAnalytics AirQuality Index: "2.6"
+** end
+*s RoomAnalytics Sound Level A: 39
+** end
+*s RoomAnalytics UltrasoundPresence: No
+** end
+
+//====================  IN MTR CALL MIC MUTE DEACTIVATED  ====================
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+*s Audio Microphones Mute: Off
+** end
+*s Audio Input Connectors Ethernet 1 Mute: Off
+** end
+*s RoomAnalytics Sound Level A: 42
+** end
+*s RoomAnalytics Sound Level A: 40
+** end
+===================================================================//
+
+
+
+//====================  MTR CALL ENDING  ====================
+*s RemoteAccess Availability Reason: InCall
+** end
+
+//====================  MTR CALL ENDED  ====================
+*s MicrosoftTeams Calling InCall: False
+** end
+*s SystemUnit State NumberOfActiveCalls: 0
+*s SystemUnit State System: Initialized
+** end
+*s RemoteAccess Availability Reason: Available
+*s RemoteAccess Availability State: Available
+** end
+*s UserInterface LedControl Color: Green
+** end
+*s RoomAnalytics RoomInUse: False
+** end
+*e Audio MicrophonesMuteStatus Mute: "Off"
+** end
+*s Cameras SpeakerTrack State: Off
+** end
+*s RoomAnalytics PeopleCount Current: -1
+** end
+*s Cameras Camera 1 LightingConditions: Unknown
+** end
+*s RoomAnalytics Sound Level A: 41
+** end
+===================================================================//
+
+
+]*s RoomAnalytics Sound Level A: 39
+** end
