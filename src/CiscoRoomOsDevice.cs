@@ -34,12 +34,12 @@ namespace epi_videoCodec_ciscoExtended.V2
 
         internal readonly uint phoneBookLimit;
 
-        private readonly IBasicCommunication communications;
+        private readonly IBasicCommunication _communications;
         private readonly IList<CiscoRoomOsFeature> features = new List<CiscoRoomOsFeature>();
         private readonly CTimer requestTimeout;
 
-        private readonly string username;
-        private readonly string password;
+        private readonly string _username;
+        private readonly string _password;
 
         private bool isLoggedIn;
         private StringBuilder buffer = new StringBuilder();
@@ -47,13 +47,13 @@ namespace epi_videoCodec_ciscoExtended.V2
         public CiscoRoomOsDevice(string key, string name, CiscoCodecConfig props, IBasicCommunication communications)
             : base(key, name)
         {
-            username = props.Username ?? string.Empty;
-            password = props.Password ?? string.Empty;
+            _username = props.Username ?? string.Empty;
+            _password = props.Password ?? string.Empty;
             phoneBookLimit = props.PhonebookResultsLimit;
            
-            this.communications = communications;
+            _communications = communications;
 
-            var gather = new CommunicationGather(communications, Delimiter);
+            var gather = new CommunicationGather(_communications, Delimiter);
 
             gather.LineReceived += GatherOnLineReceived;
 
@@ -61,7 +61,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             {
                 CommunicationMonitor = new GenericCommunicationMonitor(
                     this,
-                    communications,
+                    _communications,
                     props.CommunicationMonitorProperties);
             }
             else
@@ -70,7 +70,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 
                 CommunicationMonitor = new GenericCommunicationMonitor(
                     this,
-                    communications,
+                    _communications,
                     10000,
                     600000,
                     1200000,
@@ -143,7 +143,7 @@ namespace epi_videoCodec_ciscoExtended.V2
             if (
                 (data.StartsWith("*s SystemUnit") || data.StartsWith("*r Login successful"))
                 && !isLoggedIn
-                && (communications as ISocketStatus) == null) // RS232 Login Sucessful
+                && (_communications as ISocketStatus) == null) // RS232 Login Sucessful
             {
                 isLoggedIn = true;
 
@@ -162,10 +162,14 @@ namespace epi_videoCodec_ciscoExtended.V2
                     ProcessResponse(dataToProcess);
                 }
             }
-            else if (data.Contains("login:") || data.Contains("Password:"))
+            else if (data.ToLower().Contains("login:"))
             {
-                // handles login for non-delimited
+                SendText(_username);
             }
+			else if (data.ToLower().Contains("password:"))
+			{
+				SendText(_password);
+			}
             else if (data.StartsWith("{") || data.EndsWith("}"))
             {
                 SendText("xPreferences outputmode terminal");
@@ -263,9 +267,9 @@ namespace epi_videoCodec_ciscoExtended.V2
                 },
                 Timeout.Infinite);
 
-            if (communications is ISocketStatus)
+            if (_communications is ISocketStatus)
             {
-                (communications as ISocketStatus)
+                (_communications as ISocketStatus)
                     .ConnectionChange += (sender, args) =>
                     {
                         if (args.Client.ClientStatus ==
@@ -279,13 +283,13 @@ namespace epi_videoCodec_ciscoExtended.V2
                         }
                     };
 
-                communications.Connect();
+                _communications.Connect();
                 isLoggedIn = true;
                 CommunicationMonitor.Start();
             }
             else
             {
-                communications.TextReceived += CommunicationsOnTextReceived;
+                _communications.TextReceived += CommunicationsOnTextReceived;
                 Rs232LoggedIn += (sender, args) => pollTimer.Reset(250, 30000);
                 CommunicationMonitor.Start();
             }
@@ -307,25 +311,25 @@ namespace epi_videoCodec_ciscoExtended.V2
             if (data.Contains("login:"))
             {
                 isLoggedIn = false;
-                if (string.IsNullOrEmpty(username))
+                if (string.IsNullOrEmpty(_username))
                 {
                     Debug.Console(0, Debug.ErrorLogLevel.Notice, "Prompted for a username but none is configured");
                 }
                 else
                 {
-                    SendText(username);
+                    SendText(_username);
                 }
             }
             else if (data.Contains("Password:"))
             {
                 isLoggedIn = false;
-                if (string.IsNullOrEmpty(password))
+                if (string.IsNullOrEmpty(_password))
                 {
                     Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Prompted for a password but none is configured");
                 }
                 else
                 {
-                    SendText(password);
+                    SendText(_password);
                 }
             }
         }
@@ -336,7 +340,7 @@ namespace epi_videoCodec_ciscoExtended.V2
                 return;
             //Debug.Console(0, this, "TX: '{0}'", text);
             var textToSend = PreProcessStringToSend(text);
-            communications.SendText(textToSend);
+            _communications.SendText(textToSend);
         }
 
         class CiscoRoomOsRequestHandler
@@ -1067,8 +1071,8 @@ namespace epi_videoCodec_ciscoExtended.V2
             trilist.SetUShortSigAction(joinMap.NearEndPresentationSource.JoinNumber, value => Presentation.SetShareSource(value));
             Presentation.SharingSourceIntFeedback.LinkInputSig(trilist.UShortInput[joinMap.NearEndPresentationSource.JoinNumber]);
 
-            communications.TextReceived += (sender, args) => trilist.SetString(joinMap.Coms.JoinNumber, args.Text);
-            trilist.SetStringSigAction(joinMap.Coms.JoinNumber, value => communications.SendText(value));
+            _communications.TextReceived += (sender, args) => trilist.SetString(joinMap.Coms.JoinNumber, args.Text);
+            trilist.SetStringSigAction(joinMap.Coms.JoinNumber, value => _communications.SendText(value));
         }
 
         public void VolumeUp(bool pressRelease)
