@@ -6,22 +6,12 @@ using System.Xml.Serialization;
 using PepperDash.Essentials.Core;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
-{
-    public class Panel : ICiscoCodecUiExtensionsPanel
     {
-        /// <summary>
-        /// clicked event to subscribe to 
-        /// </summary>
+    public class Panel : ICiscoCodecUiExtensionsPanel
+        {
         public event EventHandler ClickedEvent;
-        /// <summary>
-        /// trigger clicked event from parsing fb
-        /// </summary>
         internal void OnClickedEvent() { ClickedEvent?.Invoke(this, EventArgs.Empty); }
 
-        /// <summary>
-        /// Determines the order of the panels.   Lower numbers are displayed first.
-        /// </summary>
-        /// <remarks>Valid values are 1-9999.  0 is not valid.</remarks>
         [XmlElement("Order")]
         [JsonProperty("order")]
         public ushort Order { get; set; }
@@ -30,29 +20,53 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [JsonProperty("panelId")]
         public string PanelId { get; set; }
 
-        /// <summary>
-        ///  CallControls, ControlPanel, Hidden
-        /// </summary>
         [XmlElement("Location")]
         [JsonProperty("location")]
         public string Location { get; set; }
 
-        /// <summary>
-        /// The icon on the button. Use one of the preinstalled icons from the list or select Custom to use a custom icon that has been uploaded to the device.
-        /// Briefing, Camera, Concierge, Disc, Handset, Help, Helpdesk, Home, Hvac, Info, Input, Language, Laptop, 
-        /// Lightbulb, Media, Microphone, Power, Proximity, Record, Spark, Tv, Webex, General, Custom
-        /// </summary>
         [XmlElement("Icon")]
         [JsonProperty("icon")]
         [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
         public eCiscoPanelIcons Icon { get; set; }
 
-        /// <summary>
-        /// only needed for custom icons
-        /// </summary>
-        [XmlElement("IconId")]
+        [XmlElement("CustomIcon")]
+        public CustomIconWrapper CustomIcon { get; set; } = new CustomIconWrapper();
+
+        // JSON: iconId → maps to CustomIcon.Id
+        [XmlIgnore]
         [JsonProperty("iconId")]
-        public string IconId { get; set; }
+        public string IconId
+            {
+            get => CustomIcon?.Id;
+            set
+                {
+                if (!string.IsNullOrEmpty(value))
+                    {
+                    if (CustomIcon == null)
+                        CustomIcon = new CustomIconWrapper();
+
+                    CustomIcon.Id = value;
+                    }
+                }
+            }
+
+        // JSON: base64 image → maps to CustomIcon.Content
+        [XmlIgnore]
+        [JsonProperty("customIconContent")]
+        public string CustomIconContent
+            {
+            get => CustomIcon?.Content;
+            set
+                {
+                if (!string.IsNullOrEmpty(value))
+                    {
+                    if (CustomIcon == null)
+                        CustomIcon = new CustomIconWrapper();
+
+                    CustomIcon.Content = value;
+                    }
+                }
+            }
 
         [XmlElement("Name")]
         [JsonProperty("name")]
@@ -60,24 +74,32 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
 
         [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
-		public string Url { get; set; }
+        public string Url { get; set; }
 
         [JsonProperty("mobileControlPath", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
-		public string MobileControlPath { get; set; }
+        public string MobileControlPath { get; set; }
 
         [JsonProperty("uiWebViewDisplays", NullValueHandling = NullValueHandling.Ignore)]
-		[XmlIgnore]
-		public List<UiWebViewDisplayConfig> UiWebViewDisplays { get; set; }
+        [XmlIgnore]
+        public List<UiWebViewDisplayConfig> UiWebViewDisplays { get; set; }
 
         [JsonProperty("deviceActions", NullValueHandling = NullValueHandling.Ignore)]
-		[XmlIgnore]
-		public List<DeviceActionWrapper> DeviceActions { get; set; }
+        [XmlIgnore]
+        public List<DeviceActionWrapper> DeviceActions { get; set; }
+        }
 
+    public class CustomIconWrapper
+        {
+        [XmlElement("Id")]
+        public string Id { get; set; }
+
+        [XmlElement("Content")]
+        public string Content { get; set; }
         }
 
     public enum eCiscoPanelIcons
-    {
+        {
         Briefing,
         Camera,
         Concierge,
@@ -103,5 +125,5 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         General,
         Sliders,
         Custom
+        }
     }
-}
