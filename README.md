@@ -283,6 +283,80 @@ Provided under MIT license
   }
 }
 ```
+
+## Navigator
+
+```json
+{
+        "key": "navigator",
+        "name": "Rm Navigator",
+        "type": "ciscoRoomOsMobileControl",
+        "group": "videoCodecTouchpanel",
+        "properties": {
+          "defaultRoomKey": "room",
+          "useDirectServer": true,
+          "videoCodecKey": "Codec-1",
+          "enableLockoutPoll": true,
+          "lockout": {
+            "mobileControlPath": "/lockout",
+            "uiWebViewDisplays": {
+              "title": "Room Lockout",
+              "mode": "Fullscreen",
+              "target": "Controller"
+            }
+          },
+          "extensions": {
+            "configId": 1,
+            "panels": [
+              {
+                "order": 2,
+                "panelId": "audio",
+                "location": "ControlPanel",
+                "icon": "Sliders",
+                "name": "Volume",
+                "mobileControlPath": "/audio",
+                "uiWebViewDisplays": [
+                  {
+                  "title": "Audio Volume",
+                  "mode": "Modal",
+                  "target": "Controller"
+                }]
+              },
+              {
+                "order": 3,
+                "panelId": "roomCombine",
+                "location": "ControlPanel",
+                "icon": "Custom",
+                "iconId": "1234",
+                "customIconContent":"iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAYAAAA6/NlyAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAABS8AAAUvAVpwdGYAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAw4MAAOgDAADDgwAA6AMAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACJB7xjFmMTpAAAAepJREFUaEPtmuFRwjAUx/91AjYQJxAnECeQEXQC2EDdQCaADagTiBOIG+AEssHzS9JL/7xYEbw2r/nd5UNf2pLfpS85Lq8QEfSJMw5YJwtbJwtbp3fCRcO2NAAwAXANYMidHWML4A1ACWDHnRUiorWBiCwkXRbOgb3UGR4BeHWzmzI7ADcANmGQc9iKLJzDq3OqCGd4COA9IrsDsAbwwR1/5IGun+j6UC4BjH8Y+5XL8VoOrzgRRORLRGacB0e2R/4RF+OBVijviLU7N2Zm5e/xn/TQrcYhPgeeKd5llm7MvEpP/C7jhaf1fgDAPSd8Imzc2JkpAuFaYruHSoqlRKlM1giB8Ljehxe6ThF2GEPZlsyTha2Tha2ThbtIURQHtxhJCJ+SLGydNoTPORCJHYv6zjaEPzkQiVX4/7K/IbhXfWcbwq2ShVOni/uwtphosYomiUNoQ1hbTLTYv9CGcKtkYetk4S6inDA0thhJCJ+SLGydLGwdL7ym+C1dpwg7rBEIaydtfF6cEpPIiWglPK/3AQAWykMpMHJjZ+YIhLfKebAvCplRvMvMIkU5pa/x6F1RC9dpWSpbglarxdvSJlIUkiJ7slCE4W64cBUxqbJ0Drz77H3SjLni0iZhc2iftGmysHWysHV6J/wNJ9Ukf3MotnsAAAAASUVORK5CYII=",
+                "name": "Room Setup",
+                "mobileControlPath": "/roomCombine",
+                "uiWebViewDisplays": [{
+                  "title": "Room Setup",
+                  "mode": "Modal",
+                  "target": "Controller"
+                }]
+              },
+              {
+                "order": 1,
+                "panelId": "techPin",
+                "location": "ControlPanel",
+                "icon": "Language",
+                "name": "Technician",
+                "mobileControlPath": "/techPin",
+                "uiWebViewDisplays": [{
+                  "title": "Technician",
+                  "mode": "Modal",
+                  "target": "Controller"
+                }]
+              }]
+              }
+            ]
+          }
+        }
+      },
+```
+
 > Note: Not all configuration properties are currently shown
 
 ## Bridge
@@ -331,3 +405,5 @@ Provided under MIT license
 - `setcodeccommdebug {1 | 0}`
   - Turn on device-level communications debugging. In order to see thes messages, the `appdebug 1` command must be sent
   - {1 | 0} - 1 turns debuggging on, 0 turns it off
+
+
