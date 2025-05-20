@@ -1,39 +1,56 @@
-﻿//using System;
-//using System.Collections.Generic;
-//using System.IO;
-//using System.Linq;
-//using System.Text;
-//using System.Threading.Tasks;
+﻿using System;
+using Crestron.SimplSharp;
+using Crestron.SimplSharp.CrestronIO;
+using PepperDash.Core;
+using Serilog.Events;
 
-//namespace epi_videoCodec_ciscoExtended.UiExtensions
-//{
-//	 //MAKE ICONS BEFORE OTHER EXTENSIONS THAT HAVE ICONID REF TO CUSTOM ICON. UPLOAD FIRST TO DEFINE IDS
-//    public class IconHandler: IUiExtensionHandler
-//    {
-//        //chat gpt on how to convert icon file to base64 for cisco command. upload of custom icon requirement
+namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
+    {
+    public static class IconHandler
+        {
+        // Dynamically determine the correct user path for the current program slot
+        private static readonly string ProgramSlot = string.Format("program{0}", InitialParametersClass.ApplicationNumber);
+        private static readonly string IconFolder = string.Format("/user/{0}/navigatorIcons", ProgramSlot);
+        private static readonly string OutputFile = string.Format("/user/{0}/navigatorIcons/icons-base64.txt", ProgramSlot);
 
-//        public IconHandler() { }
-//        public IconHandler(string filePath)
-//        {
+        public static void DumpAllPngsToBase64()
+            {
+            try
+                {
+                if (!Directory.Exists(IconFolder))
+                    {
+                    Directory.CreateDirectory(IconFolder);
+                    Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Created icon folder: {0}", IconFolder);
+                    }
 
-//            try
-//            {
-//                // Read the file into a byte array
-//                byte[] fileBytes = File.ReadAllBytes(filePath);
+                var pngFiles = Directory.GetFiles(IconFolder, "*.png");
+                Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Found {0} PNG(s) in {1}", pngFiles.Length, IconFolder);
 
-//                // Convert the byte array to a Base64 string
-//                string base64String = Convert.ToBase64String(fileBytes);
+                using (var writer = new StreamWriter(OutputFile, false))
+                    {
+                    foreach (var filePath in pngFiles)
+                        {
+                        var fileName = Path.GetFileNameWithoutExtension(filePath);
+                        try
+                            {
+                            var bytes = System.IO.File.ReadAllBytes(filePath);
+                            var b64 = Convert.ToBase64String(bytes);
+                            writer.WriteLine($"{fileName}:{b64}");
+                            Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Encoded '{0}', length={1}", fileName, b64.Length);
+                            }
+                        catch (Exception inner)
+                            {
+                            Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Skipping '{0}': {1}", filePath, inner.Message);
+                            }
+                        }
+                    }
 
-//                // Output the base64 string
-//                Console.WriteLine("Base64 Encoded String:");
-//                Console.WriteLine(base64String);
-
-//                // Now you can use this base64String as part of your command to send to the Cisco Room OS device
-//            }
-//            catch (Exception e)
-//            {
-//                Console.WriteLine("An error occurred: " + e.Message);
-//            }
-//        }
-//    }
-//}
+                Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Wrote base64 to: {0}", OutputFile);
+                }
+            catch (Exception ex)
+                {
+                Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] DumpAllPngsToBase64 error: {0}", ex.Message);
+                }
+            }
+        }
+    }

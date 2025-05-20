@@ -1,4 +1,6 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+﻿using Crestron.SimplSharp;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+using epi_videoCodec_ciscoExtended.UserInterface.Utilities;
 using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
@@ -36,6 +38,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
 
         public override bool CustomActivate()
         {
+            
             foreach (var action in CustomActivateActions)
             {
                 action();
@@ -63,24 +66,30 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
             BuildRoomCombinerHandler();
         }
 
+        
+
+
         public void PreActivateAction()
-        {
+            {
+            // Create an instance of IconHandler to call the method  
+            Debug.LogMessage(LogEventLevel.Debug, "iconHandler.DumpAllPngsToBase64() CALLED!!!!!", this);
+
+           // var iconHandler = new IconHandler();
+            IconHandler.DumpAllPngsToBase64();
+
             Debug.LogMessage(LogEventLevel.Debug, "Activating Video Codec UI Extensions", this);
             UisCiscoCodec = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
 
             if (UisCiscoCodec == null)
-            {
+                {
                 var msg = $"Video codec UserInterface could not find codec with key '{ConfigProps.VideoCodecKey}'.";
                 Debug.LogMessage(new NullReferenceException(msg), msg, this);
-                //return base.CustomActivate();
                 return;
-            }
+                }
 
             UiExtensions = ConfigProps.Extensions;
             CiscoCodecUiExtensionsHandler = new UserInterfaceExtensionsHandler(this, UisCiscoCodec.EnqueueCommand);
 
-            // update the codec props which will be overwritten if they exist from codec config.
-            // #TODO Remove codec config later probably not needed with UI device. 
             UisCiscoCodec.UiExtensions = UiExtensions;
             UisCiscoCodec.CiscoCodecUiExtensionsHandler = CiscoCodecUiExtensionsHandler;
 
@@ -92,8 +101,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
                 UiExtensions.Initialize(this, UisCiscoCodec.EnqueueCommand);
                 Debug.LogMessage(LogEventLevel.Debug, "Video Codec UI Extensions Handler Initilizing", this);
             };
-            //return base.CustomActivate();
             return;
+            }
         }
-    }
 }

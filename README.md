@@ -285,6 +285,11 @@ Provided under MIT license
 ```
 
 ## Navigator
+Place your custom icon .png files in the /user/programX/navigatorIcons/ folder.
+This will automatically generate an output file:
+/user/programX/navigatorIcons/icons-base64.txt,
+which contains the Base64-encoded "customIconContent" for each icon.
+
 
 ```json
 {
