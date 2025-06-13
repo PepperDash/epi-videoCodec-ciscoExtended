@@ -86,7 +86,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 			if (socket != null)
 				socket.ConnectionChange += OnSocketOnConnectionChange;
 
-			_isSerialComm = (socket == null);
+			_isSerialComm = (socket == null) || props.SerialOverIp;
 
 			if (props.CommunicationMonitorProperties != null)
 			{
@@ -454,7 +454,13 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 			if (_isSerialComm)
 			{
-				Rs232LoggedIn += (sender, args) => PollTimerReset(250, 30000);
+				Rs232LoggedIn += (sender, args) =>
+				{
+					Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "PollTimerStart: Rs232Logged In, resetting timer, polling or features and feedback...");
+					PollTimerReset(250, 30000);
+					PollFeatures();
+					PollForFeedback();
+				};
 			}
 		}
 

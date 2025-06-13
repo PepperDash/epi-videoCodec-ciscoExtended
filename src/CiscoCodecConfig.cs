@@ -14,6 +14,9 @@ namespace epi_videoCodec_ciscoExtended
 		[JsonProperty("password")]
         public string Password { get; set; }
 
+		[JsonProperty("serialOverIp")]
+		public bool SerialOverIp { get; set; }
+
         [JsonProperty("communicationMonitorProperties")]
         public CommunicationMonitorConfig CommunicationMonitorProperties { get; set; }
 
