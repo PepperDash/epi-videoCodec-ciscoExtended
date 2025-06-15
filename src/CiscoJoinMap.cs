@@ -17,6 +17,20 @@ namespace epi_videoCodec_ciscoExtended.V2
                 JoinType = eJoinType.Digital
             });
 
+		[JoinName("IsLoggedIn")]
+		public JoinDataComplete IsLoggedIn = new JoinDataComplete(
+			new JoinData
+			{
+				JoinNumber = 2,
+				JoinSpan = 1
+			},
+			new JoinMetadata
+			{
+				Description = "IsLoggedIn",
+				JoinCapabilities = eJoinCapabilities.ToSIMPL,
+				JoinType = eJoinType.Digital
+			});
+
         [JoinName("DtmfJoins")] public JoinDataComplete DtmfJoins = new JoinDataComplete(
             new JoinData
             {

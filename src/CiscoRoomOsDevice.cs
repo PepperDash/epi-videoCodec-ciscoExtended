@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronSockets;
+using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
@@ -55,18 +56,33 @@ namespace epi_videoCodec_ciscoExtended.V2
 				if (value == _isLoggedIn) return;
 				_isLoggedIn = value;
 
-				if (_isLoggedIn)
+				IsLoggedInFeedback.FireUpdate();
+
+				if (_isSerialComm)
 				{
-					PollTimerStart();
-					_communications.TextReceived -= OnTextReceived;
+					if (_isLoggedIn)
+					{
+						_communications.TextReceived -= OnTextReceived;
+						//CommunicationMonitor.Start();
+						PollTimerStart();
+					}
+					else
+					{
+						_communications.TextReceived += OnTextReceived;
+						//CommunicationMonitor.Stop();
+						PollTimerStop();
+					}
 				}
 				else
 				{
-					PollTimerStop();
-					_communications.TextReceived += OnTextReceived;
+					CommunicationMonitor.Start();
+					PollTimerStart();	
 				}
 			}
 		}
+
+		public BoolFeedback IsLoggedInFeedback;
+
 		private StringBuilder _buffer = new StringBuilder();
 
 		public CiscoRoomOsDevice(string key, string name, CiscoCodecConfig props, IBasicCommunication communications)
@@ -87,7 +103,8 @@ namespace epi_videoCodec_ciscoExtended.V2
 				socket.ConnectionChange += OnSocketOnConnectionChange;
 
 			_isSerialComm = (socket == null) || props.SerialOverIp;
-
+			Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Constructor: _isSerialComm == {0}", _isSerialComm);
+			
 			if (props.CommunicationMonitorProperties != null)
 			{
 				CommunicationMonitor = new GenericCommunicationMonitor(
@@ -133,6 +150,8 @@ namespace epi_videoCodec_ciscoExtended.V2
 			Layouts.AvailableLayoutsChanged += AvailableLayoutsChanged;
 			Layouts.CurrentLayoutChanged += CurrentLayoutChanged;
 
+			IsLoggedInFeedback = new BoolFeedback(() => IsLoggedIn);
+
 			requestTimeout = new CTimer(_ =>
 			{
 				var now = DateTime.UtcNow;
@@ -158,6 +177,9 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		public override void Initialize()
 		{
+
+			IsLoggedIn = false;
+
 			_communications.Connect();
 			CommunicationMonitor.Start();
 
@@ -174,30 +196,50 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		private void OnSocketOnConnectionChange(object sender, GenericSocketStatusChageEventArgs args)
 		{
-			if (args.Client.ClientStatus == SocketStatus.SOCKET_STATUS_CONNECTED)
+			switch (args.Client.ClientStatus)
 			{
-				PollTimerReset(250, 30000);
-			}
-			else
-			{
-				PollTimerStop();
+				case SocketStatus.SOCKET_STATUS_CONNECTED:
+				{
+					if (_isSerialComm)
+					{
+						// TODO
+					}
+					else
+					{
+						// TODO
+						PollTimerStart();
+					}
+					break;
+				}
+				default:
+				{
+					PollTimerStop();
+					break;
+				}
 			}
 		}
 
 		private void OnTextReceived(object sender, GenericCommMethodReceiveTextArgs args)
 		{
 			var data = args.Text.Trim();
+			//Debug.Console(2, this, "OnTextReceived: {0}", data);
 
 			if (data.ToLower().Contains("login:"))
 			{
-				Debug.Console(0, this, "OnTextReceived: login request, sending username '{0}'", _username);
+				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
+				Debug.Console(0, this, "OnTextReceived: login request, sending '{0}'", _username);
 				IsLoggedIn = false;
+				//var text = PreProcessStringToSend(_username);
+				//_communications.SendText(text);
 				SendText(_username);
 			}
 			else if (data.ToLower().Contains("password:"))
 			{
-				Debug.Console(0, this, "OnTextReceived: passwrod request, sending password '{0}'", _password);
+				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
+				Debug.Console(0, this, "OnTextReceived: password request, sending '{0}'", _password);
 				IsLoggedIn = false;
+				//var text = PreProcessStringToSend(_password);
+				//_communications.SendText(text);
 				SendText(_password);
 			}
 			else if (data.ToLower().Contains("login incorrect"))
@@ -208,8 +250,8 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		private void OnLineRecevied(object sender, GenericCommMethodReceiveTextArgs args)
 		{
-			//Debug.Console(0, this, "RX: '{0}'", args.Text);
 			var data = args.Text.Trim();
+			//Debug.Console(2, this, "OnLineRecieved: '{0}'", data);
 
 			if (string.IsNullOrEmpty(data)
 				|| data == "Command not recognized."
@@ -219,16 +261,14 @@ namespace epi_videoCodec_ciscoExtended.V2
 				return;
 			}
 
-			if (data.StartsWith("*s SystemUnit") || data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
+			if (data.StartsWith("*s SystemUnit"))
+			{
+				if (!_isSerialComm)
+					IsLoggedIn = true;
+			}
+			if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
 			{
 				IsLoggedIn = true;
-
-				if (!_isSerialComm || !IsLoggedIn) return;
-
-				// RS232 login successful
-				var handler = Rs232LoggedIn;
-				if (handler != null)
-					handler(this, EventArgs.Empty);
 			}
 			else if (data.ToLower().StartsWith("login incorrect"))
 			{
@@ -246,14 +286,20 @@ namespace epi_videoCodec_ciscoExtended.V2
 			}
 			else if (data.ToLower().Contains("login:"))
 			{
-				Debug.Console(0, this, "OnLineRecevied: login request, sending username '{0}'", _username);
+				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
+				Debug.Console(0, this, "OnLineRecevied: login request, sending '{0}'", _username);
 				IsLoggedIn = false;
+				//var text = PreProcessStringToSend(_username);
+				//_communications.SendText(text);
 				SendText(_username);
 			}
 			else if (data.ToLower().Contains("password:"))
 			{
-				Debug.Console(0, this, "OnLineRecevied: password request, sending password '{0}'", _password);
+				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
+				Debug.Console(0, this, "OnLineRecevied: password request, sending '{0}'", _password);
 				IsLoggedIn = false;
+				//var text = PreProcessStringToSend(_password);
+				//_communications.SendText(text);
 				SendText(_password);
 			}
 			else if (data.StartsWith("{") || data.EndsWith("}"))
@@ -368,7 +414,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 		{
 			if (string.IsNullOrEmpty(text))
 				return;
-			//Debug.Console(0, this, "TX: '{0}'", text);
+
 			var textToSend = PreProcessStringToSend(text);
 			_communications.SendText(textToSend);
 		}
@@ -533,6 +579,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 				bridge.AddJoinMap(Key, joinMap);
 
 			IsOnline.LinkInputSig(trilist.BooleanInput[joinMap.IsOnline.JoinNumber]);
+			IsLoggedInFeedback.LinkInputSig(trilist.BooleanInput[joinMap.IsLoggedIn.JoinNumber]);
 
 			trilist.SetSigTrueAction(joinMap.DtmfPound.JoinNumber, () => CallStatus.SendDtmf("#"));
 			trilist.SetSigTrueAction(joinMap.DtmfStar.JoinNumber, () => CallStatus.SendDtmf("*"));
