@@ -5,13 +5,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronSockets;
-using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Bridges;
-using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
@@ -63,8 +61,10 @@ namespace epi_videoCodec_ciscoExtended.V2
 					if (_isLoggedIn)
 					{
 						_communications.TextReceived -= OnTextReceived;
-						//CommunicationMonitor.Start();
-						PollTimerStart();
+						if (_pollTimer == null)
+							PollTimerStart();
+						else
+							PollTimerReset(250, 30000);
 					}
 					else
 					{
