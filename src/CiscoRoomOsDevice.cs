@@ -177,7 +177,6 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		public override void Initialize()
 		{
-
 			IsLoggedIn = false;
 
 			_communications.Connect();
