@@ -228,18 +228,20 @@ namespace epi_videoCodec_ciscoExtended.V2
 				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
 				Debug.Console(0, this, "OnTextReceived: login request, sending '{0}'", _username);
 				IsLoggedIn = false;
-				//var text = PreProcessStringToSend(_username);
-				//_communications.SendText(text);
-				SendText(_username);
+				_communications.SendText(_username);
+				//SendText(_username);
 			}
 			else if (data.ToLower().StartsWith("password:"))
 			{
 				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
 				Debug.Console(0, this, "OnTextReceived: password request, sending '{0}'", _password);
 				IsLoggedIn = false;
-				//var text = PreProcessStringToSend(_password);
-				//_communications.SendText(text);
-				SendText(_password);
+				_communications.SendText(_password);
+				//SendText(_password);
+			}
+			else if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
+			{
+				IsLoggedIn = true;
 			}
 			else if (data.ToLower().Contains("login incorrect"))
 			{
@@ -265,7 +267,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 				if (!_isSerialComm)
 					IsLoggedIn = true;
 			}
-			if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
+			else if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
 			{
 				IsLoggedIn = true;
 			}
@@ -288,18 +290,16 @@ namespace epi_videoCodec_ciscoExtended.V2
 				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
 				Debug.Console(0, this, "OnLineRecevied: login request, sending '{0}'", _username);
 				IsLoggedIn = false;
-				//var text = PreProcessStringToSend(_username);
-				//_communications.SendText(text);
-				SendText(_username);
+				_communications.SendText(_username);
+				//SendText(_username);
 			}
 			else if (data.ToLower().StartsWith("password:"))
 			{
 				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
 				Debug.Console(0, this, "OnLineRecevied: password request, sending '{0}'", _password);
 				IsLoggedIn = false;
-				//var text = PreProcessStringToSend(_password);
-				//_communications.SendText(text);
-				SendText(_password);
+				_communications.SendText(_password);
+				//SendText(_password);
 			}
 			else if (data.StartsWith("{") || data.EndsWith("}"))
 			{
@@ -412,7 +412,16 @@ namespace epi_videoCodec_ciscoExtended.V2
 		public void SendText(string text)
 		{
 			if (string.IsNullOrEmpty(text))
+			{
+				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "SendText: text is null or empty, unable to send command");
 				return;
+			}
+
+			if (_isSerialComm && !IsLoggedIn)
+			{
+				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "SendText: _isSerialComm == {0} && IsLoggedIn == {1}", _isSerialComm, IsLoggedIn); 
+				return;
+			}
 
 			var textToSend = PreProcessStringToSend(text);
 			_communications.SendText(textToSend);
