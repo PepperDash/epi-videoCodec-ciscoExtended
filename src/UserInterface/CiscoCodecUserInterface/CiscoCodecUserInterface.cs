@@ -72,9 +72,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
         public void PreActivateAction()
             {
             // Create an instance of IconHandler to call the method  
-            Debug.LogMessage(LogEventLevel.Debug, "iconHandler.DumpAllPngsToBase64() CALLED!!!!!", this);
+            Debug.LogMessage(LogEventLevel.Debug, "iconHandler.DumpAllPngsToBase64() called.", this);
 
-           // var iconHandler = new IconHandler();
             IconHandler.DumpAllPngsToBase64();
 
             Debug.LogMessage(LogEventLevel.Debug, "Activating Video Codec UI Extensions", this);

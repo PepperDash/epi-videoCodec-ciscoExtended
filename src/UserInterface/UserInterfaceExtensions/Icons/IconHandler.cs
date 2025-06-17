@@ -37,7 +37,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
                             var bytes = System.IO.File.ReadAllBytes(filePath);
                             var b64 = Convert.ToBase64String(bytes);
                             var id = random.Next(10000000, 100000000).ToString(); 
-                            writer.WriteLine($"\"fileName\":\"{fileName}\":\"iconId\":\"{id}\":\"customIconContent\":\"{b64}\"");
+                            writer.WriteLine($"{{\"fileName\":\"{fileName}\",\"iconId\":\"{id}\",\"customIconContent\":\"{b64}\"}}");
                             Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Encoded '{0}', id={1}, length={2}", fileName, id, b64.Length);
                             }
                         catch (Exception inner)
