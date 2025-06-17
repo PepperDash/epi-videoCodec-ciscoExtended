@@ -8,10 +8,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
     {
     public static class IconHandler
         {
-        // Dynamically determine the correct user path for the current program slot
         private static readonly string ProgramSlot = string.Format("program{0}", InitialParametersClass.ApplicationNumber);
-        private static readonly string IconFolder = string.Format("/user/{0}/navigatorIcons", ProgramSlot);
-        private static readonly string OutputFile = string.Format("/user/{0}/navigatorIcons/icons-base64.txt", ProgramSlot);
+        private static readonly string IconFolder = string.Format("/user/{0}/icons", ProgramSlot);
+        private static readonly string OutputFile = string.Format("/user/{0}/icons/icons-base64.txt", ProgramSlot);
 
         public static void DumpAllPngsToBase64()
             {
@@ -26,6 +25,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
                 var pngFiles = Directory.GetFiles(IconFolder, "*.png");
                 Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Found {0} PNG(s) in {1}", pngFiles.Length, IconFolder);
 
+                var random = new Random();
+
                 using (var writer = new StreamWriter(OutputFile, false))
                     {
                     foreach (var filePath in pngFiles)
@@ -35,8 +36,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
                             {
                             var bytes = System.IO.File.ReadAllBytes(filePath);
                             var b64 = Convert.ToBase64String(bytes);
-                            writer.WriteLine($"{fileName}:{b64}");
-                            Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Encoded '{0}', length={1}", fileName, b64.Length);
+                            var id = random.Next(10000000, 100000000).ToString(); 
+                            writer.WriteLine($"\"fileName\":\"{fileName}\":\"iconId\":\"{id}\":\"customIconContent\":\"{b64}\"");
+                            Debug.LogMessage(LogEventLevel.Debug, "[IconHandler] Encoded '{0}', id={1}, length={2}", fileName, id, b64.Length);
                             }
                         catch (Exception inner)
                             {
