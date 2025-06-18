@@ -7341,19 +7341,17 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void CodecRoomPresetSelect(int preset)
 		{
-			Debug.Console(
-				1,
+			Debug.LogInformation(
 				this,
-				"Selecting Preset: {0} for Camera:{1}",
-				preset,
-				SelectedCamera.Key
+				"Selecting Preset: {0}",
+				preset
 			);
 			if (SelectedCamera is IAmFarEndCamera)
 				SelectFarEndPreset(preset);
 			else
 			{
 				_selectedPreset = preset;
-				// CiscoRoomPresetRecall();
+				CiscoRoomPresetRecall();
 			}
 		}
 
