@@ -22,6 +22,7 @@ using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using PepperDash.Essentials.Core.Queues;
 using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
+using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
@@ -85,7 +86,6 @@ namespace epi_videoCodec_ciscoExtended
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			IRoutingInputs,
 			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,

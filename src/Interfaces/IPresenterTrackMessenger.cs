@@ -1,5 +1,6 @@
 ﻿using PepperDash.Core;
 using PepperDash.Essentials.AppServer.Messengers;
+using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 using System;
 using System.Collections.Generic;
 using System.Linq;
