@@ -224,6 +224,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.Mob
                 {
                     Debug.LogMessage(LogEventLevel.Debug, $"UiMap default room key {_thisUisDefaultRoomKey} is in lockout state", this);
                     _mcTpController.LockedOut = true;
+                    ClearCiscoCodecUiWebViewController();
                     //SendLockout(_thisUisDefaultRoomKey, _primaryRoomKey);
                     _extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
                     _mcTpController.UisCiscoCodec.EnqueueCommand(UiWebViewDisplay.xCommandStatus());
