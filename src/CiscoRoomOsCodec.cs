@@ -278,20 +278,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		public bool SpeakerTrackAvailability { get; private set; }
 		public bool SpeakerTrackStatus { get; private set; }
-        
-		private bool _presenterTrackAvailability;
-        public bool PresenterTrackAvailability { 
-			get
-			{ 
-				Debug.Console(0, this, "PresenterTrackAvailability get, PresenterTrackAvailability: {0}", _presenterTrackAvailability);
-				return _presenterTrackAvailability;
-            }
-			private set
-			{ 
-				Debug.Console(0, this, "PresenterTrackAvailability set, PresenterTrackAvailability: {0}", value);
-				_presenterTrackAvailability = value;
-            }
-		}
+		public bool PresenterTrackAvailability { get; private set; }
 		public bool PresenterTrackStatus { get; private set; }
 		public bool WebviewIsVisible { get; private set; }
 		public string PresenterTrackStatusName { get; private set; }
@@ -606,10 +593,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		protected Func<bool> PresenterTrackAvailableFeedbackFunc
 		{
-			get { 
-				Debug.Console(0,this, "PresenterTrackAvailableFeedbackFunc called, PresenterTrackAvailability: {0}", PresenterTrackAvailability);
-                return () => PresenterTrackAvailability; 
-			}
+			get { return () => PresenterTrackAvailability; }
 		}
 
 		protected Func<bool> SpeakerTrackAvailableFeedbackFunc
@@ -1524,7 +1508,6 @@ namespace epi_videoCodec_ciscoExtended
 			};
 			CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction += () =>
 			{
-                Debug.Console(0, this, "CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction = {0}", CodecStatus.Status.Cameras.PresenterTrack.Availability.Value);
                 PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
                 PresenterTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
@@ -2901,7 +2884,6 @@ namespace epi_videoCodec_ciscoExtended
 				if (String.IsNullOrEmpty(presenterTrackToken.ToString()))
 					return;
 				var presenterTrackObject = presenterTrackToken as JObject;
-                Debug.Console(0, this, "PresenterTrackObject: {0}", presenterTrackObject != null ? presenterTrackObject.ToString() : "null");
                 if (presenterTrackObject == null)
 					return;
 				var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
