@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronSockets;
+using Crestron.SimplSharpPro.CrestronThread;
 using Crestron.SimplSharpPro.DeviceSupport;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
@@ -121,7 +122,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 					timeToError,
 					() => SendText(pollString));
 
-			CommunicationMonitor.StatusChange += OnCommunicationMonitor_StatusChage;
+			//CommunicationMonitor.StatusChange += OnCommunicationMonitor_StatusChage;
 
 			CodecCameras = new CiscoCameras(this);
 			Standby = new CiscoStandby(this);
@@ -195,20 +196,17 @@ namespace epi_videoCodec_ciscoExtended.V2
 			if (args.Client.ClientStatus != SocketStatus.SOCKET_STATUS_CONNECTED)
 				return;
 
-			if (_isSerialComm)
-			{
-				SendText(_username);
-			}
+			if (!_isSerialComm) return;
+
+			Thread.Sleep(2000);
+			SendText(_username);
 		}
 
-		private void OnCommunicationMonitor_StatusChage(object sender, MonitorStatusChangeEventArgs args)
-		{
-			//if (!_isSerialComm)
-			//    return;
-
-			//if (args.Status != MonitorStatus.IsOk)
-			//    IsLoggedIn = false;
-		}
+		//private void OnCommunicationMonitor_StatusChage(object sender, MonitorStatusChangeEventArgs args)
+		//{
+		//    if (!_isSerialComm)
+		//        return;
+		//}
 
 		private void OnRs232LoggedIn(bool boolValue)
 		{
@@ -252,7 +250,17 @@ namespace epi_videoCodec_ciscoExtended.V2
 			var data = args.Text.Trim().ToLower();
 			Debug.Console(2, this, "OnTextReceived: {0}", data);
 
-			if (data.Contains("login:"))
+			var lines = data.Split('\r');
+			foreach (var line in lines)
+			{
+				Debug.Console(2, this, "OnTextReceived: line == {0}", line);
+			}
+
+			if (data.Contains("login: timed out after 60 seconds"))
+			{
+				IsLoggedIn = false;				
+			}
+			else if (data.Contains("login:"))
 			{
 				IsLoggedIn = false;
 				SendText(_username);
@@ -448,7 +456,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 		public static string PreProcessStringToSend(string text)
 		{
 			if (text.EndsWith("\r"))
-				return text.Trim();
+				return text;
 
 			const string delimiter = "\r";
 			return text.Trim() + delimiter;
