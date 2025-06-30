@@ -34,53 +34,36 @@ namespace epi_videoCodec_ciscoExtended.V2
 		internal readonly uint phoneBookLimit;
 
 		private readonly IBasicCommunication _communications;
+		private readonly CommunicationGather _gather;
 		private readonly IList<CiscoRoomOsFeature> features = new List<CiscoRoomOsFeature>();
 		private readonly CTimer requestTimeout;
 
 		private CTimer _pollTimer;
+		private uint _pollCounter;
 
 		private readonly string _username = String.Empty;
 		private readonly string _password = String.Empty;
 
 		private readonly bool _isSerialComm;
 
+		public BoolFeedback IsLoggedInFeedback;
 		private bool _isLoggedIn;
-
 		public bool IsLoggedIn
 		{
 			get { return _isLoggedIn; }
 			set
 			{
-				if (value == _isLoggedIn) return;
 				_isLoggedIn = value;
-
 				IsLoggedInFeedback.FireUpdate();
 
-				if (_isSerialComm)
-				{
-					if (_isLoggedIn)
-					{
-						_communications.TextReceived -= OnTextReceived;
-						if (_pollTimer == null)
-							PollTimerStart();
-						else
-							PollTimerReset(250, 30000);
-					}
-					else
-					{
-						_communications.TextReceived += OnTextReceived;
-						PollTimerStop();
-					}
-				}
-				else
-				{
-					CommunicationMonitor.Start();
-					PollTimerStart();	
-				}
+				if (!_isSerialComm) return;
+
+				OnRs232LoggedIn(_isLoggedIn);
 			}
 		}
 
-		public BoolFeedback IsLoggedInFeedback;
+		private delegate void Rs232LoggedIn(bool value);
+		private Rs232LoggedIn _rs232LoggedInDelegate;
 
 		private StringBuilder _buffer = new StringBuilder();
 
@@ -89,13 +72,16 @@ namespace epi_videoCodec_ciscoExtended.V2
 		{
 			_username = props.Username;
 			_password = props.Password;
+
+			_rs232LoggedInDelegate = OnRs232LoggedIn;
+			IsLoggedInFeedback = new BoolFeedback(() => IsLoggedIn);
+
 			phoneBookLimit = props.PhonebookResultsLimit;
 
 			_communications = communications;
 			_communications.TextReceived += OnTextReceived;
 
-			var gather = new CommunicationGather(_communications, Delimiter);
-			gather.LineReceived += OnLineRecevied;
+			_gather = new CommunicationGather(_communications, Delimiter);			
 
 			var socket = _communications as ISocketStatus;
 			if (socket != null)
@@ -103,25 +89,37 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 			_isSerialComm = (socket == null) || props.SerialOverIp;
 			Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Constructor: _isSerialComm == {0}", _isSerialComm);
-			
-			if (props.CommunicationMonitorProperties != null)
+
+			if (_isSerialComm)
 			{
-				CommunicationMonitor = new GenericCommunicationMonitor(
-					this,
-					_communications,
-					props.CommunicationMonitorProperties);
+				_communications.TextReceived += OnTextReceived;
 			}
 			else
 			{
-				const string pollString = "xStatus SystemUnit Hardware\r";
-				CommunicationMonitor = new GenericCommunicationMonitor(
+				_gather.LineReceived += OnLineRecevied;
+			}
+
+			var pollInterval = 30000;
+			var timeToWarning = 180000;
+			var timeToError = 300000;
+			var pollString = "xStatus SystemUnit Hardware\r";
+
+			if (props.CommunicationMonitorProperties != null)
+			{
+				Debug.Console(0, this, Debug.ErrorLogLevel.Notice, "Constructor: props.CommunicationMonitorProperties != null, using configured values");
+				pollInterval = props.CommunicationMonitorProperties.PollInterval;
+				timeToWarning = props.CommunicationMonitorProperties.TimeToWarning;
+				timeToError = props.CommunicationMonitorProperties.TimeToError;
+				pollString = props.CommunicationMonitorProperties.PollString;
+			}
+
+			CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
 					_communications,
-					30000,
-					1800000,
-					3000000,
+					pollInterval,
+					timeToWarning,
+					timeToError,
 					() => SendText(pollString));
-			}
 
 			CommunicationMonitor.StatusChange += OnCommunicationMonitor_StatusChage;
 
@@ -149,9 +147,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 			CodecCameras.CameraSelected += CameraSelected;
 			Layouts.AvailableLayoutsChanged += AvailableLayoutsChanged;
-			Layouts.CurrentLayoutChanged += CurrentLayoutChanged;
-
-			IsLoggedInFeedback = new BoolFeedback(() => IsLoggedIn);
+			Layouts.CurrentLayoutChanged += CurrentLayoutChanged;			
 
 			requestTimeout = new CTimer(_ =>
 			{
@@ -178,10 +174,12 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		public override void Initialize()
 		{
-			_communications.Connect();
-			CommunicationMonitor.Start();
-
 			CrestronEnvironment.ProgramStatusEventHandler += OnProgramStatusEventHandler;
+
+			_communications.Connect();
+
+			if(!_isSerialComm)
+				CommunicationMonitor.Start();
 		}
 
 		private void OnProgramStatusEventHandler(eProgramStatusEventType type)
@@ -194,96 +192,94 @@ namespace epi_videoCodec_ciscoExtended.V2
 
 		private void OnSocketOnConnectionChange(object sender, GenericSocketStatusChageEventArgs args)
 		{
-			switch (args.Client.ClientStatus)
+			if (args.Client.ClientStatus != SocketStatus.SOCKET_STATUS_CONNECTED)
+				return;
+
+			if (_isSerialComm)
 			{
-				case SocketStatus.SOCKET_STATUS_CONNECTED:
-				{
-					if (_isSerialComm)
-					{
-						// TODO
-					}
-					else
-					{
-						// TODO
-						PollTimerStart();
-					}
-					break;
-				}
-				default:
-				{
-					PollTimerStop();
-
-					if (_isSerialComm)
-						IsLoggedIn = false;
-
-					break;
-				}
+				SendText(_username);
 			}
 		}
 
 		private void OnCommunicationMonitor_StatusChage(object sender, MonitorStatusChangeEventArgs args)
 		{
-			if (!_isSerialComm)
-				return;
+			//if (!_isSerialComm)
+			//    return;
 
-			if (args.Status != MonitorStatus.IsOk)
-				IsLoggedIn = false;
-
+			//if (args.Status != MonitorStatus.IsOk)
+			//    IsLoggedIn = false;
 		}
 
-		private void OnRs232LoggedIn(object sender, EventArgs args)
+		private void OnRs232LoggedIn(bool boolValue)
 		{
-			Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "OnRs232LoggedIn: Rs232Logged In, resetting timer, polling or features and feedback...");
+			Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "OnRs232LoggedIn: boolValue == {0}", boolValue);
+
+			if (!_isSerialComm)
+			{
+				Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "OnRs232LoggedIn: _isSerialComm == {0}, nothing to do here", _isSerialComm);
+				return;
+			}
+
+			// not logged in (boolValue == false)
+			if (!boolValue)
+			{
+				_gather.LineReceived -= OnLineRecevied;
+				_communications.TextReceived += OnTextReceived;
+
+				CommunicationMonitor.Stop();
+				if(_pollTimer != null)
+					PollTimerStop();
+
+				return;
+			}
+
+			// logged in (boolValue == true)			
+			_communications.TextReceived -= OnTextReceived;
+			_gather.LineReceived += OnLineRecevied;
+
+			CommunicationMonitor.Start();
 			if(_pollTimer == null)
 				PollTimerStart();
 			else
 				PollTimerReset(250, 30000);
 			
-			PollFeatures();
-			PollForFeedback();
+			//PollFeatures();
+			//PollForFeedback();
 		}
 
 		private void OnTextReceived(object sender, GenericCommMethodReceiveTextArgs args)
 		{
-			var data = args.Text.Trim();
-			//Debug.Console(2, this, "OnTextReceived: {0}", data);
+			var data = args.Text.Trim().ToLower();
+			Debug.Console(2, this, "OnTextReceived: {0}", data);
 
-			if (data.ToLower().Contains("login:"))
+			if (data.Contains("login:"))
 			{
-				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
-				Debug.Console(0, this, "OnTextReceived: login request, sending '{0}'", _username);
 				IsLoggedIn = false;
-				_communications.SendText(_username);
-				//SendText(_username);
+				SendText(_username);
 			}
-			else if (data.ToLower().Contains("password:"))
+			else if (data.Contains("password:"))
 			{
-				Debug.Console(0, this, "OnTextReceived: data == '{0}'", data);
-				Debug.Console(0, this, "OnTextReceived: password request, sending '{0}'", _password);
 				IsLoggedIn = false;
-				_communications.SendText(_password);
-				//SendText(_password);
+				SendText(_password);
 			}
-			else if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
+			else if (data.Contains("login incorrect"))
+			{
+				IsLoggedIn = false;
+			}			
+			else if (data.Contains("*r Login successful") || data.Contains("Welcome to"))
 			{
 				IsLoggedIn = true;
-
-				OnRs232LoggedIn(this, EventArgs.Empty);
-
-				//var handler = Rs232LoggedIn;
-				//if (handler != null)
-				//    handler(this, EventArgs.Empty);
 			}
-			else if (data.ToLower().Contains("login incorrect"))
+			else if (data.Contains("command not recognized"))
 			{
-				IsLoggedIn = false;
+				IsLoggedIn = true;
 			}
 		}
 
 		private void OnLineRecevied(object sender, GenericCommMethodReceiveTextArgs args)
 		{
 			var data = args.Text.Trim();
-			//Debug.Console(2, this, "OnLineRecieved: '{0}'", data);
+			Debug.Console(2, this, "OnLineRecevied: {0}", data);
 
 			if (string.IsNullOrEmpty(data)
 				|| data == "Command not recognized."
@@ -293,20 +289,15 @@ namespace epi_videoCodec_ciscoExtended.V2
 				return;
 			}
 
+			_pollCounter = 0;
+
 			if (data.StartsWith("*s SystemUnit"))
 			{
-				if (!_isSerialComm)
-					IsLoggedIn = true;
+				IsLoggedIn = true;
 			}
 			else if (data.StartsWith("*r Login successful") || data.Contains("Welcome to"))
 			{
 				IsLoggedIn = true;
-
-				OnRs232LoggedIn(this, EventArgs.Empty);
-
-				//var handler = Rs232LoggedIn;
-				//if (handler != null)
-				//    handler(this, EventArgs.Empty);
 			}
 			else if (data.ToLower().StartsWith("login incorrect"))
 			{
@@ -324,19 +315,17 @@ namespace epi_videoCodec_ciscoExtended.V2
 			}
 			else if (data.ToLower().StartsWith("login:"))
 			{
-				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
 				Debug.Console(0, this, "OnLineRecevied: login request, sending '{0}'", _username);
+				
 				IsLoggedIn = false;
-				_communications.SendText(_username);
-				//SendText(_username);
+				SendText(_username);
 			}
 			else if (data.ToLower().StartsWith("password:"))
 			{
-				Debug.Console(0, this, "OnLineRecevied: data == '{0}'", data);
 				Debug.Console(0, this, "OnLineRecevied: password request, sending '{0}'", _password);
+				
 				IsLoggedIn = false;
-				_communications.SendText(_password);
-				//SendText(_password);
+				SendText(_password);
 			}
 			else if (data.StartsWith("{") || data.EndsWith("}"))
 			{
@@ -423,9 +412,7 @@ namespace epi_videoCodec_ciscoExtended.V2
 		{
 			get { return CodecCameras.ControllingFarEndCameraFeedback; }
 		}
-
-		private event EventHandler Rs232LoggedIn;
-
+	
 		class CiscoRoomOsRequestHandler
 		{
 			private readonly Action<string> action;
@@ -454,18 +441,15 @@ namespace epi_videoCodec_ciscoExtended.V2
 				return;
 			}
 
-			if (_isSerialComm && !IsLoggedIn)
-			{
-				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "SendText: _isSerialComm == {0} && IsLoggedIn == {1}", _isSerialComm, IsLoggedIn); 
-				return;
-			}
-
 			var textToSend = PreProcessStringToSend(text);
 			_communications.SendText(textToSend);
 		}
 
 		public static string PreProcessStringToSend(string text)
 		{
+			if (text.EndsWith("\r"))
+				return text.Trim();
+
 			const string delimiter = "\r";
 			return text.Trim() + delimiter;
 		}
@@ -529,26 +513,38 @@ namespace epi_videoCodec_ciscoExtended.V2
 			handler.HandleResponse(response);
 		}
 
-		public void PollTimerStart()
+		public void Poll(string cmd)
 		{
-			if (_pollTimer == null)
-			{
-				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "PollTimerStart: _pollTimer is null, creating new timer");
-				_pollTimer = new CTimer(
-					_ =>
-					{
-						PollFeatures();
-						PollForFeedback();
-					},
-					Timeout.Infinite);
-			}
+			if (string.IsNullOrEmpty(cmd))
+				return;
 
-			if (_isSerialComm)
-			{
-				Rs232LoggedIn += OnRs232LoggedIn;
-			}
+			SendText(cmd);
+
+			if (!_isSerialComm) return;
+
+			_pollCounter++;
+
+			if (_pollCounter > 3)
+				IsLoggedIn = false;
 		}
 
+		public void PollTimerStart()
+		{
+			if (_pollTimer != null)
+			{
+				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "PollTimerStart: _pollTimer != null, nothing to do here");				
+				return;
+			}
+
+			Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "PollTimerStart: _pollTimer is null, creating new timer");
+			_pollTimer = new CTimer(
+				_ =>
+				{
+					PollFeatures();
+					PollForFeedback();
+				},
+				Timeout.Infinite);
+		}
 
 		public void PollTimerStop()
 		{
@@ -559,13 +555,16 @@ namespace epi_videoCodec_ciscoExtended.V2
 			}
 
 			_pollTimer.Stop();
+			_pollTimer = null;
 		}
 
 		public void PollTimerReset(long dueTime, long repeatPeriod)
 		{
 			if (_pollTimer == null)
 			{
-				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "PollTimerReset: _pollTimer is null");
+				Debug.Console(1, this, Debug.ErrorLogLevel.Warning, "PollTimerReset: _pollTimer is null, calling PollTimerStart()");
+				PollTimerStart();
+				
 				return;
 			}
 			_pollTimer.Reset(dueTime, repeatPeriod);
