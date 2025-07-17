@@ -7426,7 +7426,7 @@ namespace epi_videoCodec_ciscoExtended
 			PepperDash.Essentials.Devices.Common.VideoCodec.Cisco.eExternalSourceType type
 		)
 		{
-			var id = 0;
+			int id;
 			switch (connectorId.ToLower())
 			{
 				case "hdmiin1":
