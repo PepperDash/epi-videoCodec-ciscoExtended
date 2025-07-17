@@ -7426,10 +7426,27 @@ namespace epi_videoCodec_ciscoExtended
 			PepperDash.Essentials.Devices.Common.VideoCodec.Cisco.eExternalSourceType type
 		)
 		{
-			int id = 2;
-			if (connectorId.ToLower() == "hdmiin3")
+			var id = 0;
+			switch (connectorId.ToLower())
 			{
-				id = 3;
+				case "hdmiin1":
+					id = 1;
+					break;
+				case "hdmiin2":
+					id = 2;
+					break;
+				case "hdmiin3":
+					id = 3;
+					break;
+				case "hdmiin4":
+					id = 4;
+					break;
+				case "hdmiin5":
+					id = 5;
+					break;
+				default:
+					id = 2;
+					break;
 			}
 			EnqueueCommand(
 				string.Format(
