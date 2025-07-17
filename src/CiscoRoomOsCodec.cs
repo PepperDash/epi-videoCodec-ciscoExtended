@@ -7427,26 +7427,29 @@ namespace epi_videoCodec_ciscoExtended
 		)
 		{
 			int id;
-			switch (connectorId.ToLower())
+			if (string.Equals(connectorId, "hdmiin1", StringComparison.OrdinalIgnoreCase))
 			{
-				case "hdmiin1":
-					id = 1;
-					break;
-				case "hdmiin2":
-					id = 2;
-					break;
-				case "hdmiin3":
-					id = 3;
-					break;
-				case "hdmiin4":
-					id = 4;
-					break;
-				case "hdmiin5":
-					id = 5;
-					break;
-				default:
-					id = 2;
-					break;
+				id = 1;
+			}
+			else if (string.Equals(connectorId, "hdmiin2", StringComparison.OrdinalIgnoreCase))
+			{
+				id = 2;
+			}
+			else if (string.Equals(connectorId, "hdmiin3", StringComparison.OrdinalIgnoreCase))
+			{
+				id = 3;
+			}
+			else if (string.Equals(connectorId, "hdmiin4", StringComparison.OrdinalIgnoreCase))
+			{
+				id = 4;
+			}
+			else if (string.Equals(connectorId, "hdmiin5", StringComparison.OrdinalIgnoreCase))
+			{
+				id = 5;
+			}
+			else
+			{
+				id = 2;
 			}
 			EnqueueCommand(
 				string.Format(
