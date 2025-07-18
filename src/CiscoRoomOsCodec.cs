@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -1508,7 +1508,8 @@ namespace epi_videoCodec_ciscoExtended
 			};
 			CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction += () =>
 			{
-				PresenterTrackAvailableFeedback.FireUpdate();
+                PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
+                PresenterTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
 				OnCameraTrackingCapabilitiesChanged();
 			};
@@ -2883,7 +2884,7 @@ namespace epi_videoCodec_ciscoExtended
 				if (String.IsNullOrEmpty(presenterTrackToken.ToString()))
 					return;
 				var presenterTrackObject = presenterTrackToken as JObject;
-				if (presenterTrackObject == null)
+                if (presenterTrackObject == null)
 					return;
 				var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
 				var statusToken = presenterTrackObject.SelectToken("Status.Value");
@@ -6955,7 +6956,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void PresenterTrackOff()
 		{
-			if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
+			if (!PresenterTrackAvailability)
 			{
 				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
 				return;
@@ -6970,10 +6971,10 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void PresenterTrackFollow()
 		{
-			if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
+			if (!PresenterTrackAvailability)
 			{
-				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-				return;
+                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+                return;
 			}
 			if (CameraIsOffFeedback.BoolValue)
 			{
@@ -6985,7 +6986,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void PresenterTrackBackground()
 		{
-			if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
+			if (!PresenterTrackAvailability)
 			{
 				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
 				return;
@@ -7001,7 +7002,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		public void PresenterTrackPersistent()
 		{
-			if (!CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue)
+			if (!PresenterTrackAvailability)
 			{
 				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
 				return;
