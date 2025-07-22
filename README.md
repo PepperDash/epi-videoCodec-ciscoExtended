@@ -290,6 +290,32 @@ This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
 which contains the Base64-encoded "customIconContent" for each icon.
 
+### Available default icons
+
+Briefing
+Camera
+Concierge
+Disc
+Handset
+Help
+Helpdesk
+Home
+Hvac
+Info
+Input
+Language
+Laptop
+Lightbulb
+Media
+Microphone
+Power
+Proximity
+Record
+Spark
+Tv
+Webex
+General
+Sliders
 
 ```json
 {
