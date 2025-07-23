@@ -8,27 +8,53 @@ using PepperDash.Essentials.Devices.Common.Codec;
 
 namespace epi_videoCodec_ciscoExtended
 {
+    /// <summary>
+    /// Contains data classes for managing bookings and meeting information from Cisco codecs.
+    /// This class provides the structure for parsing and handling booking data from the codec's API.
+    /// </summary>
     public class CiscoExtendedCodecBookings
     {
+        /// <summary>
+        /// Represents the total number of booking rows returned from the codec.
+        /// </summary>
         public class TotalRows
         {
+            /// <summary>
+            /// Gets or sets the total row count as a string value.
+            /// </summary>
             public string Value { get; set; }
         }
 
+        /// <summary>
+        /// Contains result information including total row count for booking queries.
+        /// </summary>
         public class ResultInfo
         {
+            /// <summary>
+            /// Gets or sets the total rows information.
+            /// </summary>
             public TotalRows TotalRows { get; set; }
 
+            /// <summary>
+            /// Initializes a new instance of the ResultInfo class.
+            /// </summary>
             public ResultInfo()
             {
                 TotalRows = new TotalRows();
             }
         }
 
+        /// <summary>
+        /// Represents the last updated timestamp for booking information.
+        /// </summary>
         public class LastUpdated
         {
             string _value;
 
+            /// <summary>
+            /// Gets or sets the last updated datetime value.
+            /// Automatically converts between string and DateTime representations.
+            /// </summary>
             public DateTime Value
             {
                 get

@@ -39,6 +39,18 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         [XmlIgnore]
         public PanelsHandler PanelsHandler { get; set; }
 
+        /// <summary>
+        /// Initializes the Extensions object, setting up the PanelsHandler and sending the XML command if SkipXml is false.
+        /// </summary>
+        /// <param name="parent">The parent device that this Extensions object belongs to.</param>
+        /// <param name="enqueueCommand">Action to enqueue the command for sending.</param>
+        /// <remarks>
+        /// This method initializes the PanelsHandler with the provided parent and command enqueue action.
+        /// If SkipXml is false, it constructs the XML command string using the xCommand method
+        /// and enqueues it for sending.
+        /// </remarks>
+        /// <exception cref="Exception">Thrown if XML serialization fails.</exception>       
+
         public void Initialize(IKeyed parent, Action<string> enqueueCommand)
         {
             Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
@@ -60,17 +72,15 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         /// <summary>
         /// string literal for multiline command 
         /// </summary>
-        /// <returns></returns>
-        public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}
-{toXmlString()}
-.{CiscoCodec.Delimiter}";
+        /// <returns>The complete xCommand string including ConfigId and XML configuration data.</returns>
+        public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}{ToXmlString()}.{CiscoCodec.Delimiter}";
 
         /// <summary>
         /// converts the props on this object with xml attributes to 
         /// an xml string for the xCommand
         /// </summary>
         /// <returns></returns>
-        string toXmlString()
+        private string ToXmlString()
         {
             try
             {

@@ -8,11 +8,21 @@ using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
 
 namespace epi_videoCodec_ciscoExtended
 {
+    /// <summary>
+    /// Configuration class for Cisco video codec settings and properties.
+    /// Contains all configurable options for codec behavior, UI extensions, sharing, and external sources.
+    /// </summary>
     public class CiscoCodecConfig
     {
+        /// <summary>
+        /// Gets or sets the communication monitor configuration properties.
+        /// </summary>
         [JsonProperty("communicationMonitorProperties")]
         public CommunicationMonitorConfig CommunicationMonitorProperties { get; set; }
 
+        /// <summary>
+        /// Gets or sets the list of favorite call destinations.
+        /// </summary>
         [JsonProperty("favorites")]
         public List<CodecActiveCallItem> Favorites { get; set; }
 
@@ -22,9 +32,15 @@ namespace epi_videoCodec_ciscoExtended
         [JsonProperty("phonebookMode")]
         public string PhonebookMode { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether self view should be shown by default.
+        /// </summary>
         [JsonProperty("showSelfViewByDefault")]
         public bool ShowSelfViewByDefault { get; set; }
 
+        /// <summary>
+        /// Gets or sets the content sharing configuration properties.
+        /// </summary>
         [JsonProperty("sharing")]
         public SharingProperties Sharing { get; set; }
 
