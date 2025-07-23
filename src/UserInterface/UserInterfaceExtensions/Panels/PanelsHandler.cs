@@ -200,9 +200,9 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, int value)
     {
-      if (!(feedbackConfig.StringFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
+      if (!(feedbackConfig.IntFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
-        Debug.LogWarning(_parent, "Panel {panelId} feedback string value not found: {value}", panel.PanelId, value);
+        Debug.LogWarning(_parent, "Panel {panelId} feedback integer value not found: {value}", panel.PanelId, value);
         return;
       }
 

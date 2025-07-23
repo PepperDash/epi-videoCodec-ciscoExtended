@@ -96,7 +96,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         /// Generates the xCommand string for configuring UI Extensions on the Cisco codec.
         /// </summary>
         /// <returns>The complete xCommand string including ConfigId and XML configuration data.</returns>
-        public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}{ToXmlString()}.{CiscoCodec.Delimiter}";
+        public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}
+{ToXmlString()}.{CiscoCodec.Delimiter}";
 
         /// <summary>
         /// converts the props on this object with xml attributes to 
