@@ -7,7 +7,7 @@ using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
-    {
+{
     /// <summary>
     /// Represents a panel configuration for Cisco Codec UI Extensions.
     /// This class implements the ICiscoCodecUiExtensionsPanel interface and provides properties
@@ -16,7 +16,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
     /// The class supports serialization to XML and JSON formats for configuration purposes.
     /// </summary>
     public class Panel : ICiscoCodecUiExtensionsPanel
-        {
+    {
         /// <inheritdoc />
         public event EventHandler ClickedEvent;
 
@@ -34,6 +34,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [JsonProperty("panelId")]
         public string PanelId { get; set; }
 
+        /// <inheritdoc />
         [XmlElement("Location")]
         [JsonProperty("location")]
         [JsonConverter(typeof(StringEnumConverter))]
@@ -60,19 +61,19 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [XmlIgnore]
         [JsonProperty("iconId")]
         public string IconId
-            {
+        {
             get => CustomIcon?.Id;
             set
-                {
+            {
                 if (!string.IsNullOrEmpty(value))
-                    {
+                {
                     if (CustomIcon == null)
                         CustomIcon = new CustomIconWrapper();
 
                     CustomIcon.Id = value;
-                    }
                 }
             }
+        }
 
         /// <summary>
         /// Base64 image content for custom icon.
@@ -81,19 +82,19 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [XmlIgnore]
         [JsonProperty("customIconContent")]
         public string CustomIconContent
-            {
+        {
             get => CustomIcon?.Content;
             set
-                {
+            {
                 if (!string.IsNullOrEmpty(value))
-                    {
+                {
                     if (CustomIcon == null)
                         CustomIcon = new CustomIconWrapper();
 
                     CustomIcon.Content = value;
-                    }
                 }
             }
+        }
 
         /// <inheritdoc />
         [XmlElement("Name")]
@@ -131,10 +132,113 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         [JsonProperty("deviceActions", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
         public List<DeviceActionWrapper> DeviceActions { get; set; }
-        }
 
+        /// <summary>
+        /// Feedback configuration for the panel.
+        /// This property defines how the panel should respond to feedback from associated devices.
+        /// </summary>
+        [JsonProperty("panelFeedback", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback { get; set; }
+    }
+
+    /// <summary>
+    /// Represents feedback configuration for a panel.
+    /// This class defines how feedback should be handled for a panel, including the device key,
+    /// feedback key, property to change, and the values for true and false states.
+    /// It also supports string and integer feedback property values for more complex feedback scenarios.
+    /// </summary>
+    public class PanelFeedback
+    {
+        /// <summary>
+        /// Device key for the panel feedback.
+        /// This is used to identify the device that provides feedback for the panel.
+        /// The device MUST implement IHasFeedback.
+        /// </summary>
+        [JsonProperty("deviceKey")]
+        public string DeviceKey { get; set; }
+
+        /// <summary>
+        /// Feedback key for the panel.
+        /// This key is used to identify the specific feedback to be monitored.
+        /// </summary>
+        [JsonProperty("feedbackKey")]
+        public string FeedbackKey { get; set; }
+
+        /// <summary>
+        /// Property to change based on feedback.
+        /// This property indicates which aspect of the panel should be updated in response to feedback.
+        /// Valid values are defined in the EPanelProperty enum.
+        /// </summary>
+        [JsonProperty("propertyToChange")]
+        public EPanelProperty PropertyToChange { get; set; }
+
+        /// <summary>
+        /// Feedback event type.
+        /// This property defines the type of feedback event that will trigger changes in the panel.
+        /// It can be a boolean, string, or integer type, as defined in the eFeedbackEventType enum.
+        /// </summary>
+        [JsonProperty("feedbackEventType")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public eFeedbackEventType FeedbackEventType { get; set; }
+
+        /// <summary>
+        /// Value to set when feedback is true.
+        /// This property defines the value that should be applied to the panel when the feedback condition is true.
+        /// It is applicable for boolean feedback events.
+        /// </summary>
+        [JsonProperty("truePropertyValue", NullValueHandling = NullValueHandling.Ignore)]
+        public string TruePropertyValue { get; set; }
+
+        /// <summary>
+        /// Value to set when feedback is false.
+        /// This property defines the value that should be applied to the panel when the feedback condition is false.
+        /// It is applicable for boolean feedback events.
+        /// </summary>
+        [JsonProperty("falsePropertyValue", NullValueHandling = NullValueHandling.Ignore)]
+        public string FalsePropertyValue { get; set; }
+
+        /// <summary>
+        /// Dictionary of string feedback property values.
+        /// This dictionary maps string keys to their corresponding values, allowing for dynamic updates
+        /// based on feedback events. It is used when the feedback event type is a string.
+        /// </summary>
+        [JsonProperty("stringFeedbackPropertyValues", NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<string, string> StringFeedbackPropertyValues { get; set; }
+
+        /// <summary>
+        /// Dictionary of integer feedback property values.
+        /// This dictionary maps integer keys to their corresponding values, allowing for dynamic updates
+        /// based on feedback events. It is used when the feedback event type is an integer.
+        /// </summary>
+        [JsonProperty("intFeedbackPropertyValues", NullValueHandling = NullValueHandling.Ignore)]
+        public Dictionary<int, string> IntFeedbackPropertyValues { get; set; }
+    }
+
+    /// <summary>
+    /// Defines the properties that can be changed on a panel based on feedback.
+    /// </summary>
+    public enum EPanelProperty
+    {
+        /// <summary>
+        /// Text property of the panel.
+        /// </summary>
+        Text,
+        /// <summary>
+        /// Color property of the panel.
+        /// </summary>
+        Color,
+        /// <summary>
+        /// Location property of the panel.
+        /// </summary>
+        Location,
+    }
+
+    /// <summary>
+    /// Wrapper class for custom icon XML serialization.
+    /// </summary>
     public class CustomIconWrapper
-        {
+    {
         /// <summary>
         /// The unique identifier of the custom icon.
         /// </summary>
@@ -146,13 +250,13 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         /// </summary>
         [XmlElement("Content")]
         public string Content { get; set; }
-        }
+    }
 
     /// <summary>
     /// Defines the available predefined icons for Cisco codec panels.
     /// </summary>
     public enum ECiscoPanelIcons
-        {
+    {
         /// <summary>Briefing icon.</summary>
         Briefing,
         /// <summary>Camera icon.</summary>
@@ -203,7 +307,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Pan
         Sliders,
         /// <summary>Custom icon (requires custom icon configuration).</summary>
         Custom
-        }
+    }
 
     /// <summary>
     /// Defines the available locations where panels can be displayed on the Cisco codec interface.

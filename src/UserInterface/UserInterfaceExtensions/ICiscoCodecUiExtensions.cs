@@ -1,19 +1,19 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
-using PepperDash.Core;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Core;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 {
-	public interface ICiscoCodecUiExtensionsHandler : 
-		ICiscoCodecUiExtensionsWebViewDisplayHandler, 
-		ICiscoCodecUiExtensionsClickedEvent, 
+	public interface ICiscoCodecUiExtensionsHandler :
+		ICiscoCodecUiExtensionsWebViewDisplayHandler,
+		ICiscoCodecUiExtensionsClickedEvent,
 		ICiscoCodecUiExtensionsPanelClickedEventHandler
-    {
+	{
 	}
 
 	public interface ICiscoCodecUiExtensionsController
@@ -22,15 +22,17 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 	}
 
 	public interface ICiscoCodecUiExtensions
-    {
-        List<Panel> Panels { get; }
-        //other extensions later
+	{
+		List<Panel> Panels { get; }
+		//other extensions later
 
-        PanelsHandler PanelsHandler { get; }
+		PanelsHandler PanelsHandler { get; }
 
-        void Initialize(IKeyed parent, Action<string> enqueueCommand);
+		void Initialize(IKeyed parent, Action<string> enqueueCommand);
 
-        string xCommand();
-    }
+		void Update(Action<string> enqueueCommand);
+
+		string xCommand();
+	}
 
 }

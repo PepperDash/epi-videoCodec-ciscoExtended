@@ -1,11 +1,11 @@
-﻿using Newtonsoft.Json;
+﻿using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
+using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
 using epi_videoCodec_ciscoExtended.Xml;
+using Newtonsoft.Json;
 using PepperDash.Core;
 using Serilog.Events;
-using System;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
 
 namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 {
@@ -17,6 +17,7 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
     [XmlRoot("Extensions")]
     public class Extensions : ICiscoCodecUiExtensions
     {
+        private IKeyed parent;
         [XmlElement("Version")]
         public string Version { get; set; }
 
@@ -27,12 +28,12 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
         [XmlElement("Panel")]
         [JsonProperty("panels")]
         public List<Panel> Panels { get; set; }
-        
+
         [XmlIgnore]
         [JsonProperty("doNotSendXml")]
-        public bool SkipXml { get; set; } 
+        public bool SkipXml { get; set; }
         // Lets you skip sending the XML command on init if they are added externally
-        
+
         //other extensions later
 
         [JsonIgnore]
@@ -53,6 +54,8 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
 
         public void Initialize(IKeyed parent, Action<string> enqueueCommand)
         {
+            this.parent = parent;
+
             Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
             PanelsHandler = new PanelsHandler(parent, enqueueCommand, Panels);
             //Debug.LogMessage(LogEventLevel.Warning, xCommand(), parent);
@@ -61,16 +64,36 @@ namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
             {
                 return;
             }
-            
+
             var xml = xCommand();
-            var message = "Sending XML data: " + xml;
-            
-            Debug.LogMessage(level: LogEventLevel.Debug, message: message, device: parent);
-            enqueueCommand(xCommand());
+
+            Debug.LogDebug(parent, "Sending XML data: {xml}", xml);
+
+            enqueueCommand(xml);
         }
 
         /// <summary>
-        /// string literal for multiline command 
+        /// Updates the Extensions configuration by sending the XML command if SkipXml is false.
+        /// </summary>
+        /// <param name="enqueueCommand">Action to enqueue the command for sending.</param>
+        public void Update(Action<string> enqueueCommand)
+        {
+            if (SkipXml)
+            {
+                return;
+            }
+
+            var xml = xCommand();
+
+            Debug.LogDebug(parent, "Sending XML data: {xml}", xml);
+
+            enqueueCommand(xml);
+        }
+
+
+
+        /// <summary>
+        /// Generates the xCommand string for configuring UI Extensions on the Cisco codec.
         /// </summary>
         /// <returns>The complete xCommand string including ConfigId and XML configuration data.</returns>
         public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}{ToXmlString()}.{CiscoCodec.Delimiter}";
