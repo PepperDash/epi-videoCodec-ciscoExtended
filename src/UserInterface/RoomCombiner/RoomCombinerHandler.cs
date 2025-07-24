@@ -1,32 +1,21 @@
-﻿using PepperDash.Essentials.Core;
-using PepperDash.Essentials.Core.Devices;
-using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
-using PepperDash.Essentials.Devices.Common.VideoCodec;
-using Serilog.Events;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using PepperDash.Core;
+using PepperDash.Essentials.Core;
+using Serilog.Events;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.RoomCombiner
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner
 {
-	public interface IRoomCombinerHandler
-	{
-		EssentialsRoomCombiner EssentialsRoomCombiner { get; }
-	}
-
-	public class RoomCombinerHandler: IRoomCombinerHandler
-	{
+    public class RoomCombinerHandler
+    {
         public EssentialsRoomCombiner EssentialsRoomCombiner { get; private set; }
 
-        public RoomCombinerHandler(ICiscoCodecUserInterface ui)
+        public RoomCombinerHandler(CiscoCodecUserInterface ui)
         {
             ui.AddCustomActivationAction(() => GetDeviceForType(ui));
         }
 
-        private void GetDeviceForType(ICiscoCodecUserInterface ui)
+        private void GetDeviceForType(CiscoCodecUserInterface ui)
         {
             //company room null check
             if (ui == null)
@@ -36,31 +25,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodec
             }
             try
             {
-                Debug.LogMessage(
-                    LogEventLevel.Debug,
-                    "Setting up RoomCombinerHandler for {0}",
-                    ui,
-                    ui.Key
-                );
-                Debug.LogMessage(
-                    LogEventLevel.Debug,
-                    "Get Interface: IEssentialsRoomCombiner",
-                    ui
-                );
-
                 var combiners = DeviceManager.AllDevices.OfType<EssentialsRoomCombiner>().ToList();
 
-                if (combiners == null)
+                if (combiners == null || combiners.Count == 0)
                 {
                     Debug.LogMessage(LogEventLevel.Debug, $"[Warning]: {ui.Key} could not find RoomCombiner", ui);
                     return;
                 }
 
-                if (combiners.Count == 0)
-                {
-                    Debug.LogMessage(LogEventLevel.Debug, $"[Warning]: {ui.Key} could not find RoomCombiner", ui);
-                    return;
-                }
                 if (combiners.Count > 1)
                 {
                     Debug.LogMessage(LogEventLevel.Debug, $"[Warning]: {ui.Key} found more than one RoomCombiner", ui);

@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
+using Newtonsoft.Json;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
-
-using Newtonsoft.Json;
-using Extensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Extensions;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
+using UiExtensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.UiExtensions;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -103,8 +102,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("Widgets")]
         public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
-		[JsonProperty("extensions")]
-		public Extensions Extensions { get; set; }
+        [JsonProperty("extensions")]
+        public UiExtensions Extensions { get; set; }
 
         [JsonProperty("emergency")]
         public Emergency Emergency { get; set; }
@@ -168,6 +167,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public string MobileControlPath { get; set; }
 
         [JsonProperty("uiWebViewDisplay")]
-        public UiWebViewDisplay UiWebViewDisplay { get; set; }
+        public WebViewDisplay UiWebViewDisplay { get; set; }
     }
 }

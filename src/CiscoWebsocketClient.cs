@@ -1,15 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronWebSocketClient;
-using Crestron.SimplSharp.Net;
-using Crestron.SimplSharp.Net.Http;
-using Crestron.SimplSharp.Net.Https;
-using Crestron.SimplSharpPro.DM.Endpoints;
 using PepperDash.Core;
-using RequestType = Crestron.SimplSharp.Net.Https.RequestType;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -21,11 +14,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private readonly CrestronQueue<Action> _requestQueue = new CrestronQueue<Action>(20);
         private readonly ControlPropertiesConfig _config;
 
-        public CiscoWebsocketClient(string key, ControlPropertiesConfig controlConfig) 
+        public CiscoWebsocketClient(string key, ControlPropertiesConfig controlConfig)
         {
             if (string.IsNullOrEmpty(key) || controlConfig == null)
             {
-                Debug.Console(0, "WebSocketClient key or Host is null or empty - failed to instantiate websocket client" );
+                Debug.Console(0, "WebSocketClient key or Host is null or empty - failed to instantiate websocket client");
                 return;
             }
             _config = controlConfig;
@@ -47,7 +40,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     URL = String.Format("wss://{0}:{1}@{2}/ws", _config.TcpSshProperties.Username,
                     _config.TcpSshProperties.Password, _config.TcpSshProperties.Address),
                     KeepAlive = true,
-                    ConnectionCallBack =  WebsocketConnected,
+                    ConnectionCallBack = WebsocketConnected,
                     DisconnectCallBack = WebsocketDisconnected,
                     ReceiveCallBack = WebsocketReceiveCallback
                 };
@@ -66,14 +59,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             return (int)error;
         }
 
-        public int WebsocketReceiveCallback(byte[] data, uint dataLen, 
+        public int WebsocketReceiveCallback(byte[] data, uint dataLen,
             WebSocketClient.WEBSOCKET_PACKET_TYPES opcode, WebSocketClient.WEBSOCKET_RESULT_CODES error)
         {
-            if (opcode != WebSocketClient.WEBSOCKET_PACKET_TYPES.LWS_WS_OPCODE_07__TEXT_FRAME) return (int) error;
+            if (opcode != WebSocketClient.WEBSOCKET_PACKET_TYPES.LWS_WS_OPCODE_07__TEXT_FRAME) return (int)error;
             var strData = Encoding.ASCII.GetString(data, 0, data.Length);
             Debug.Console(0, this, "Incoming Data Packet From Websocket");
             Debug.Console(0, this, "{0}", strData);
-            return (int) error;
+            return (int)error;
         }
 
         /*

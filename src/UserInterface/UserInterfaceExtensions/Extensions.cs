@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
 using Newtonsoft.Json;
 using PepperDash.Core;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
 using Serilog.Events;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
@@ -15,7 +16,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     /// Json attributes for config, xml attributes for command structure
     /// </summary>
     [XmlRoot("Extensions")]
-    public class Extensions : ICiscoCodecUiExtensions
+    public class UiExtensions
     {
         private IKeyed parent;
         [XmlElement("Version")]

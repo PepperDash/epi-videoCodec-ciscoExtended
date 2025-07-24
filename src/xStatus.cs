@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using PepperDash.Core;
-using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Core.Presets;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Devices.Common.VideoCodec;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
     /// </summary>
-    public class CiscoCodecStatus 
+    public class CiscoCodecStatus
     {
         public class ConnectionStatus
         {
@@ -135,7 +135,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             /// </summary>
             public int IntValue
             {
-                get {
+                get
+                {
                     return !string.IsNullOrEmpty(_value) ? Convert.ToInt32(_value) : 0;
                 }
             }
@@ -365,7 +366,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public bool BoolValue { get; private set; }
             public string StringValue { get; private set; }
 
-            public List<string> SpeakerTrackStatusValues { get; private set; }  
+            public List<string> SpeakerTrackStatusValues { get; private set; }
 
 
             public string Value
@@ -422,7 +423,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             string _value;
             public string StringValue { get; private set; }
             public bool BoolValue { get; private set; }
-            public List<string> PresenterTrackStatusValues { get; private set; }  
+            public List<string> PresenterTrackStatusValues { get; private set; }
 
             public string Value
             {
@@ -442,7 +443,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             public PresenterTrackStatus()
             {
-                PresenterTrackStatusValues = new List<string> {"off", "follow", "diagnostic", "background", "setup", "persistent"};
+                PresenterTrackStatusValues = new List<string> { "off", "follow", "diagnostic", "background", "setup", "persistent" };
             }
         }
 
@@ -711,7 +712,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public bool Off { get { return !LocalOnly && !LocalRemote; } }
         }
 
-        public class LocalInstance 
+        public class LocalInstance
         {
 
 
@@ -850,16 +851,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public class Reason
         {
             public string Value { get; set; }
-		}
+        }
 
-		public class XPath
-		{
-			public string Value { get; set; }
-		}
+        public class XPath
+        {
+            public string Value { get; set; }
+        }
 
 
 
-		public class H323Mode
+        public class H323Mode
         {
             public Reason Reason { get; set; }
             public Status Status { get; set; }
@@ -1097,7 +1098,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string Value { get; set; }
         }
 
-// ReSharper disable once InconsistentNaming
+        // ReSharper disable once InconsistentNaming
         public class IPv4
         {
             public Address Address { get; set; }
@@ -1111,7 +1112,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
 
-// ReSharper disable once InconsistentNaming
+        // ReSharper disable once InconsistentNaming
         public class IPv6
         {
             public Address Address { get; set; }
@@ -1141,9 +1142,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public Cdp Cdp { get; set; }
             public Dns Dns { get; set; }
             public Ethernet Ethernet { get; set; }
-// ReSharper disable once InconsistentNaming
+            // ReSharper disable once InconsistentNaming
             public IPv4 IPv4 { get; set; }
-// ReSharper disable once InconsistentNaming
+            // ReSharper disable once InconsistentNaming
             public IPv6 IPv6 { get; set; }
             public Vlan Vlan { get; set; }
 
@@ -1357,7 +1358,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             /// </summary>
             public int IntValue
             {
-                get {
+                get
+                {
                     return !string.IsNullOrEmpty(_value) ? Convert.ToInt32(_value) : 0;
                 }
             }
@@ -1458,7 +1460,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             public CallForward()
             {
-                DisplayName = new DisplayName();    
+                DisplayName = new DisplayName();
             }
         }
 
@@ -1868,8 +1870,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public class UserInterface
         {
             public ContactInfo ContactInfo { get; set; }
-			public List<UiWebView> WebViews { get; set; }
-		}
+            public List<WebView> WebViews { get; set; }
+        }
 
 
         public class ActiveSpeakerPip
@@ -1889,13 +1891,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
 
-#region Type
+        #region Type
         public class Type
         {
             public string Value { get; set; }
         }
 
-#endregion
+        #endregion
 
 
         public class Connector
@@ -2394,14 +2396,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public NetworkCount NetworkCount { get; set; }
             private List<Network> _networks;
             [JsonProperty("Network")]
-            public List<Network> Networks {
+            public List<Network> Networks
+            {
                 get { return _networks; }
                 set
                 {
                     if (value == null) return;
                     _networks = value;
                     NetworkCount.Value = value.Count;
-                } }
+                }
+            }
             public NetworkServices NetworkServices { get; set; }
             public Peripherals Peripherals { get; set; }
             public Provisioning Provisioning { get; set; }
@@ -2431,11 +2435,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public Time Time { get; set; }
             public UserInterface UserInterface { get; set; }
             public Video Video { get; set; }
-			public Reason Reason { get; set; }
-			public XPath XPath { get; set; }
-			public string status { get; set; }
+            public Reason Reason { get; set; }
+            public XPath XPath { get; set; }
+            public string status { get; set; }
 
-			public Status()
+            public Status()
             {
                 RoomPresetsChange = new RoomPresetsChange();
                 _roomPresets = new List<RoomPreset>();
@@ -2537,7 +2541,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
         public class CurrentLayouts
         {
-            private List<LayoutData> _availableLayouts; 
+            private List<LayoutData> _availableLayouts;
 
             public ActiveLayout ActiveLayout { get; set; }
 

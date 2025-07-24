@@ -14,11 +14,8 @@
 //-----------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
@@ -27,7 +24,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 
     public class UIExtensionsHandler
-    {        
+    {
         private readonly IKeyed _parent;
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
@@ -65,7 +62,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Debug.Console(1, _parent, "WidgetEvent: {0}", val.ToString());
             var val_ = JsonConvert.SerializeObject(val);
             Debug.Console(1, _parent, "WidgetEvent val: {0}", val_);
-            
+
             var action_ = new CiscoCodecEvents.WidgetAction();
             if (val.Pressed != null)
             {
@@ -89,7 +86,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             action_.Id = String.Empty;
             var arr_ = action_.Value.Split(':'); // "tv_menu:menu";
-            if(arr_.Length > 1)
+            if (arr_.Length > 1)
             {
                 action_.Value = arr_[0]; // "tv_menu"
                 action_.Id = arr_[1]; // "menu"
@@ -97,7 +94,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             else
                 _widgetEventData = String.Format("/{0} /{1}", action_.Value, action_.Type); // e.g. "/blinds /pressed /increment"
-            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);            
+            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);
             WidgetEventFeedback.FireUpdate();
         }
 

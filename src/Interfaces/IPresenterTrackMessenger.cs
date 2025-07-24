@@ -1,11 +1,6 @@
 ﻿using PepperDash.Core;
 using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Devices.Common.Codec.Cisco;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
@@ -15,8 +10,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
     /// </summary>
     internal class IPresenterTrackMessenger : MessengerBase
     {
-        private readonly IPresenterTrack _presenterTrack; 
-        
+        private readonly IPresenterTrack _presenterTrack;
+
         /// <summary>
         /// Initializes a new instance of the IPresenterTrackMessenger class.
         /// </summary>
@@ -32,7 +27,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 
         protected override void RegisterActions()
         {
-            if(_presenterTrack == null)
+            if (_presenterTrack == null)
             {
                 Debug.LogMessage(Serilog.Events.LogEventLevel.Error, $"{Key} does not implement IPresenterTrack", this, _presenterTrack.Key);
                 return;

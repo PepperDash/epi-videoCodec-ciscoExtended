@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 {
     /// <summary>
     /// Represents a panel configuration for Cisco Codec UI Extensions.
@@ -15,7 +15,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     /// It also includes event handling for panel click events.
     /// The class supports serialization to XML and JSON formats for configuration purposes.
     /// </summary>
-    public class Panel : ICiscoCodecUiExtensionsPanel
+    public class Panel
     {
         /// <inheritdoc />
         public event EventHandler ClickedEvent;
@@ -123,7 +123,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         /// </summary>
         [JsonProperty("uiWebViewDisplays", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
-        public List<UiWebViewDisplayConfig> UiWebViewDisplays { get; set; }
+        public List<WebViewDisplayConfig> UiWebViewDisplays { get; set; }
 
         /// <summary>
         /// Collection of device actions associated with the panel.
