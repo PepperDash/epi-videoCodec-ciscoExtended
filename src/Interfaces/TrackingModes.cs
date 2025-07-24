@@ -1,6 +1,4 @@
-﻿using PepperDash.Core;
-using PepperDash.Essentials.Core;
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
+﻿namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
     //internal enum eCiscoCameraMode
     //{
@@ -8,7 +6,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
     //    PresenterTrack,
     //    Manual
     //}
-    
+
     ///// <summary>
     ///// Describes the available tracking modes for a Cisco codec
     ///// </summary>

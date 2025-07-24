@@ -1,44 +1,36 @@
-﻿using Crestron.SimplSharp;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Icons;
-using Newtonsoft.Json;
+﻿using System;
+using System.Collections.Generic;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.Devices;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Icons;
 using Serilog.Events;
-using System;
-using System.Collections.Generic;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 {
-    public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface
+    public class CiscoCodecUserInterface : ReconfigurableDevice
     {
-        public CiscoCodec UisCiscoCodec { get; private set; }
-        public CiscoCodecUserInterfaceConfig ConfigProps { get; }
-        public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
+        public CiscoCodec Parent { get; private set; }
+        public UserInterfaceConfig ConfigProps { get; }
+        public ExtensionsHandler UiExtensionsHandler { get; set; }
+        public UiExtensions UiExtensions { get; private set; }
 
-        public ICiscoCodecUiExtensions UiExtensions { get; private set; }
-
-        public RoomCombiner.IRoomCombinerHandler RoomCombinerHandler { get; private set; }
+        public RoomCombinerHandler RoomCombinerHandler { get; private set; }
 
         public bool EnableLockoutPoll { get; set; } = false;
 
         public bool LockedOut { get; set; } = false;
 
-        #region ParseConfigProps
-        public T ParseConfigProps<T>(DeviceConfig config)
-        {
-            return JsonConvert.DeserializeObject<T>(config.Properties.ToString());
-        }
-        #endregion
-
         #region Custom Activate
-        private List<Action> CustomActivateActions = new List<Action>();
+        private readonly List<Action> CustomActivateActions = new List<Action>();
 
         public override bool CustomActivate()
         {
-            
+
             foreach (var action in CustomActivateActions)
             {
                 action();
@@ -54,53 +46,55 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodec
 
         public virtual void BuildRoomCombinerHandler()
         {
-            RoomCombinerHandler = new RoomCombiner.RoomCombinerHandler(this);
+            RoomCombinerHandler = new RoomCombinerHandler(this);
         }
-
 
         public CiscoCodecUserInterface(DeviceConfig config) : base(config)
         {
-            ConfigProps = ParseConfigProps<CiscoCodecUserInterfaceConfig>(config);
+            ConfigProps = config.Properties.ToObject<UserInterfaceConfig>();
             EnableLockoutPoll = ConfigProps.EnableLockoutPoll ?? false;
             AddPreActivationAction(PreActivateAction);
             BuildRoomCombinerHandler();
         }
 
-        
-
-
         public void PreActivateAction()
-            {
+        {
             // Create an instance of IconHandler to call the method  
             Debug.LogMessage(LogEventLevel.Debug, "iconHandler.DumpAllPngsToBase64() called.", this);
 
             IconHandler.DumpAllPngsToBase64();
 
             Debug.LogMessage(LogEventLevel.Debug, "Activating Video Codec UI Extensions", this);
-            UisCiscoCodec = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
+            Parent = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
 
-            if (UisCiscoCodec == null)
-                {
+            if (Parent == null)
+            {
                 var msg = $"Video codec UserInterface could not find codec with key '{ConfigProps.VideoCodecKey}'.";
                 Debug.LogMessage(new NullReferenceException(msg), msg, this);
                 return;
-                }
+            }
 
             UiExtensions = ConfigProps.Extensions;
-            CiscoCodecUiExtensionsHandler = new UserInterfaceExtensionsHandler(this, UisCiscoCodec.EnqueueCommand);
 
-            UisCiscoCodec.UiExtensions = UiExtensions;
-            UisCiscoCodec.CiscoCodecUiExtensionsHandler = CiscoCodecUiExtensionsHandler;
+            UiExtensionsHandler = new ExtensionsHandler(this, Parent.EnqueueCommand);
 
-            UisCiscoCodec.IsReadyChange += (s, a) =>
+            Parent.UiExtensions = UiExtensions;
+
+            Parent.UiExtensionsHandler = UiExtensionsHandler;
+
+            Parent.IsReadyChange += (s, a) =>
             {
-                if (!UisCiscoCodec.IsReady) return;
+                if (!Parent.IsReady) return;
+
                 var msg = UiExtensions != null ? "Initializing Video Codec UI Extensions" : "No Ui Extensions in config";
+
                 Debug.LogMessage(LogEventLevel.Debug, msg, this);
-                UiExtensions.Initialize(this, UisCiscoCodec.EnqueueCommand);
+
+                UiExtensions.Initialize(this, Parent.EnqueueCommand);
+
                 Debug.LogMessage(LogEventLevel.Debug, "Video Codec UI Extensions Handler Initilizing", this);
             };
             return;
-            }
         }
+    }
 }

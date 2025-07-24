@@ -1,14 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using Newtonsoft.Json;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView
 {
-    public class UiWebViewDisplayConfig
+    public class WebViewDisplayConfig
     {
         [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)]
         public string Target { get; set; }
@@ -32,19 +27,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         public Dictionary<string, string> QueryParams { get; set; }
 
         // Static collection to hold all instances of UiWebViewDisplayConfig
-        private static List<UiWebViewDisplayConfig> _webViewConfigs = new List<UiWebViewDisplayConfig>();
+        private static List<WebViewDisplayConfig> webViewConfigs = new List<WebViewDisplayConfig>();
 
         // Constructor to add instances to the collection
-        public UiWebViewDisplayConfig()
-            {
-            _webViewConfigs.Add(this);
-            }
+        public WebViewDisplayConfig()
+        {
+            webViewConfigs.Add(this);
+        }
 
         // Public method to get all instances
-        public static List<UiWebViewDisplayConfig> GetWebViewConfigs()
-            {
-            return _webViewConfigs;
-            }
+        public static List<WebViewDisplayConfig> GetWebViewConfigs()
+        {
+            return webViewConfigs;
         }
+    }
 
 }
