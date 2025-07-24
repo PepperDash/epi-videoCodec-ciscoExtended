@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+
 using System.Linq;
 using System.Timers;
 using Crestron.SimplSharp.Net;
@@ -14,7 +15,7 @@ using Serilog.Events;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
-    internal class NavigatorRoomCombinerLockoutHandler : IKeyed
+    internal class NavigatorLockoutHandler : IKeyed
     {
         private NavigatorController mcTpController;
 
@@ -38,7 +39,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             Mode = "Modal"
         };
 
-        internal NavigatorRoomCombinerLockoutHandler(
+        internal NavigatorLockoutHandler(
             NavigatorController ui,
             NavigatorConfig props
         )
@@ -46,7 +47,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             this.props = props;
             mcTpController = ui;
 
-            Key = ui.Key + "-NavigatorRoomCombinerLockout";
+            Key = ui.Key + "-NavigatorLockout";
 
             lockoutPollTimer = new Timer(
                                       this.props?.Lockout?.PollIntervalMs > 0 ? this.props.Lockout.PollIntervalMs : 5000
@@ -103,82 +104,91 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             if (combinerHandler.EssentialsRoomCombiner != null)
             {
                 //subscribe to events for routing buttons from codec ui to mobile control
-                combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged +=
-                    Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler;
+                combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
             }
 
             extensionsHandler.UiExtensionsClickedEvent +=
                 VideoCodecUiExtensionsClickedMcEventHandler;
 
             defaultRoomKey = mcTpController?.DefaultRoomKey;
+
+            SetupCustomLockouts();
         }
 
-        private void Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler(
-            object sender,
-            EventArgs e
-        )
+        private void SetupCustomLockouts()
         {
-            HandleRoomCombineScenarioChanged();
+            foreach (var lockout in props.CustomLockouts)
+            {
+                if (!(DeviceManager.GetDeviceForKey(lockout.DeviceKey) is IHasFeedback feedbackProvider))
+                {
+                    this.LogDebug("No feedback provider found for device key: {DeviceKey}", lockout.DeviceKey);
+                    continue;
+                }
+
+                // Setup lockout for feedback provider
+
+            }
         }
 
-        private void HandleRoomCombineScenarioChanged()
+        private void HandleRoomCombineScenarioChanged(object sender = null, EventArgs e = null)
         {
             try
             {
-                var combiner = combinerHandler?.EssentialsRoomCombiner;
-                var currentScenario = combiner?.CurrentScenario;
-                var uimap = currentScenario?.UiMap;
+                var combiner = combinerHandler.EssentialsRoomCombiner;
+                var currentScenario = combiner.CurrentScenario;
+                var uiMap = currentScenario.UiMap;
 
-                if (uimap == null)
+                if (uiMap == null)
                 {
-                    this.LogDebug("uimap is null");
+                    this.LogDebug("uiMap is null");
                     return;
                 }
 
-                var currentScenarioRoomKey = (
-                    uimap?.FirstOrDefault((kv) => kv.Key == defaultRoomKey)
-                )?.Value;
-
-
-                if (!uimap.TryGetValue("primary", out primaryRoomKey))
-                {
-                    this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
-                }
-
-                if (currentScenarioRoomKey == null)
+                if (!uiMap.TryGetValue(defaultRoomKey, out var currentScenarioRoomKey))
                 {
                     this.LogDebug("[ERROR] UiMap default room key: {DefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey} or lockout", defaultRoomKey, currentScenario.Key);
                     return;
                 }
-                if (currentScenarioRoomKey == "lockout")
+
+                if (!uiMap.TryGetValue("primary", out primaryRoomKey))
                 {
-                    this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
-
-                    mcTpController.LockedOut = true;
-
-                    ClearCiscoCodecUiWebViewController();
-
-                    extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
-
-                    mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
-
-                    if (mcTpController.EnableLockoutPoll)
-                    {
-                        // Start the timer when lockout occurs                      
-                        lockoutPollTimer.Start();
-                        return;
-                    }
-
-                    return;
+                    this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
-                CancelLockoutTimer();
-                this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
+                if (currentScenarioRoomKey != "lockout")
+                {
+                    CancelLockoutTimer();
+                    this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
+                }
+
+                this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
+
+                SendLockout();
             }
             catch (Exception ex)
             {
                 this.LogDebug("Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", ex);
             }
+        }
+
+        private void SendLockout()
+        {
+            mcTpController.LockedOut = true;
+
+            ClearWebView();
+
+            extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
+
+            mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
+
+            if (!mcTpController.EnableLockoutPoll)
+            {
+                return;
+            }
+
+            // Start the timer when lockout occurs                      
+            lockoutPollTimer.Start();
+            return;
         }
 
         private void CancelLockoutTimer()
@@ -189,7 +199,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             mcTpController.LockedOut = false;
 
-            ClearCiscoCodecUiWebViewController();
+            ClearWebView();
 
             lockoutPollTimer.Stop();
         }
@@ -402,14 +412,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             );
         }
 
-        public void ClearCiscoCodecUiWebViewController()
+        public void ClearWebView()
         {
             extensionsHandler?.UiWebViewClearAction?.Invoke(
                 new WebViewDisplayClearActionArgs() { Target = "Controller" }
             );
         }
 
-        public void ClearCiscoCodecUiWebViewOsd()
+        public void ClearWebViewOsd()
         {
             extensionsHandler?.UiWebViewClearAction?.Invoke(
                 new WebViewDisplayClearActionArgs() { Target = "OSD" }

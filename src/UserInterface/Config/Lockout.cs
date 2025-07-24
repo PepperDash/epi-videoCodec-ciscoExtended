@@ -14,5 +14,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 
     [JsonProperty("pollInterval")]
     public int PollIntervalMs { get; set; }
+
+    public string DeviceKey { get; set; }
+
+    public string FeedbackKey { get; set; }
   }
 }

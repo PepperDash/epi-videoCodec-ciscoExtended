@@ -27,7 +27,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         //public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
 
-        private NavigatorRoomCombinerLockoutHandler router;
+        private NavigatorLockoutHandler router;
 
         public NavigatorController(DeviceConfig config) : base(config)
         {
@@ -88,7 +88,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     SetAppUrl(this.bridge.AppUrl);
                 };
 
-                router = new NavigatorRoomCombinerLockoutHandler(this, props);
+                router = new NavigatorLockoutHandler(this, props);
 
                 router.Activate(this);
             }
@@ -124,7 +124,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void CloseWebViewController()
         {
-            router.ClearCiscoCodecUiWebViewController();
+            router.ClearWebView();
         }
 
         public void CloseWebViewOsd()
