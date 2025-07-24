@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Timers;
 using Crestron.SimplSharp.Net;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner;
@@ -24,7 +26,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public string Key { get; }
 
-        private readonly System.Timers.Timer lockoutPollTimer;
+        private readonly Timer lockoutPollTimer;
 
         private string defaultRoomKey;
         private string primaryRoomKey;
@@ -46,7 +48,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             Key = ui.Key + "-NavigatorRoomCombinerLockout";
 
-            lockoutPollTimer = new System.Timers.Timer(
+            lockoutPollTimer = new Timer(
                                       this.props?.Lockout?.PollIntervalMs > 0 ? this.props.Lockout.PollIntervalMs : 5000
                                   )
             {
@@ -56,10 +58,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             lockoutPollTimer.Elapsed += (s, a) =>
             {
-                Debug.LogMessage(LogEventLevel.Verbose, "Lockout Poll Timer Elapsed", this);
+                this.LogVerbose("Lockout Poll Timer Elapsed");
                 if (!mcTpController.LockedOut)
                 {
-                    Debug.LogMessage(LogEventLevel.Verbose, "_mcTpController.LockedOut: {LockedOut}", this, mcTpController.LockedOut);
+                    this.LogVerbose("_mcTpController.LockedOut: {LockedOut}", mcTpController.LockedOut);
                     //if not in lockout state and was previously locked out
                     CancelLockoutTimer();
                     return;
@@ -74,7 +76,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             //set private props after activation so everything is instantiated
             if (parent == null)
             {
-                Debug.LogMessage(LogEventLevel.Debug, "Error: parent navigator controller is null", this);
+                this.LogDebug("Error: parent navigator controller is null");
                 return;
             }
 
@@ -86,7 +88,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             if (extensionsHandler == null)
             {
-                Debug.LogMessage(LogEventLevel.Debug, "[Warning]: VideoCodecUiExtensionsHandler is null. Skipping VideoCodecMobileControlRouter Subscriptions", this);
+                this.LogDebug("[Warning]: VideoCodecUiExtensionsHandler is null. Skipping VideoCodecMobileControlRouter Subscriptions");
                 return;
             }
 
@@ -129,7 +131,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 if (uimap == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "uimap is null", this);
+                    this.LogDebug("uimap is null");
                     return;
                 }
 
@@ -140,17 +142,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 if (!uimap.TryGetValue("primary", out primaryRoomKey))
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "Primary room key not found in UiMap for scenario: {ScenarioKey}", this, currentScenario.Key);
+                    this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
                 if (currentScenarioRoomKey == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "[ERROR] UiMap default room key: {DefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey} or lockout", this, defaultRoomKey, currentScenario.Key);
+                    this.LogDebug("[ERROR] UiMap default room key: {DefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey} or lockout", defaultRoomKey, currentScenario.Key);
                     return;
                 }
                 if (currentScenarioRoomKey == "lockout")
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "UiMap default room key {DefaultRoomKey} is in lockout state", this, defaultRoomKey);
+                    this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
 
                     mcTpController.LockedOut = true;
 
@@ -171,11 +173,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 }
 
                 CancelLockoutTimer();
-                Debug.LogMessage(LogEventLevel.Debug, "ui with default room key {DefaultRoomKey} is not locked out", this, defaultRoomKey);
+                this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
             }
             catch (Exception ex)
             {
-                Debug.LogMessage(ex, "Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", this);
+                this.LogDebug("Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", ex);
             }
         }
 
@@ -198,7 +200,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             if (isError) //isError means no webview open
             {
-                Debug.LogMessage(LogEventLevel.Debug, "Error in UiWebViewChanagedEventHandler.  XPath: {XPath}Reason: {Reason}", this, args?.UiWebViewStatus?.ErrorStatus?.XPath?.Value, args?.UiWebViewStatus?.ErrorStatus?.Reason?.Value);
+                this.LogDebug("Error in UiWebViewChanagedEventHandler.  XPath: {XPath}Reason: {Reason}", args?.UiWebViewStatus?.ErrorStatus?.XPath?.Value, args?.UiWebViewStatus?.ErrorStatus?.Reason?.Value);
 
                 //if web view not open and in lockout send lockout to web view
                 if (mcTpController.LockedOut == true)
@@ -219,7 +221,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
         {
-            Debug.LogMessage(LogEventLevel.Debug, "UiMap default room key: {DefaultRoomKey} is in lockout state", this, thisUisDefaultRoomKey);
+            this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
             var path = props?.Lockout?.MobileControlPath;
 
@@ -249,7 +251,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             UiExtensionsClickedEventArgs e
         )
         {
-            Debug.LogMessage(LogEventLevel.Debug, "VideoCodecUiExtensionsClickedMcEventHandler: {Id}", this, e.Id);
+            this.LogDebug("VideoCodecUiExtensionsClickedMcEventHandler: {Id}", e.Id);
             try
             {
                 //navigator button click build url and use VideoCodecUiExtensionsHandler action to send to mobile control
@@ -257,14 +259,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 var extensions = props.Extensions;
                 if (extensions == null || !extensions.Panels.Any())
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "No extensions found for VideoCodecMobileControlRouter", this);
+                    this.LogDebug("No extensions found for VideoCodecMobileControlRouter");
                     return;
                 }
                 var panels = extensions.Panels;
                 var mcPanel = panels.Find((pp) => pp.PanelId == panelId);
                 if (mcPanel == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "Panel not found for VideoCodecMobileControlRouter", this);
+                    this.LogDebug("Panel not found for VideoCodecMobileControlRouter");
                     return;
                 }
                 if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
@@ -273,17 +275,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     {
                         if (action == null)
                         {
-                            Debug.LogMessage(LogEventLevel.Debug, "DeviceAction is null", this);
+                            this.LogDebug("DeviceAction is null");
                             continue;
                         }
-                        Debug.LogMessage(LogEventLevel.Debug, "Running DeviceAction {MethodName}", this, action.MethodName);
+                        this.LogDebug("Running DeviceAction {MethodName}", action.MethodName);
                         await DeviceJsonApi.DoDeviceActionAsync(action);
                     }
                 }
 
                 if (!string.IsNullOrEmpty(mcPanel.Url))
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "Sending URL to WebView: {Url}", this, mcPanel.Url);
+                    this.LogDebug("Sending URL to WebView: {Url}", mcPanel.Url);
 
                     foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
                     {
@@ -295,12 +297,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 if (mcPanel.MobileControlPath == null || mcPanel.MobileControlPath.Length == 0)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "MobileControlPath not found for {PanelName}", this, mcPanel.Name);
+                    this.LogDebug("MobileControlPath not found for {PanelName}", mcPanel.Name);
                     return;
                 }
                 if (mcPanel.UiWebViewDisplays == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "[Warning] UiWebViewDisplay not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", this, mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig);
+                    this.LogDebug("[Warning] UiWebViewDisplay not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig.Target);
                 }
 
                 foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
@@ -310,11 +312,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
             catch (Exception ex)
             {
-                Debug.LogMessage(ex, "Error Sending Mc URL to Cisco Ui", this);
-                Debug.LogMessage(LogEventLevel.Debug, "Error Sending Mc URL to Cisco Ui: {Message}", this, ex.Message);
+                this.LogDebug("Error Sending Mc URL to Cisco Ui: {Message}", ex.Message);
+                this.LogVerbose(ex, "Error Sending Mc URL to Cisco Ui");
             }
-
-
         }
 
         /// <summary>
@@ -328,29 +328,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         )
         {
-            Debug.LogMessage(LogEventLevel.Debug, "SendCiscoCodecUiToWebViewMcUrl: {McPath}, webViewConfig null: {WebViewConfigNull}, _McTouchPanelController: {McTpControllerNull}, AppUrlFeedback null: {AppUrlFeedbackNull}, appUrl: {AppUrl}", this, mcPath, webViewConfig == null, mcTpController == null, mcTpController?.AppUrlFeedback == null, mcTpController?.AppUrlFeedback?.StringValue);
+            this.LogDebug("SendCiscoCodecUiToWebViewMcUrl: {McPath}, webViewConfig null: {WebViewConfigNull}, _McTouchPanelController: {McTpControllerNull}, AppUrlFeedback null: {AppUrlFeedbackNull}, appUrl: {AppUrl}", mcPath, webViewConfig == null, mcTpController == null, mcTpController?.AppUrlFeedback == null, mcTpController?.AppUrlFeedback?.StringValue);
             // Parse the _appUrl into a Uri object
             var (url, printableUrl) = prependmcUrl ? GetMobileControlUrl(mcPath, webViewConfig) : (mcPath, mcPath);
 
 
-            Debug.LogMessage(LogEventLevel.Debug, "[MobileControlClickedEvent] Sending Mobile Control URL: {Url}", this, printableUrl);
+            this.LogDebug("[MobileControlClickedEvent] Sending Mobile Control URL: {Url}", printableUrl);
 
             extensionsHandler.UiWebViewDisplayAction?.Invoke(
                 new WebViewDisplayActionArgs()
                 {
                     Title =
-                        webViewConfig.Title != null
-                            ? webViewConfig.Title
-                            : defaultUiWebViewDisplayConfig.Title,
+                        webViewConfig.Title ?? defaultUiWebViewDisplayConfig.Title,
                     Url = url,
                     Target =
-                        webViewConfig.Target != null
-                            ? webViewConfig.Target
-                            : defaultUiWebViewDisplayConfig.Target,
+                        webViewConfig.Target ?? defaultUiWebViewDisplayConfig.Target,
                     Mode =
-                        webViewConfig.Mode != null
-                            ? webViewConfig.Mode
-                            : defaultUiWebViewDisplayConfig.Mode
+                        webViewConfig.Mode ?? defaultUiWebViewDisplayConfig.Mode
                 }
             );
         }
@@ -360,15 +354,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             var appUrl = mcTpController.AppUrlFeedback.StringValue;
             if (appUrl == null)
             {
-                Debug.LogMessage(LogEventLevel.Debug, "AppUrl is null, cannot send to WebView", this);
+                this.LogDebug("AppUrl is null, cannot send to WebView", this);
                 return (string.Empty, string.Empty);
             }
-            //var printableAppUrl = _mcTpController?.AppUrlFeedback?.StringValue?.MaskQParamTokenInUrl();
-            //Debug.LogMessage(
-            //    LogEventLevel.Debug,
-            //    $"SendCiscoCodecUiToWebViewMcUrl: {printableAppUrl}",
-            //    this
-            //);
 
             var uriBuilder = new UriBuilder(appUrl);
 
@@ -401,7 +389,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             var uriBuilder = new UriBuilder(url);
             var urlToUse = uriBuilder.ToString();
 
-            Debug.LogMessage(LogEventLevel.Debug, "[MobileControlClickedEvent] Sending URL: {Url}", this, urlToUse);
+            this.LogDebug("[MobileControlClickedEvent] Sending URL: {Url}", urlToUse);
 
             extensionsHandler.UiWebViewDisplayAction?.Invoke(
                 new WebViewDisplayActionArgs()
@@ -416,7 +404,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void ClearCiscoCodecUiWebViewController()
         {
-            Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewController", this);
             extensionsHandler?.UiWebViewClearAction?.Invoke(
                 new WebViewDisplayClearActionArgs() { Target = "Controller" }
             );
@@ -424,7 +411,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void ClearCiscoCodecUiWebViewOsd()
         {
-            Debug.LogMessage(LogEventLevel.Debug, "ClearCiscoCodecUiWebViewOsd", this);
             extensionsHandler?.UiWebViewClearAction?.Invoke(
                 new WebViewDisplayClearActionArgs() { Target = "OSD" }
             );
