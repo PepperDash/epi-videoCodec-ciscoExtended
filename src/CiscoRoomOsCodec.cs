@@ -7,8 +7,9 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
-using epi_videoCodec_ciscoExtended.Interfaces;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -26,10 +27,10 @@ using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 	#region enums
 	internal enum eCommandType

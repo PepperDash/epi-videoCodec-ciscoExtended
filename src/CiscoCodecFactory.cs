@@ -2,10 +2,10 @@
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
-using static epi_videoCodec_ciscoExtended.CiscoCodecConfiguration;
+using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecConfiguration;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// Factory class for creating Cisco codec devices.

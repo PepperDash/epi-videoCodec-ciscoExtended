@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
     /// <summary>
     /// Defines the required elements for layout control with direct layout selection

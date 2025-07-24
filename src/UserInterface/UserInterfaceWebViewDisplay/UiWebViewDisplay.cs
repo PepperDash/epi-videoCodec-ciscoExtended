@@ -1,4 +1,4 @@
-﻿namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
+﻿namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
 {
     /// <summary>
     /// xCommand UserInterface WebView Display Header: value Mode: value Options: value Target: value Title: value Url: value

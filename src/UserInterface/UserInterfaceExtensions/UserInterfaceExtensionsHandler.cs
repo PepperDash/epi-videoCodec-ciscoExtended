@@ -1,5 +1,5 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+﻿using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.MobileControl;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -7,9 +7,9 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
 using System;
 using System.Collections.Generic;
-using static epi_videoCodec_ciscoExtended.CiscoCodecConfiguration;
+using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecConfiguration;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
 {
 	public class UserInterfaceExtensionsHandler : ICiscoCodecUiExtensionsHandler
 	{

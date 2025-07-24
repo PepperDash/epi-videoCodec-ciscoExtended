@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
-using epi_videoCodec_ciscoExtended.Xml;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
 using Newtonsoft.Json;
 using PepperDash.Core;
 using Serilog.Events;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
 {
     /// <summary>
     /// json config to build xml commands

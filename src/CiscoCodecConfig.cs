@@ -3,10 +3,10 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
 using Newtonsoft.Json;
-using Extensions = epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Extensions;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using Extensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Extensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// Configuration class for Cisco video codec settings and properties.

@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace epi_videoCodec_ciscoExtended.Interfaces
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
     /// <summary>
     /// Messenger class for handling PresenterTrack functionality communication.

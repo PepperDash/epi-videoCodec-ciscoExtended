@@ -1,4 +1,4 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+﻿using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using PepperDash.Core;
 using PepperDash.Essentials.Core.Devices;
 using PepperDash.Essentials.Devices.Common.VideoCodec.Interfaces;
@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface
 {
     public interface ICiscoCodecUserInterface : IKeyed, IReconfigurableDevice, ICiscoCodecUiExtensionsController
 	{

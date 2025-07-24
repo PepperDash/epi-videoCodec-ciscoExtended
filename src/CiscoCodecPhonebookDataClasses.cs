@@ -4,7 +4,7 @@ using System.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class CiscoCodecExtendedPhonebook
     {

@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
 {
 	public interface ICiscoCodecUiExtensionsHandler :
 		ICiscoCodecUiExtensionsWebViewDisplayHandler,

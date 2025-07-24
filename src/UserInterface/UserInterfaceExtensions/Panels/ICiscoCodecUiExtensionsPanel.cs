@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Crestron.SimplSharpPro.DeviceSupport;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels
 {
     /// <summary>
     /// Interface for Cisco Codec UI Extensions Panel.

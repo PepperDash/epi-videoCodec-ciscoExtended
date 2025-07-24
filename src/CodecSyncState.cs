@@ -4,7 +4,7 @@ using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// Tracks the initial sycnronization state of the codec when making a connection

@@ -1,6 +1,6 @@
 ﻿using Crestron.SimplSharp;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
-using epi_videoCodec_ciscoExtended.UserInterface.Utilities;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Icons;
 using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
@@ -10,7 +10,7 @@ using Serilog.Events;
 using System;
 using System.Collections.Generic;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface
 {
     public class CiscoCodecUserInterface : ReconfigurableDevice, ICiscoCodecUserInterface
     {

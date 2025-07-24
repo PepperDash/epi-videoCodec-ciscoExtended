@@ -11,7 +11,7 @@ using Crestron.SimplSharpPro.DM.Endpoints;
 using PepperDash.Core;
 using RequestType = Crestron.SimplSharp.Net.Https.RequestType;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class CiscoWebsocketClient : IKeyed
     {

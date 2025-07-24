@@ -5,7 +5,7 @@ using PepperDash.Core;
 using Newtonsoft.Json;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode

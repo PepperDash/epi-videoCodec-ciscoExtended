@@ -4,7 +4,7 @@ using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 
 
-namespace epi_videoCodec_ciscoExtended.Interfaces
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
     public class ISpeakerTrackMessenger : MessengerBase
     {

@@ -5,7 +5,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
 using PepperDash.Essentials.Devices.Common.Codec;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class DoNotDisturbHandler : IHasDoNotDisturbMode
     {

@@ -1,6 +1,6 @@
 ﻿using PepperDash.Core;
 using PepperDash.Essentials.Core;
-namespace epi_videoCodec_ciscoExtended.Interfaces
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
     //internal enum eCiscoCameraMode
     //{

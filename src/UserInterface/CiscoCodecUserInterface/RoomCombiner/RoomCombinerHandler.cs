@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using PepperDash.Core;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.RoomCombiner
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.RoomCombiner
 {
 	public interface IRoomCombinerHandler
 	{

@@ -7,7 +7,7 @@ using PepperDash.Core;
 using PepperDash.Essentials.Core;
 
 //see comments at bottom for xCommand examples
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels
 {
 
   /// <summary>

@@ -6,7 +6,7 @@ using Crestron.SimplSharp;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 
     public class CiscoCodecJsonRpc
