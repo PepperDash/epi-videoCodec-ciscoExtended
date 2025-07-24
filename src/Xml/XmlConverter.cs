@@ -2,7 +2,7 @@
 using System.Xml;
 using System.Xml.Serialization;
 
-namespace epi_videoCodec_ciscoExtended.Xml
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml
 {
 	public static class XmlConverter
 	{

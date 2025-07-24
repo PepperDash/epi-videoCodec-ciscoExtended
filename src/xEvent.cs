@@ -1,7 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
@@ -203,7 +203,7 @@ namespace epi_videoCodec_ciscoExtended
  
             public Widget Widget { get; set; }
 
-            public epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
+            public PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
 
             public UiExtensions()
             {
@@ -211,7 +211,7 @@ namespace epi_videoCodec_ciscoExtended
                 //PageClosed = new PageClosed();
                 //WidgetEvent = new WidgetEvent();
                 Widget = new Widget();
-				Panel = new epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
+				Panel = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
             }
         }
 

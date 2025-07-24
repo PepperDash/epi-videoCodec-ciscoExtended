@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions.Panels
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels
 {
     public class CiscoCodecEvents
     {

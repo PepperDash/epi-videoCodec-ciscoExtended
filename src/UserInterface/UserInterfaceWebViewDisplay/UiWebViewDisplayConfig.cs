@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
 {
     public class UiWebViewDisplayConfig
     {

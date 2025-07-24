@@ -3,7 +3,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Bridges.JoinMaps;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class CiscoCodecJoinMap : VideoCodecControllerJoinMap
     {

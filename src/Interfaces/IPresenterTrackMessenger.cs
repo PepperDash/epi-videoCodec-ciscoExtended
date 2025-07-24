@@ -7,12 +7,22 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace epi_videoCodec_ciscoExtended.Interfaces
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
 {
+    /// <summary>
+    /// Messenger class for handling PresenterTrack functionality communication.
+    /// Provides messaging infrastructure for PresenterTrack commands and status updates.
+    /// </summary>
     internal class IPresenterTrackMessenger : MessengerBase
     {
         private readonly IPresenterTrack _presenterTrack; 
         
+        /// <summary>
+        /// Initializes a new instance of the IPresenterTrackMessenger class.
+        /// </summary>
+        /// <param name="key">The unique key for this messenger.</param>
+        /// <param name="messagePath">The message path for communication.</param>
+        /// <param name="presenterTrack">The PresenterTrack device to manage.</param>
         public IPresenterTrackMessenger(string key, string messagePath, IPresenterTrack presenterTrack)
             : base(key, messagePath, presenterTrack as Device)
         {

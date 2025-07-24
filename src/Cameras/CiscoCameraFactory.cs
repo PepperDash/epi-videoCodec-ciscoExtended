@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Core;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
     public class CiscoCameraFactory : EssentialsPluginDeviceFactory<CiscoCamera>
     {

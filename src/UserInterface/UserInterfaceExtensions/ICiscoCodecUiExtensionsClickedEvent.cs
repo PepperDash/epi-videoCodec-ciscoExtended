@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
 {
     public interface ICiscoCodecUiExtensionsClickedEvent
     {

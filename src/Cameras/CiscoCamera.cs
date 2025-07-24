@@ -6,7 +6,7 @@ using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Bridges;
 using PepperDash.Essentials.Devices.Common.Cameras;
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
     public class CiscoFarEndCamera : CameraBase, IHasCameraPtzControl, IAmFarEndCamera, IBridgeAdvanced
     {

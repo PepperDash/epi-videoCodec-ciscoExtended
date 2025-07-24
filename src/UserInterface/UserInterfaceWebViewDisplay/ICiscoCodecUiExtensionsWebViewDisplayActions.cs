@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
 {
     public interface ICiscoCodecUiExtensionsWebViewDisplayActions
     {

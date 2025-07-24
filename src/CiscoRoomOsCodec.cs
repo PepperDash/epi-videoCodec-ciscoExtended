@@ -7,8 +7,9 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
-using epi_videoCodec_ciscoExtended.Interfaces;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -26,10 +27,10 @@ using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 	#region enums
 	internal enum eCommandType
@@ -41,41 +42,121 @@ namespace epi_videoCodec_ciscoExtended
 		GetConfiguration
 	};
 
+	/// <summary>
+	/// Defines the types of external sources that can be connected to a Cisco codec.
+	/// </summary>
 	public enum eExternalSourceType
 	{
+		/// <summary>
+		/// External camera source
+		/// </summary>
 		camera,
+		/// <summary>
+		/// Desktop computer source
+		/// </summary>
 		desktop,
+		/// <summary>
+		/// Document camera source
+		/// </summary>
 		document_camera,
+		/// <summary>
+		/// Media player source
+		/// </summary>
 		mediaplayer,
+		/// <summary>
+		/// Personal computer source
+		/// </summary>
 		PC,
+		/// <summary>
+		/// Whiteboard source
+		/// </summary>
 		whiteboard,
+		/// <summary>
+		/// Other unspecified source type
+		/// </summary>
 		other
 	}
 
+	/// <summary>
+	/// Defines the operational modes of external sources connected to a Cisco codec.
+	/// </summary>
 	public enum eExternalSourceMode
 	{
+		/// <summary>
+		/// External source is ready and available for use
+		/// </summary>
 		Ready,
+		/// <summary>
+		/// External source is not ready for use
+		/// </summary>
 		NotReady,
+		/// <summary>
+		/// External source is hidden from the user interface
+		/// </summary>
 		Hidden,
+		/// <summary>
+		/// External source is in an error state
+		/// </summary>
 		Error
 	}
 
+	/// <summary>
+	/// Defines the presentation states for content sharing on a Cisco codec.
+	/// </summary>
 	public enum eCodecPresentationStates
 	{
+		/// <summary>
+		/// Presentation content is displayed locally only
+		/// </summary>
 		LocalOnly,
+		/// <summary>
+		/// Presentation content is displayed both locally and remotely
+		/// </summary>
 		LocalRemote
 	}
 
+	/// <summary>
+	/// Defines the camera tracking capabilities available on a Cisco codec.
+	/// </summary>
 	public enum eCameraTrackingCapabilities
 	{
+		/// <summary>
+		/// No camera tracking capabilities available
+		/// </summary>
 		None,
+		/// <summary>
+		/// SpeakerTrack capability available - automatically tracks active speakers
+		/// </summary>
 		SpeakerTrack,
+		/// <summary>
+		/// PresenterTrack capability available - automatically tracks presenters
+		/// </summary>
 		PresenterTrack,
+		/// <summary>
+		/// Both SpeakerTrack and PresenterTrack capabilities available
+		/// </summary>
 		Both
 	}
 
 	#endregion
 
+	/// <summary>
+	/// Extended Cisco video codec implementation that provides comprehensive control and monitoring capabilities for Cisco Room OS devices.
+	/// This class extends VideoCodecBase and implements numerous interfaces to support advanced features including
+	/// call management, directory services, camera control, UI extensions, scheduling, and occupancy sensing.
+	/// </summary>
+	/// <remarks>
+	/// This implementation supports a wide range of Cisco codec models running Room OS and provides:
+	/// - Call history and favorites management
+	/// - Directory and phonebook integration
+	/// - Camera tracking (SpeakerTrack and PresenterTrack)
+	/// - UI extensions for custom panels
+	/// - Room preset management
+	/// - External source switching
+	/// - Do Not Disturb and half-wake modes
+	/// - Occupancy and people count monitoring
+	/// - WebEx integration and branding
+	/// </remarks>
 	public class CiscoCodec
 		: VideoCodecBase,
 			IHasCallHistory,
@@ -7775,12 +7856,17 @@ namespace epi_videoCodec_ciscoExtended
 		}
 	}
 
+	/// <summary>
+	/// Provides device information and capabilities for a Cisco codec, extending the base VideoCodecInfo class.
+	/// This class contains codec-specific information such as multi-site capabilities, IP address, and other device details.
+	/// </summary>
 	public class CiscoCodecInfo : VideoCodecInfo
 	{
 		private readonly CiscoCodec _codec;
 
 		private bool _multiSiteOptionIsEnabled;
 
+		/// <inheritdoc />
 		public override bool MultiSiteOptionIsEnabled
 		{
 			get { return _multiSiteOptionIsEnabled; }
@@ -7788,6 +7874,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		private string _ipAddress;
 
+		/// <inheritdoc />
 		public override string IpAddress
 		{
 			get { return _ipAddress; }
@@ -7795,6 +7882,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		private string _sipPhoneNumber;
 
+		/// <inheritdoc />
 		public override string SipPhoneNumber
 		{
 			get { return _sipPhoneNumber; }
@@ -7802,6 +7890,7 @@ namespace epi_videoCodec_ciscoExtended
 
 		private string _e164Alias;
 
+		/// <inheritdoc />
 		public override string E164Alias
 		{
 			get { return _e164Alias; }

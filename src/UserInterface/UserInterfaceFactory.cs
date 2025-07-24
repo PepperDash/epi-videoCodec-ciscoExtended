@@ -1,16 +1,16 @@
 ﻿using System.Collections.Generic;
-using epi_videoCodec_ciscoExtended.UserInterface;
-using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface;
-using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface;
+using CiscoCodecUserInterfaceNS = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.MobileControl;
 using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 {
-    public class UserInterfaceFactory : EssentialsPluginDeviceFactory<CiscoCodecUserInterface>
+    public class UserInterfaceFactory : EssentialsPluginDeviceFactory<CiscoCodecUserInterfaceNS.CiscoCodecUserInterface>
     {
         public UserInterfaceFactory()
         {
@@ -29,7 +29,7 @@ namespace epi_videoCodec_ciscoExtended
 			{
 				return new McVideoCodecTouchpanelController(dc);
 			}
-			return new CiscoCodecUserInterface(dc);
+			return new CiscoCodecUserInterfaceNS.CiscoCodecUserInterface(dc);
         }
     }
 }

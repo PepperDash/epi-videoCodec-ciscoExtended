@@ -1,6 +1,6 @@
-﻿using epi_videoCodec_ciscoExtended.Interfaces;
-using epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface.MobileControl;
-using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+﻿using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.MobileControl;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -8,7 +8,7 @@ using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
-using static epi_videoCodec_ciscoExtended.CiscoCodecStatus;
+using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecStatus;
 
 namespace PepperDash.Essentials.Touchpanel
 {

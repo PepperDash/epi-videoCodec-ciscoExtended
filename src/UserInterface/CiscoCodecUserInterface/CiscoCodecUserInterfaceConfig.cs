@@ -1,7 +1,7 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceExtensions;
+﻿using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using Newtonsoft.Json;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.CiscoCodecUserInterface
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface
 {
     public class CiscoCodecUserInterfaceConfig : ICiscoCodecUserInterfaceConfig
     {

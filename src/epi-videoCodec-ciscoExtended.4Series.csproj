@@ -5,7 +5,7 @@
   
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
-    <RootNamespace>epi_videoCodec_ciscoExtended</RootNamespace>
+    <RootNamespace>PepperDash.Essentials.Plugin.CiscoRoomOsCodec</RootNamespace>
     <Deterministic>false</Deterministic>
     <AssemblyTitle>epi-videoCodec-ciscoExtended</AssemblyTitle>
     <Description>This software is a plugin designed to work as a part of PepperDash Essentials for Crestron control processors. This plugin controls a Cisco RoomOs Video Codec using SSH</Description>

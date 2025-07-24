@@ -6,7 +6,7 @@ using Crestron.SimplSharp.Net.Http;
 using PepperDash.Core;
 
 
-namespace epi_videoCodec_ciscoExtended
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class HttpApiServerExtended
     {

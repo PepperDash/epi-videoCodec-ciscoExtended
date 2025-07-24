@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static epi_videoCodec_ciscoExtended.CiscoCodecStatus;
+using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecStatus;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
 {
 	public class Status 
 	{

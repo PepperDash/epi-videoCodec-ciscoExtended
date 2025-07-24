@@ -4,7 +4,7 @@ using Crestron.SimplSharp.CrestronIO;
 using PepperDash.Core;
 using Serilog.Events;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.Utilities
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Icons
     {
     public static class IconHandler
         {

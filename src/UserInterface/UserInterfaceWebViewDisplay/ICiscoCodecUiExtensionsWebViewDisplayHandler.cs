@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
 {
 	public interface ICiscoCodecUiExtensionsWebViewDisplayHandler: ICiscoCodecUiExtensionsWebViewDisplayActions
 	{

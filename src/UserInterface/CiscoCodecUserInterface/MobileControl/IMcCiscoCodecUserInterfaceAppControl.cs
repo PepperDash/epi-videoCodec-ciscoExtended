@@ -1,4 +1,4 @@
-﻿using epi_videoCodec_ciscoExtended.UserInterface.UserInterfaceWebViewDisplay;
+﻿using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using PepperDash.Core;
 using PepperDash.Essentials.Core;
 using System.Collections.Generic;
