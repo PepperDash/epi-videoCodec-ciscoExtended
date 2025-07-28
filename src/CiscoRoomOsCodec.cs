@@ -6748,9 +6748,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand("xCommand Video Selfview Set Mode: On");
 		}
 
+		public void SelfViewModeOn(EMonitorRole monitorRole, bool fullScreen = false)
+		{
+			EnqueueCommand($"xCommand Video Selfview Set Mode: On MonitorRole: {monitorRole}${(fullScreen ? " FullscreenMode: On" : string.Empty)}");
+		}
+
 		public void SelfViewModeOff()
 		{
-			EnqueueCommand("xCommand Video Selfview Set Mode: Off");
+			var monitorRole = _config.SelfViewDefaultMonitorRole != null ?
+				$" MonitorRole: {_config.SelfViewDefaultMonitorRole}" : string.Empty;
+			EnqueueCommand($"xCommand Video Selfview Set Mode: Off{monitorRole}");
 		}
 
 		public void SelfViewModeToggle()
