@@ -17,9 +17,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 		[JsonProperty("useDirectServer")]
 		public bool UseDirectServer { get; set; }
 
+		/// <summary>
+		/// Configuration for lockout settings for room combining.
+		/// Used as the default lockout for the navigator in Room Combination Scenarios.
+		/// </summary>
 		[JsonProperty("lockout")]
 		public Lockout Lockout { get; set; }
 
+		/// <summary>
+		/// List of custom lockouts for the navigator.
+		/// Each lockout can have its own mobile control path, UI web view display settings,
+		/// poll interval, device key, feedback key, and lock on false behavior.
+		/// This allows for flexible lockout configurations based on different conditions or requirements.
+		/// </summary>
 		[JsonProperty("customLockouts")]
 		public List<Lockout> CustomLockouts { get; set; }
 	}

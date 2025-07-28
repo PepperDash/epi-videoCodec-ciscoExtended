@@ -32,6 +32,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private string defaultRoomKey;
         private string primaryRoomKey;
 
+        private Lockout currentLockout;
+
+        private bool combinationLockout;
+
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
             Title = "Mobile Control",
@@ -126,7 +130,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 }
 
                 // Setup lockout for feedback provider
+                if (!(feedbackProvider.Feedbacks[lockout.FeedbackKey] is BoolFeedback feedback))
+                {
+                    this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, lockout.DeviceKey);
+                    continue;
+                }
 
+                // Setup lockout for feedback
+                feedback.OutputChange += (s, a) =>
+                        {
+                            // skip this lockout update if the current lockout is a combination lockout
+                            if (combinationLockout)
+                            {
+                                return;
+                            }
+
+                            if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
+                            {
+                                currentLockout = lockout;
+
+                                StartLockout();
+                            }
+                            else
+                            {
+                                CancelLockoutTimer();
+                            }
+                        };
             }
         }
 
@@ -163,7 +192,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
 
-                SendLockout();
+                currentLockout = props?.Lockout;
+
+                StartLockout();
             }
             catch (Exception ex)
             {
@@ -171,13 +202,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
         }
 
-        private void SendLockout()
+        private void StartLockout()
         {
             mcTpController.LockedOut = true;
 
             ClearWebView();
 
-            extensionsHandler.UiWebViewChanagedEvent += LockoutUiWebViewChanagedEventHandler;
+            extensionsHandler.UiWebViewChangedEvent += LockoutWebViewChanged;
 
             mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
 
@@ -188,14 +219,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             // Start the timer when lockout occurs                      
             lockoutPollTimer.Start();
-            return;
         }
 
         private void CancelLockoutTimer()
         {
             Debug.LogMessage(LogEventLevel.Verbose, "Canceling Lockout Poll Timer for: {Key}", this, mcTpController.Key);
 
-            extensionsHandler.UiWebViewChanagedEvent -= LockoutUiWebViewChanagedEventHandler;
+            extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
 
             mcTpController.LockedOut = false;
 
@@ -204,44 +234,57 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             lockoutPollTimer.Stop();
         }
 
-        public void LockoutUiWebViewChanagedEventHandler(object sender, WebViewChangedEventArgs args)
+        public void LockoutWebViewChanged(object sender, WebViewChangedEventArgs args)
         {
-            bool isError = args?.UiWebViewStatus?.IsError ?? false;
+            bool isError = args.UiWebViewStatus.IsError;
 
-            if (isError) //isError means no webview open
+            // Case 1: No error AND not locked out → Clear web view
+            if (!isError && !mcTpController.LockedOut)
             {
-                this.LogDebug("Error in UiWebViewChanagedEventHandler.  XPath: {XPath}Reason: {Reason}", args?.UiWebViewStatus?.ErrorStatus?.XPath?.Value, args?.UiWebViewStatus?.ErrorStatus?.Reason?.Value);
+                WebView.WebView uiWebView = args.UiWebViewStatus.UiWebView;
 
-                //if web view not open and in lockout send lockout to web view
-                if (mcTpController.LockedOut == true)
-                {
-                    SendLockout(defaultRoomKey, primaryRoomKey);
-                }
-                return;
-            }
-
-            if (mcTpController.LockedOut == false)
-            {
-                WebView.WebView uiWebView = args?.UiWebViewStatus?.UiWebView;
                 extensionsHandler.UiWebViewClearAction?.Invoke(
                     new WebViewDisplayClearActionArgs() { Target = "Controller" }
                 );
+
+                return;
             }
+
+            // Case 2: No error AND locked out → Do nothing
+            if (!isError && mcTpController.LockedOut)
+            {
+                return;
+            }
+
+            // Case 3: Error (regardless of lockout state) → Log error
+            this.LogDebug("Error in UiWebViewChangedEventHandler.  XPath: {XPath}Reason: {Reason}", args.UiWebViewStatus.ErrorStatus.XPath.Value, args.UiWebViewStatus.ErrorStatus.Reason.Value);
+
+            // Case 4: Error AND not locked out → Do nothing (just logged)
+            if (!mcTpController.LockedOut)
+            {
+                return;
+            }
+
+            // Case 5: Error AND locked out → Send lockout
+            SendLockout(defaultRoomKey, primaryRoomKey);
+
+            return;
         }
+
 
         private void SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
         {
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
-            var path = props?.Lockout?.MobileControlPath;
+            var path = currentLockout?.MobileControlPath;
 
             if (path == null || path.Length == 0)
                 path = "/lockout";
 
             var webViewConfig =
-                props?.Lockout?.UiWebViewDisplay == null
+                currentLockout?.UiWebViewDisplay == null
                     ? defaultUiWebViewDisplayConfig
-                    : props.Lockout.UiWebViewDisplay;
+                    : currentLockout.UiWebViewDisplay;
 
             if (!string.IsNullOrEmpty(primaryRoomKey))
             {
@@ -253,6 +296,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 webViewConfig.QueryParams["primaryRoomName"] =
                             DeviceManager.GetDeviceForKey(primaryRoomKey) is IKeyName room ? room.Name : primaryRoomKey;
             }
+
             SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
         }
 

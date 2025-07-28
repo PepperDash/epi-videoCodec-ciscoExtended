@@ -18,7 +18,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 		public Action<WebViewDisplayClearActionArgs> UiWebViewClearAction { get; set; }
 
 		public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
-		public event EventHandler<WebViewChangedEventArgs> UiWebViewChanagedEvent;
+		public event EventHandler<WebViewChangedEventArgs> UiWebViewChangedEvent;
 
 		public WebViewStatus CurrentUiWebViewStatus { get; private set; }
 
@@ -55,7 +55,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 			//assume 1 navigator only allows 1 webview to display at a time
 			//api testing shows only one after changing or closing and reopening
 			CurrentUiWebViewStatus = new WebViewStatus(webViews[0]);
-			UiWebViewChanagedEvent?.Invoke(this, new WebViewChangedEventArgs(CurrentUiWebViewStatus));
+			UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(CurrentUiWebViewStatus));
 		}
 
 		public void ParseErrorStatus(JToken statusToken)
@@ -69,7 +69,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 					return;
 				}
 
-				UiWebViewChanagedEvent?.Invoke(this, new WebViewChangedEventArgs(new WebViewStatus(status)));
+				UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(new WebViewStatus(status)));
 			}
 			catch (Exception e)
 			{
