@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -315,6 +315,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public string WebexMeetingNumber { get; private set; }
 		public string WebexMeetingRole { get; private set; }
 		public string WebexMeetingPin { get; private set; }
+		public string TeamsMeetingNumber { get; private set; }
+		public string TeamsMeetingPasscode { get; private set; }
 
 		public eCodecPresentationStates PresentationStates;
 
@@ -1311,6 +1313,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.Trim();
 
 			EnqueueCommand(webexCmd);
+		}
+
+		public void DialTeams()
+		{
+			var teamsNumber =
+				TeamsMeetingNumber.NullIfEmpty() == null
+					? String.Empty
+					: String.Format("Number: \"{0}\"", TeamsMeetingNumber);
+			var teamsPasscode =
+				TeamsMeetingPasscode.NullIfEmpty() == null
+					? String.Empty
+					: String.Format("Pin: \"{0}\"", TeamsMeetingPasscode);
+
+			if (teamsNumber == null)
+				return;
+
+			var teamsCmd = String
+				.Format(
+					"xCommand MicrosoftTeams Join MeetingNumber: {0} Passcode: {1}",
+					teamsNumber,
+					teamsPasscode
+				)
+				.Trim();
+
+			EnqueueCommand(teamsCmd);
 		}
 
 		private void ScheduleTimeCheck(object time)
@@ -6136,6 +6163,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			LinkCiscoCodecWebex(trilist, joinMap);
 
+			LinkCiscoCodecTeams(trilist, joinMap);
+
 			LinkCiscoCodecZoomConnector(trilist, joinMap);
 
 			UIExtensionsHandler.LinkToApi(trilist, joinMap);
@@ -6207,6 +6236,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					WebexMeetingNumber = String.Empty;
 					WebexMeetingRole = String.Empty;
 					WebexMeetingPin = String.Empty;
+				}
+			);
+		}
+
+		private void LinkCiscoCodecTeams(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+		{
+			trilist.SetStringSigAction(
+				joinMap.TeamsMeetingNumber.JoinNumber,
+				s => TeamsMeetingNumber = s
+			);
+			trilist.SetStringSigAction(
+				joinMap.TeamsMeetingPasscode.JoinNumber,
+				s => TeamsMeetingPasscode = s
+			);
+
+			trilist.SetSigTrueAction(joinMap.TeamsDial.JoinNumber, DialTeams);
+
+			trilist.SetSigTrueAction(
+				joinMap.TeamsDialClear.JoinNumber,
+				() =>
+				{
+					TeamsMeetingNumber = String.Empty;
+					TeamsMeetingPasscode = String.Empty;
 				}
 			);
 		}

@@ -404,12 +404,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     {
                         meeting.Calls.Add(new Call
                         {
-                            Number = c.Number.Value,
-                            Protocol = c.Protocol.Value,
-                            CallRate = c.CallRate.Value,
-                            CallType = c.CallType.Value
+                            Number = c.Number?.Value,
+                            Protocol = c.Protocol?.Value,
+                            CallRate = c.CallRate?.Value,
+                            CallType = c.CallType?.Value
                         });
-
                     }
                 }
 
