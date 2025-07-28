@@ -343,7 +343,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                     foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
                     {
-                        SendCiscoCodecUiToWebViewUrl(mcPanel.Url, webView);
+                        SendWebViewUrl(mcPanel.Url, webView);
                     }
 
                     return;
@@ -438,7 +438,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         /// </summary>
         /// <param name="mcPath"></param>
         /// <param name="webViewConfig"></param>
-        public void SendCiscoCodecUiToWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
+        public void SendWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
         {
             var uriBuilder = new UriBuilder(url);
             var urlToUse = uriBuilder.ToString();

@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using PepperDash.Core;
 using PepperDash.Essentials.Core.Presets;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Enums;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec

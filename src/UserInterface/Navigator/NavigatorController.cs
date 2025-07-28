@@ -129,22 +129,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void CloseWebViewOsd()
         {
-            router.ClearCiscoCodecUiWebViewOsd();
-        }
-
-        public void ShowWebViewOsd()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ShowWebViewOsd(string url)
-        {
-            throw new NotImplementedException();
+            router.ClearWebViewOsd();
         }
 
         public void ShowWebViewOsd(string url, WebViewDisplayConfig webviewConfig)
         {
-            router.SendCiscoCodecUiToWebViewUrl(url, webviewConfig);
+            router.SendWebViewUrl(url, webviewConfig);
         }
     }
 }

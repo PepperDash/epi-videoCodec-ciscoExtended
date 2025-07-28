@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
@@ -36,6 +37,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         [JsonProperty("showSelfViewByDefault")]
         public bool ShowSelfViewByDefault { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default monitor role for self view.
+        /// Valid values are defined in the EMonitorRole enum.
+        /// This property determines where the self view will be displayed on the codec's monitors.
+        /// </summary>
+        [JsonProperty("selfViewDefaultMonitorRole", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public EMonitorRole? SelfViewDefaultMonitorRole { get; set; }
 
         /// <summary>
         /// Gets or sets the content sharing configuration properties.
