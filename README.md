@@ -10,18 +10,13 @@ It implements all available Essentials interfaces relevant to a device of this t
 
 Additionally, every component implements `IKeyed` and all devices are added to the `DeviceManager` unpon instantiation.
 
-## Cloning Instructions
-
-After forking this repository into your own GitHub space, you can create a new repository using this one as the template. Then you must install the necessary dependencies as indicated below.
-
 ## Dependencies
-
-The [Essentials](https://github.com/PepperDash/Essentials) libraries are required.
 
 As of [v1.6.0](https://github.com/PepperDash/epi-videoCodec-ciscoExtended/tree/v1.6.0), this plugin requires Essentials 2.1.0 or later. See table below for plugin/Essentials version mapping:
 
 | Plugin version | Minimum Essentials Version | 
 | -------------- | ------------------ |
+| 2.0.x | 2.7.0 |
 | 1.11.x, 1.10.x, 1.9.x | 2.7.0 | 
 | 1.8.x, 1.7.x | 2.3.0 |
 | 1.6.x | 2.1.0 |
