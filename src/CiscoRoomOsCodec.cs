@@ -785,9 +785,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			LocalLayoutFeedback = new StringFeedback(LocalLayoutFeedbackFunc);
 			LocalLayoutIsProminentFeedback = new BoolFeedback(LocalLayoutIsProminentFeedbackFunc);
 			FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
-			CameraIsOffFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
-			);
 			AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
 			PhoneOffHookFeedback = new BoolFeedback(PhoneOffHookFeedbackFunc);
 			CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
@@ -809,9 +806,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			#endregion
 
+			// Initialize Camera feedbacks
+			InitializeCameraFeedbacks();
 
-
-			CameraIsMutedFeedback = CameraIsOffFeedback;
 			SupportsCameraOff = true;
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
@@ -6999,37 +6996,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 
 		#endregion
-
-		#region IHasCameraOff Members
-
-		public BoolFeedback CameraIsOffFeedback { get; private set; }
-
-		public void CameraOff()
-		{
-			CameraMuteOn();
-		}
-
-		#endregion
-
-		public BoolFeedback CameraIsMutedFeedback { get; private set; }
-
-		public void CameraMuteOn()
-		{
-			EnqueueCommand("xCommand Video Input MainVideo Mute");
-		}
-
-		public void CameraMuteOff()
-		{
-			EnqueueCommand("xCommand Video Input MainVideo Unmute");
-		}
-
-		public void CameraMuteToggle()
-		{
-			if (CameraIsMutedFeedback.BoolValue)
-				CameraMuteOff();
-			else
-				CameraMuteOn();
-		}
 
 		#region IHasDoNotDisturbMode Members
 

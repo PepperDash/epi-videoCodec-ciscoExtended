@@ -32,10 +32,54 @@ using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceW
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 	/// <summary>
-	/// Partial class implementation for IHasCameraOff
+	/// Partial class implementation for IHasCameraOff and IHasCameraMute
 	/// </summary>
 	public partial class CiscoCodec
 	{
-		// TODO: Move IHasCameraOff implementation here
+		#region IHasCameraOff Implementation
+
+		public BoolFeedback CameraIsOffFeedback { get; private set; }
+
+		public void CameraOff()
+		{
+			CameraMuteOn();
+		}
+
+		#endregion
+
+		#region IHasCameraMute Implementation
+
+		public BoolFeedback CameraIsMutedFeedback { get; private set; }
+
+		public void CameraMuteOn()
+		{
+			EnqueueCommand("xCommand Video Input MainVideo Mute");
+		}
+
+		public void CameraMuteOff()
+		{
+			EnqueueCommand("xCommand Video Input MainVideo Unmute");
+		}
+
+		public void CameraMuteToggle()
+		{
+			if (CameraIsMutedFeedback.BoolValue)
+				CameraMuteOff();
+			else
+				CameraMuteOn();
+		}
+
+		/// <summary>
+		/// Initializes camera feedback properties. Called from main constructor.
+		/// </summary>
+		private void InitializeCameraFeedbacks()
+		{
+			CameraIsOffFeedback = new BoolFeedback(
+				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
+			);
+			CameraIsMutedFeedback = CameraIsOffFeedback;
+		}
+
+		#endregion
 	}
 }

@@ -33,9 +33,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
 	/// <summary>
 	/// Partial class implementation for IHasCameraMute
+	/// NOTE: Implementation is included in CiscoCodecIHasCameraOff.cs
 	/// </summary>
 	public partial class CiscoCodec
 	{
-		// TODO: Move IHasCameraMute implementation here
+		// IHasCameraMute implementation is included in CiscoCodecIHasCameraOff.cs
+		// since the two interfaces are closely related and share the same underlying functionality
 	}
 }

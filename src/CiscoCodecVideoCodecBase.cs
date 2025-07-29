@@ -37,5 +37,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 	public partial class CiscoCodec
 	{
 		// TODO: Move VideoCodecBase override methods and properties here
+		// This requires careful analysis of what can be safely moved vs what needs to stay in main class
 	}
 }
