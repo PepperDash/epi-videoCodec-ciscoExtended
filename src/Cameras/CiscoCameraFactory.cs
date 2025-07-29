@@ -1,7 +1,7 @@
-﻿using PepperDash.Essentials.Core;
-using System.Collections.Generic;
-using PepperDash.Essentials.Core.Config;
+﻿using System.Collections.Generic;
 using PepperDash.Core;
+using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Core.Config;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
@@ -16,7 +16,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         public override EssentialsDevice BuildDevice(DeviceConfig dc)
         {
-            Debug.Console(1, "Factory Attempting to create new Cisco Camera Device");
+            Debug.LogDebug("Factory Attempting to create new Cisco Camera Device");
 
             var props = Newtonsoft.Json.JsonConvert.DeserializeObject<CiscoCodecCameraPropertiesConfig>(dc.Properties.ToString());
             return new CiscoCamera(dc.Key, dc.Name, props);

@@ -26,7 +26,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <inheritdoc />
         public override EssentialsDevice BuildDevice(DeviceConfig dc)
         {
-            Debug.Console(1, "Factory Attempting to create new Cisco RoomOs Device");
+            Debug.LogDebug("Factory Attempting to create new Cisco RoomOs Device");
 
             var comm = CommFactory.CreateCommForDevice(dc);
             return new CiscoCodec(dc, comm);

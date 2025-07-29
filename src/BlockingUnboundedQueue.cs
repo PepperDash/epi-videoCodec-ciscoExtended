@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using Crestron.SimplSharp;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -28,7 +30,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
                 catch (Exception ex)
                 {
-                    Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error checking message:{0}", ex);
+                    _parent.LogError("Error checking message: {message}", ex.Message);
+                    _parent.LogVerbose(ex, "Exception");
                     throw;
                 }
                 finally
@@ -47,7 +50,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             catch (Exception ex)
             {
-                Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error pushing message:{0}", ex);
+                _parent.LogError("Error pushing message: {message}", ex.Message);
+                _parent.LogVerbose(ex, "Exception");
             }
             finally
             {
@@ -73,7 +77,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             catch (Exception ex)
             {
-                Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error popping message:{0}", ex);
+                _parent.LogError("Error popping message: {message}", ex.Message);
+                _parent.LogVerbose(ex, "Exception");
                 throw;
             }
             finally
