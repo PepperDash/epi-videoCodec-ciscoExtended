@@ -157,7 +157,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 	/// - Occupancy and people count monitoring
 	/// - WebEx integration and branding
 	/// </remarks>
-	public class CiscoCodec
+	public partial class CiscoCodec
 		: VideoCodecBase,
 			IHasCallHistory,
 			IHasCallFavorites,
@@ -300,7 +300,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private readonly bool _phonebookAutoPopulate;
 		private bool _phonebookInitialSearch;
 
-		private string _lastSearched;
 		private CiscoCodecConfig _config;
 		private readonly int _joinableCooldownSeconds;
 
@@ -322,9 +321,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public bool Room { get; private set; }
 
-		public event EventHandler<DirectoryEventArgs> DirectoryResultReturned;
-
-		private CTimer _brandingTimer;
 		private CTimer _registrationCheckTimer;
 
 		public CommunicationGather PortGather { get; private set; }
@@ -357,12 +353,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public BoolFeedback PresentationActiveFeedback { get; private set; }
 
-		public bool SpeakerTrackAvailability { get; private set; }
-		public bool SpeakerTrackStatus { get; private set; }
-		public bool PresenterTrackAvailability { get; private set; }
-		public bool PresenterTrackStatus { get; private set; }
 		public bool WebviewIsVisible { get; private set; }
-		public string PresenterTrackStatusName { get; private set; }
 
 		private string _currentLayoutBacker;
 
@@ -379,23 +370,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public BoolFeedback FarEndIsSharingContentFeedback { get; private set; }
 
 		#region AutoCamera Feedbacks
-
-		public BoolFeedback CameraAutoModeIsOnFeedback { get; private set; }
-		public BoolFeedback SpeakerTrackStatusOnFeedback { get; private set; }
-		public BoolFeedback PresenterTrackStatusOnFeedback { get; private set; }
-
-		public StringFeedback PresenterTrackStatusNameFeedback { get; private set; }
-		public BoolFeedback PresenterTrackStatusOffFeedback { get; private set; }
-		public BoolFeedback PresenterTrackStatusFollowFeedback { get; private set; }
-		public BoolFeedback PresenterTrackStatusBackgroundFeedback { get; private set; }
-		public BoolFeedback PresenterTrackStatusPersistentFeedback { get; private set; }
-
-		public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
-		public BoolFeedback SpeakerTrackAvailableFeedback { get; private set; }
-		public BoolFeedback PresenterTrackAvailableFeedback { get; private set; }
-		public BoolFeedback DirectorySearchInProgress { get; private set; }
-
-		public FeedbackGroup PresenterTrackFeedbackGroup { get; private set; }
 
 		#endregion
 
@@ -435,27 +409,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CiscoCodecStatus.RootObject CodecStatus;
 
 		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
-
-		public CodecCallHistory CallHistory { get; private set; }
-
-		public CodecCallFavorites CallFavorites { get; private set; }
-
-		public CodecDirectory DirectoryRoot { get; private set; }
-
-		public CodecDirectory CurrentDirectoryResult
-		{
-			get
-			{
-				if (DirectoryBrowseHistory.Count > 0)
-					return DirectoryBrowseHistory[DirectoryBrowseHistory.Count - 1];
-				else
-					return DirectoryRoot;
-			}
-		}
-
-		public BoolFeedback CurrentDirectoryResultIsNotDirectoryRoot { get; private set; }
-
-		public List<CodecDirectory> DirectoryBrowseHistory { get; private set; }
 
 		public CodecScheduleAwareness CodecSchedule { get; private set; }
 
@@ -656,77 +609,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region CameraAutoTrackingFeedbackFunc
 
-
-		protected Func<bool> CameraTrackingAvailableFeedbackFunc
-		{
-			get { return () => PresenterTrackAvailability || SpeakerTrackAvailability; }
-		}
-
-		protected Func<bool> CameraTrackingOnFeedbackFunc
-		{
-			get
-			{
-				return () =>
-					(SpeakerTrackAvailability && SpeakerTrackStatus)
-					|| (PresenterTrackAvailability && PresenterTrackStatus);
-			}
-		}
-
-		protected Func<bool> PresenterTrackAvailableFeedbackFunc
-		{
-			get { return () => PresenterTrackAvailability; }
-		}
-
-		protected Func<bool> SpeakerTrackAvailableFeedbackFunc
-		{
-			get { return () => SpeakerTrackAvailability; }
-		}
-
-		protected Func<bool> SpeakerTrackStatusOnFeedbackFunc
-		{
-			get { return () => SpeakerTrackStatus; }
-		}
-
-		protected Func<string> PresenterTrackStatusNameFeedbackFunc
-		{
-			get { return () => PresenterTrackStatusName; }
-		}
-
-		protected Func<bool> PresenterTrackStatusOnFeedbackFunc
-		{
-			get
-			{
-				return () =>
-					((PresenterTrackStatus) || (String.IsNullOrEmpty(PresenterTrackStatusName)));
-			}
-		}
-
-		protected Func<bool> PresenterTrackStatusOffFeedbackFunc
-		{
-			get { return () => PresenterTrackStatusName == "off"; }
-		}
-
-		protected Func<bool> PresenterTrackStatusFollowFeedbackFunc
-		{
-			get { return () => PresenterTrackStatusName == "follow"; }
-		}
-
-		protected Func<bool> PresenterTrackStatusBackgroundFeedbackFunc
-		{
-			get { return () => PresenterTrackStatusName == "background"; }
-		}
-
-		protected Func<bool> PresenterTrackStatusPersistentFeedbackFunc
-		{
-			get { return () => PresenterTrackStatusName == "persistent"; }
-		}
-
 		#endregion
 
 
 		public CodecSyncState SyncState { get; }
-
-		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
 
 		private StringBuilder _jsonMessage;
 
@@ -764,7 +650,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// **___________________________________________________________________**
 		//  Timers to be moved to the global system timer at a later point....
 		private CTimer BookingsRefreshTimer;
-		private CTimer PhonebookRefreshTimer;
 
 		// **___________________________________________________________________**
 
@@ -793,7 +678,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CodecStatus = new CiscoCodecStatus.RootObject();
 			DeviceInfo = new DeviceInfo();
 			CodecInfo = new CiscoCodecInfo(this);
-			_lastSearched = string.Empty;
 			_phonebookInitialSearch = true;
 			CurrentLayout = string.Empty;
 			_receiveQueue = new GenericQueue(Key + "-queue", 500);
@@ -881,11 +765,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			LocalLayoutFeedback = new StringFeedback(LocalLayoutFeedbackFunc);
 			LocalLayoutIsProminentFeedback = new BoolFeedback(LocalLayoutIsProminentFeedbackFunc);
 			FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
-			CameraIsOffFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
-			);
 			AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
-			DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
 			PhoneOffHookFeedback = new BoolFeedback(PhoneOffHookFeedbackFunc);
 			CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
 			CallerIdNumberFeedback = new StringFeedback(CallerIdNumberFeedbackFunc);
@@ -895,45 +775,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			#region CameraAutoFeedbackRegistration
 
-			CameraAutoModeIsOnFeedback = new BoolFeedback(CameraTrackingOnFeedbackFunc);
 			SpeakerTrackStatusOnFeedback = new BoolFeedback(SpeakerTrackStatusOnFeedbackFunc);
-			PresenterTrackStatusOnFeedback = new BoolFeedback(PresenterTrackStatusOnFeedbackFunc);
 
-			PresenterTrackStatusNameFeedback = new StringFeedback(
-				PresenterTrackStatusNameFeedbackFunc
-			);
-			PresenterTrackStatusOffFeedback = new BoolFeedback(PresenterTrackStatusOffFeedbackFunc);
-			PresenterTrackStatusFollowFeedback = new BoolFeedback(
-				PresenterTrackStatusFollowFeedbackFunc
-			);
-			PresenterTrackStatusBackgroundFeedback = new BoolFeedback(
-				PresenterTrackStatusBackgroundFeedbackFunc
-			);
-			PresenterTrackStatusPersistentFeedback = new BoolFeedback(
-				PresenterTrackStatusPersistentFeedbackFunc
-			);
-
-			CameraAutoModeAvailableFeedback = new BoolFeedback(CameraTrackingAvailableFeedbackFunc);
-			PresenterTrackAvailableFeedback = new BoolFeedback(PresenterTrackAvailableFeedbackFunc);
 			SpeakerTrackAvailableFeedback = new BoolFeedback(SpeakerTrackAvailableFeedbackFunc);
 
-			PresenterTrackFeedbackGroup = new FeedbackGroup(
-				new FeedbackCollection<Feedback>()
-				{
-					PresenterTrackStatusOnFeedback,
-					PresenterTrackStatusNameFeedback,
-					PresenterTrackStatusOffFeedback,
-					PresenterTrackStatusFollowFeedback,
-					PresenterTrackStatusBackgroundFeedback,
-					PresenterTrackStatusPersistentFeedback
-				}
-			);
+			// Initialize PresenterTrack feedbacks
+			InitializePresenterTrackFeedbacks();
+
+			// Initialize CameraAutoMode feedbacks
+			InitializeCameraAutoModeFeedbacks();
 
 			#endregion
 
+			// Initialize Camera feedbacks
+			InitializeCameraFeedbacks();
 
-
-			CameraIsMutedFeedback = CameraIsOffFeedback;
 			SupportsCameraOff = true;
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
@@ -1016,8 +872,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 
-			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
-
 			SyncState.InitialSyncCompleted += SyncState_InitialSyncCompleted;
 
 			PortGather = new CommunicationGather(Communication, Delimiter)
@@ -1034,15 +888,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				CallFavorites.Favorites = props.Favorites;
 			}
 
-			DirectoryRoot = new CodecDirectory();
-
-			DirectoryBrowseHistory = new List<CodecDirectory>();
-
-			CurrentDirectoryResultIsNotDirectoryRoot = new BoolFeedback(
-				() => DirectoryBrowseHistory.Count > 0
-			);
-
-			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
+			// Initialize Directory feedbacks
+			InitializeDirectoryFeedbacks();
 
 			CodecSchedule = new CodecScheduleAwareness();
 
@@ -1621,141 +1468,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		//	TieLineCollection.Default.Add(tl);
 		//}
 
-		public void InitializeBranding(string roomKey)
-		{
-			Debug.Console(1, this, "Initializing Branding for room {0}", roomKey);
-
-			if (!BrandingEnabled)
-			{
-				return;
-			}
-
-			var mcBridgeKey = String.Format("mobileControlBridge-{0}", roomKey);
-
-#if SERIES4
-			var mcBridge =
-				DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomMessenger;
-
-#else
-			var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomBridge;
-
-#endif
-			if (!String.IsNullOrEmpty(_brandingUrl))
-			{
-				Debug.Console(1, this, "Branding URL found: {0}", _brandingUrl);
-				if (_brandingTimer != null)
-				{
-					_brandingTimer.Stop();
-					_brandingTimer.Dispose();
-				}
-
-				_brandingTimer = new CTimer(
-					(o) =>
-					{
-						if (_sendMcUrl)
-						{
-							SendMcBrandingUrl(mcBridge);
-							_sendMcUrl = false;
-						}
-						else
-						{
-							SendBrandingUrl();
-							_sendMcUrl = true;
-						}
-					},
-					0,
-					15000
-				);
-			}
-			else if (String.IsNullOrEmpty(_brandingUrl))
-			{
-				Debug.Console(1, this, "No Branding URL found");
-				if (mcBridge == null)
-					return;
-
-				Debug.Console(2, this, "Setting QR code URL: {0}", mcBridge.QrCodeUrl);
-
-				mcBridge.UserCodeChanged += (o, a) => SendMcBrandingUrl(mcBridge);
-				mcBridge.UserPromptedForCode += (o, a) => DisplayUserCode(mcBridge.UserCode);
-
-				SendMcBrandingUrl(mcBridge);
-			}
-		}
-
-		public void PollSpeakerTrack()
-		{
-			EnqueueCommand("xStatus Cameras SpeakerTrack");
-		}
-
-		public void PollPresenterTrack()
-		{
-			EnqueueCommand("xStatus Cameras PresenterTrack");
-		}
-
 		private void DisplayUserCode(string code)
 		{
 			EnqueueCommand(
 				string.Format(
 					"xcommand userinterface message alert display title:\"Mobile Control User Code:\" text:\"{0}\" duration: 30",
 					code
-				)
-			);
-		}
-
-#if SERIES4
-		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
-#else
-		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
-#endif
-		{
-			if (roomMessenger == null)
-			{
-				return;
-			}
-
-			Debug.Console(1, this, "Sending url: {0}", roomMessenger.QrCodeUrl);
-
-			EnqueueCommand(
-				"xconfiguration userinterface custommessage: \"Scan the QR code with a mobile phone to get started\""
-			);
-			EnqueueCommand(
-				"xconfiguration userinterface osd halfwakemessage: \"Tap the touch panel or scan the QR code with a mobile phone to get started\""
-			);
-
-			var checksum = !String.IsNullOrEmpty(roomMessenger.QrCodeChecksum)
-				? String.Format("checksum: {0} ", roomMessenger.QrCodeChecksum)
-				: String.Empty;
-
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch {1}type: branding url: {0}",
-					roomMessenger.QrCodeUrl,
-					checksum
-				)
-			);
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch {1}type: halfwakebranding url: {0}",
-					roomMessenger.QrCodeUrl,
-					checksum
-				)
-			);
-		}
-
-		private void SendBrandingUrl()
-		{
-			Debug.Console(1, this, "Sending url: {0}", _brandingUrl);
-
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch type: branding url: {0}",
-					_brandingUrl
-				)
-			);
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch type: halfwakebranding url: {0}",
-					_brandingUrl
 				)
 			);
 		}
@@ -1781,7 +1499,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ConsoleAccessLevelEnum.AccessOperator
 			);
 
-			PhonebookSyncState.InitialSyncCompleted += PhonebookSyncState_InitialSyncCompleted;
 			CameraTrackingCapabilitiesChanged += CiscoCodec_CameraTrackingCapabilitiesChanged;
 
 			//Reserved for future use
@@ -1832,14 +1549,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			CurrentLayout = e.CurrentLayout;
 			LocalLayoutFeedback.FireUpdate();
-		}
-
-		private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
-		{
-			Debug.Console(0, this, "PhonebookSyncState_InitialSyncCompleted");
-			if (DirectoryRoot == null)
-				return;
-			OnDirectoryResultReturned(DirectoryRoot);
 		}
 
 		#region Overrides of Device
@@ -2929,77 +2638,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception e)
 			{
 				Debug.Console(0, this, "Exception in ParseWebviewStatusToken : ");
-				Debug.Console(0, this, "{0}", e.Message);
-			}
-		}
-		private void ParseSpeakerTrackToken(JToken speakerTrackToken)
-		{
-			try
-			{
-				if (String.IsNullOrEmpty(speakerTrackToken.ToString()))
-					return;
-				var speakerTrackObject = speakerTrackToken as JObject;
-				if (speakerTrackObject == null)
-					return;
-				var availabilityToken = speakerTrackObject.SelectToken("Availability.Value");
-				var statusToken = speakerTrackObject.SelectToken("Status.Value");
-				if (availabilityToken != null)
-					SpeakerTrackAvailability =
-						availabilityToken.ToString().ToLower() == "available";
-				if (statusToken != null)
-					SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
-
-				UpdateCameraAutoModeFeedbacks();
-			}
-			catch (Exception e)
-			{
-				Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
-				Debug.Console(0, this, "{0}", e.Message);
-			}
-		}
-
-		private void ParsePresenterTrackToken(JToken presenterTrackToken)
-		{
-			try
-			{
-				if (String.IsNullOrEmpty(presenterTrackToken.ToString()))
-					return;
-				var presenterTrackObject = presenterTrackToken as JObject;
-                if (presenterTrackObject == null)
-					return;
-				var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
-				var statusToken = presenterTrackObject.SelectToken("Status.Value");
-				if (availabilityToken != null)
-					PresenterTrackAvailability =
-						availabilityToken.ToString().ToLower() == "available";
-				if (statusToken != null)
-				{
-					var status = statusToken.ToString().ToLower();
-					if (!String.IsNullOrEmpty(status))
-					{
-						PresenterTrackStatusName = status;
-						switch (status)
-						{
-							case ("follow"):
-								PresenterTrackStatus = true;
-								break;
-							case ("background"):
-								PresenterTrackStatus = true;
-								break;
-							case ("persistent"):
-								PresenterTrackStatus = true;
-								break;
-							default:
-								PresenterTrackStatus = false;
-								break;
-						}
-					}
-				}
-				UpdateCameraAutoModeFeedbacks();
-			}
-			catch (Exception e)
-			{
-				Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
 				Debug.Console(0, this, "{0}", e.Message);
 			}
 		}
@@ -4632,19 +4270,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParseCallHistoryResponseToken(JToken callHistoryResponseToken)
-		{
-			if (callHistoryResponseToken == null)
-				return;
-			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
-			PopulateObjectWithToken(
-				callHistoryResponseToken,
-				"CallHistoryRecentsResult",
-				codecCallHistory
-			);
-			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
-		}
-
 		private void ParsePhonebookSearchResultResponse(
 			JToken phonebookSearchResultResponseToken,
 			string resultId
@@ -5497,34 +5122,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				: "Video";
 		}
 
-		private void OnDirectoryResultReturned(CodecDirectory result)
-		{
-			if (result == null)
-			{
-				Debug.Console(1, this, "OnDirectoryResultReturned - result is null");
-				return;
-			}
-			Debug.Console(1, this, "OnDirectoryResultReturned");
-			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
-
-			// This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
-			var handler = DirectoryResultReturned;
-			if (handler != null)
-			{
-				Debug.Console(1, this, "Directory result returned");
-				handler(
-					this,
-					new DirectoryEventArgs()
-					{
-						Directory = result,
-						DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
-					}
-				);
-			}
-
-			PrintDirectory(result);
-		}
-
 		private void ComputeLegacyLayout()
 		{
 			if (EnhancedLayouts)
@@ -5668,11 +5265,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return callId;
 		}
 
-		public void GetCallHistory()
-		{
-			EnqueueCommand("xCommand CallHistory Recents Limit: 20 Order: OccurrenceTime");
-		}
-
 		public void GetSchedule()
 		{
 			GetBookings(null);
@@ -5735,111 +5327,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					_phonebookMode,
 					_phonebookResultsLimit
 				)
-			);
-		}
-
-		private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
-		private bool _searchInProgress;
-
-		public void SearchDirectory(string searchString)
-		{
-			Debug.Console(
-				2,
-				this,
-				"_phonebookAutoPopulate = {0}, searchString = {1}, _lastSeached = {2}, _phonebookInitialSearch = {3}",
-				_phonebookAutoPopulate ? "true" : "false",
-				searchString,
-				_lastSearched,
-				_phonebookInitialSearch ? "true" : "false"
-			);
-
-			if (
-				!_phonebookAutoPopulate
-				&& searchString == _lastSearched
-				&& !_phonebookInitialSearch
-			)
-				return;
-
-			_searchInProgress = !String.IsNullOrEmpty(searchString);
-			var tag = Guid.NewGuid();
-			_searches.Enqueue(tag.ToString());
-			EnqueueCommand(
-				string.Format(
-					"xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
-					searchString,
-					_phonebookMode,
-					_phonebookResultsLimit,
-					tag
-				)
-			);
-			_lastSearched = searchString;
-			_phonebookInitialSearch = false;
-			DirectorySearchInProgress.FireUpdate();
-		}
-
-		public void GetDirectoryFolderContents(string folderId)
-		{
-			EnqueueCommand(
-				string.Format(
-					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2}",
-					folderId,
-					_phonebookMode,
-					_phonebookResultsLimit
-				)
-			);
-		}
-
-		public void GetDirectoryParentFolderContents()
-		{
-			var currentDirectory = new CodecDirectory();
-
-			if (DirectoryBrowseHistory.Count > 0)
-			{
-				var lastItemIndex = DirectoryBrowseHistory.Count - 1;
-				var parentDirectoryContents = DirectoryBrowseHistory[lastItemIndex];
-
-				DirectoryBrowseHistory.Remove(DirectoryBrowseHistory[lastItemIndex]);
-
-				currentDirectory = parentDirectoryContents;
-			}
-			else
-			{
-				currentDirectory = DirectoryRoot;
-			}
-
-			OnDirectoryResultReturned(currentDirectory);
-		}
-
-		public void SetCurrentDirectoryToRoot()
-		{
-			DirectoryBrowseHistory.Clear();
-
-			OnDirectoryResultReturned(DirectoryRoot);
-		}
-
-		private void PrintDirectory(CodecDirectory directory)
-		{
-			Debug.Console(0, this, "Attempting to Print Directory");
-			if (directory == null)
-				return;
-			Debug.Console(0, this, "Directory Results:\n");
-
-			foreach (var item in directory.CurrentDirectoryResults)
-			{
-				if (item is DirectoryFolder)
-				{
-					Debug.Console(1, this, "[+] {0}", item.Name);
-				}
-				else if (item is DirectoryContact)
-				{
-					Debug.Console(1, this, "{0}", item.Name);
-				}
-			}
-			Debug.Console(
-				1,
-				this,
-				"Directory is on Root Level: {0}",
-				!CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
 			);
 		}
 
@@ -6927,174 +6414,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
          */
 
-		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
-		{
-			EnqueueCommand(
-				string.Format(
-					"xCommand CallHistory DeleteEntry CallHistoryId: {0} AcknowledgeConsecutiveDuplicates: True",
-					entry.OccurrenceHistoryId
-				)
-			);
-		}
-
 		#region IHasCameraSpeakerTrack
 
-		public void CameraAutoModeToggle()
-		{
-			if (!CameraAutoModeIsOnFeedback.BoolValue)
-			{
-				CameraAutoModeOn();
-				return;
-			}
-			CameraAutoModeOff();
-		}
-
-		public void CameraAutoModeOn()
-		{
-			switch (CameraTrackingCapabilities)
-			{
-				case eCameraTrackingCapabilities.None:
-					{
-						Debug.Console(0, this, "Camera Auto Mode Unavailable");
-						break;
-					}
-				case eCameraTrackingCapabilities.PresenterTrack:
-					{
-						PresenterTrackFollow();
-						break;
-					}
-				case eCameraTrackingCapabilities.SpeakerTrack:
-					{
-						SpeakerTrackOn();
-						break;
-					}
-				case eCameraTrackingCapabilities.Both:
-					{
-						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
-						{
-							SpeakerTrackOn();
-							break;
-						}
-						PresenterTrackFollow();
-						break;
-					}
-			}
-		}
-
-		public void CameraAutoModeOff()
-		{
-			switch (CameraTrackingCapabilities)
-			{
-				case eCameraTrackingCapabilities.None:
-					{
-						Debug.Console(0, this, "Camera Auto Mode Unavailable");
-						break;
-					}
-				case eCameraTrackingCapabilities.PresenterTrack:
-					{
-						PresenterTrackOff();
-						break;
-					}
-				case eCameraTrackingCapabilities.SpeakerTrack:
-					{
-						SpeakerTrackOff();
-						break;
-					}
-				case eCameraTrackingCapabilities.Both:
-					{
-						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
-						{
-							SpeakerTrackOff();
-							break;
-						}
-						PresenterTrackOff();
-						break;
-					}
-			}
-		}
-
-		public void SpeakerTrackOn()
-		{
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
-		}
-
-		public void SpeakerTrackOff()
-		{
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
-		}
-
 		#endregion
-
-		public void PresenterTrackOff()
-		{
-			if (!PresenterTrackAvailability)
-			{
-				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-				return;
-			}
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Off");
-		}
-
-		public void PresenterTrackFollow()
-		{
-			if (!PresenterTrackAvailability)
-			{
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-                return;
-			}
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Follow");
-		}
-
-		public void PresenterTrackBackground()
-		{
-			if (!PresenterTrackAvailability)
-			{
-				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-				return;
-			}
-
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Background");
-		}
-
-		public void PresenterTrackPersistent()
-		{
-			if (!PresenterTrackAvailability)
-			{
-				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-				return;
-			}
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Persistent");
-		}
 
 		private void SetUpCameras(List<CameraInfo> cameraInfo)
 		{
@@ -7481,10 +6803,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public string ExternalSourceInputPort { get; private set; }
 
-		public bool BrandingEnabled { get; private set; }
-		private string _brandingUrl;
-		private bool _sendMcUrl;
-
 		/*public void AddExternalSource(string connectorId, string key, string name, eExternalSourceType type)
         {
             int CiscoCallId = 2;
@@ -7585,37 +6903,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 
 		#endregion
-
-		#region IHasCameraOff Members
-
-		public BoolFeedback CameraIsOffFeedback { get; private set; }
-
-		public void CameraOff()
-		{
-			CameraMuteOn();
-		}
-
-		#endregion
-
-		public BoolFeedback CameraIsMutedFeedback { get; private set; }
-
-		public void CameraMuteOn()
-		{
-			EnqueueCommand("xCommand Video Input MainVideo Mute");
-		}
-
-		public void CameraMuteOff()
-		{
-			EnqueueCommand("xCommand Video Input MainVideo Unmute");
-		}
-
-		public void CameraMuteToggle()
-		{
-			if (CameraIsMutedFeedback.BoolValue)
-				CameraMuteOff();
-			else
-				CameraMuteOn();
-		}
 
 		#region IHasDoNotDisturbMode Members
 
