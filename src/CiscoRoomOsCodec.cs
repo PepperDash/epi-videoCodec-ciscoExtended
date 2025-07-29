@@ -300,7 +300,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private readonly bool _phonebookAutoPopulate;
 		private bool _phonebookInitialSearch;
 
-		private string _lastSearched;
 		private CiscoCodecConfig _config;
 		private readonly int _joinableCooldownSeconds;
 
@@ -321,8 +320,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private bool _externalSourceChangeRequested;
 
 		public bool Room { get; private set; }
-
-		public event EventHandler<DirectoryEventArgs> DirectoryResultReturned;
 
 		private CTimer _registrationCheckTimer;
 
@@ -377,7 +374,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public BoolFeedback CameraAutoModeIsOnFeedback { get; private set; }
 
 		public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
-		public BoolFeedback DirectorySearchInProgress { get; private set; }
 
 		#endregion
 
@@ -417,23 +413,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CiscoCodecStatus.RootObject CodecStatus;
 
 		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
-
-		public CodecDirectory DirectoryRoot { get; private set; }
-
-		public CodecDirectory CurrentDirectoryResult
-		{
-			get
-			{
-				if (DirectoryBrowseHistory.Count > 0)
-					return DirectoryBrowseHistory[DirectoryBrowseHistory.Count - 1];
-				else
-					return DirectoryRoot;
-			}
-		}
-
-		public BoolFeedback CurrentDirectoryResultIsNotDirectoryRoot { get; private set; }
-
-		public List<CodecDirectory> DirectoryBrowseHistory { get; private set; }
 
 		public CodecScheduleAwareness CodecSchedule { get; private set; }
 
@@ -655,8 +634,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public CodecSyncState SyncState { get; }
 
-		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
-
 		private StringBuilder _jsonMessage;
 
 		private bool _jsonFeedbackMessageIsIncoming;
@@ -693,7 +670,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// **___________________________________________________________________**
 		//  Timers to be moved to the global system timer at a later point....
 		private CTimer BookingsRefreshTimer;
-		private CTimer PhonebookRefreshTimer;
 
 		// **___________________________________________________________________**
 
@@ -722,7 +698,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CodecStatus = new CiscoCodecStatus.RootObject();
 			DeviceInfo = new DeviceInfo();
 			CodecInfo = new CiscoCodecInfo(this);
-			_lastSearched = string.Empty;
 			_phonebookInitialSearch = true;
 			CurrentLayout = string.Empty;
 			_receiveQueue = new GenericQueue(Key + "-queue", 500);
@@ -814,7 +789,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
 			);
 			AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
-			DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
 			PhoneOffHookFeedback = new BoolFeedback(PhoneOffHookFeedbackFunc);
 			CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
 			CallerIdNumberFeedback = new StringFeedback(CallerIdNumberFeedbackFunc);
@@ -920,8 +894,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 
-			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
-
 			SyncState.InitialSyncCompleted += SyncState_InitialSyncCompleted;
 
 			PortGather = new CommunicationGather(Communication, Delimiter)
@@ -938,15 +910,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				CallFavorites.Favorites = props.Favorites;
 			}
 
-			DirectoryRoot = new CodecDirectory();
-
-			DirectoryBrowseHistory = new List<CodecDirectory>();
-
-			CurrentDirectoryResultIsNotDirectoryRoot = new BoolFeedback(
-				() => DirectoryBrowseHistory.Count > 0
-			);
-
-			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
+			// Initialize Directory feedbacks
+			InitializeDirectoryFeedbacks();
 
 			CodecSchedule = new CodecScheduleAwareness();
 
@@ -1556,7 +1521,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ConsoleAccessLevelEnum.AccessOperator
 			);
 
-			PhonebookSyncState.InitialSyncCompleted += PhonebookSyncState_InitialSyncCompleted;
 			CameraTrackingCapabilitiesChanged += CiscoCodec_CameraTrackingCapabilitiesChanged;
 
 			//Reserved for future use
@@ -1607,14 +1571,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			CurrentLayout = e.CurrentLayout;
 			LocalLayoutFeedback.FireUpdate();
-		}
-
-		private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
-		{
-			Debug.Console(0, this, "PhonebookSyncState_InitialSyncCompleted");
-			if (DirectoryRoot == null)
-				return;
-			OnDirectoryResultReturned(DirectoryRoot);
 		}
 
 		#region Overrides of Device
@@ -5188,34 +5144,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				: "Video";
 		}
 
-		private void OnDirectoryResultReturned(CodecDirectory result)
-		{
-			if (result == null)
-			{
-				Debug.Console(1, this, "OnDirectoryResultReturned - result is null");
-				return;
-			}
-			Debug.Console(1, this, "OnDirectoryResultReturned");
-			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
-
-			// This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
-			var handler = DirectoryResultReturned;
-			if (handler != null)
-			{
-				Debug.Console(1, this, "Directory result returned");
-				handler(
-					this,
-					new DirectoryEventArgs()
-					{
-						Directory = result,
-						DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
-					}
-				);
-			}
-
-			PrintDirectory(result);
-		}
-
 		private void ComputeLegacyLayout()
 		{
 			if (EnhancedLayouts)
@@ -5421,111 +5349,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					_phonebookMode,
 					_phonebookResultsLimit
 				)
-			);
-		}
-
-		private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
-		private bool _searchInProgress;
-
-		public void SearchDirectory(string searchString)
-		{
-			Debug.Console(
-				2,
-				this,
-				"_phonebookAutoPopulate = {0}, searchString = {1}, _lastSeached = {2}, _phonebookInitialSearch = {3}",
-				_phonebookAutoPopulate ? "true" : "false",
-				searchString,
-				_lastSearched,
-				_phonebookInitialSearch ? "true" : "false"
-			);
-
-			if (
-				!_phonebookAutoPopulate
-				&& searchString == _lastSearched
-				&& !_phonebookInitialSearch
-			)
-				return;
-
-			_searchInProgress = !String.IsNullOrEmpty(searchString);
-			var tag = Guid.NewGuid();
-			_searches.Enqueue(tag.ToString());
-			EnqueueCommand(
-				string.Format(
-					"xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
-					searchString,
-					_phonebookMode,
-					_phonebookResultsLimit,
-					tag
-				)
-			);
-			_lastSearched = searchString;
-			_phonebookInitialSearch = false;
-			DirectorySearchInProgress.FireUpdate();
-		}
-
-		public void GetDirectoryFolderContents(string folderId)
-		{
-			EnqueueCommand(
-				string.Format(
-					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2}",
-					folderId,
-					_phonebookMode,
-					_phonebookResultsLimit
-				)
-			);
-		}
-
-		public void GetDirectoryParentFolderContents()
-		{
-			var currentDirectory = new CodecDirectory();
-
-			if (DirectoryBrowseHistory.Count > 0)
-			{
-				var lastItemIndex = DirectoryBrowseHistory.Count - 1;
-				var parentDirectoryContents = DirectoryBrowseHistory[lastItemIndex];
-
-				DirectoryBrowseHistory.Remove(DirectoryBrowseHistory[lastItemIndex]);
-
-				currentDirectory = parentDirectoryContents;
-			}
-			else
-			{
-				currentDirectory = DirectoryRoot;
-			}
-
-			OnDirectoryResultReturned(currentDirectory);
-		}
-
-		public void SetCurrentDirectoryToRoot()
-		{
-			DirectoryBrowseHistory.Clear();
-
-			OnDirectoryResultReturned(DirectoryRoot);
-		}
-
-		private void PrintDirectory(CodecDirectory directory)
-		{
-			Debug.Console(0, this, "Attempting to Print Directory");
-			if (directory == null)
-				return;
-			Debug.Console(0, this, "Directory Results:\n");
-
-			foreach (var item in directory.CurrentDirectoryResults)
-			{
-				if (item is DirectoryFolder)
-				{
-					Debug.Console(1, this, "[+] {0}", item.Name);
-				}
-				else if (item is DirectoryContact)
-				{
-					Debug.Console(1, this, "{0}", item.Name);
-				}
-			}
-			Debug.Console(
-				1,
-				this,
-				"Directory is on Root Level: {0}",
-				!CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
 			);
 		}
 
