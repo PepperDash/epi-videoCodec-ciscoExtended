@@ -157,7 +157,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 	/// - Occupancy and people count monitoring
 	/// - WebEx integration and branding
 	/// </remarks>
-	public class CiscoCodec
+	public partial class CiscoCodec
 		: VideoCodecBase,
 			IHasCallHistory,
 			IHasCallFavorites,
@@ -324,7 +324,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public event EventHandler<DirectoryEventArgs> DirectoryResultReturned;
 
-		private CTimer _brandingTimer;
 		private CTimer _registrationCheckTimer;
 
 		public CommunicationGather PortGather { get; private set; }
@@ -435,10 +434,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CiscoCodecStatus.RootObject CodecStatus;
 
 		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
-
-		public CodecCallHistory CallHistory { get; private set; }
-
-		public CodecCallFavorites CallFavorites { get; private set; }
 
 		public CodecDirectory DirectoryRoot { get; private set; }
 
@@ -1621,67 +1616,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		//	TieLineCollection.Default.Add(tl);
 		//}
 
-		public void InitializeBranding(string roomKey)
-		{
-			Debug.Console(1, this, "Initializing Branding for room {0}", roomKey);
-
-			if (!BrandingEnabled)
-			{
-				return;
-			}
-
-			var mcBridgeKey = String.Format("mobileControlBridge-{0}", roomKey);
-
-#if SERIES4
-			var mcBridge =
-				DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomMessenger;
-
-#else
-			var mcBridge = DeviceManager.GetDeviceForKey(mcBridgeKey) as IMobileControlRoomBridge;
-
-#endif
-			if (!String.IsNullOrEmpty(_brandingUrl))
-			{
-				Debug.Console(1, this, "Branding URL found: {0}", _brandingUrl);
-				if (_brandingTimer != null)
-				{
-					_brandingTimer.Stop();
-					_brandingTimer.Dispose();
-				}
-
-				_brandingTimer = new CTimer(
-					(o) =>
-					{
-						if (_sendMcUrl)
-						{
-							SendMcBrandingUrl(mcBridge);
-							_sendMcUrl = false;
-						}
-						else
-						{
-							SendBrandingUrl();
-							_sendMcUrl = true;
-						}
-					},
-					0,
-					15000
-				);
-			}
-			else if (String.IsNullOrEmpty(_brandingUrl))
-			{
-				Debug.Console(1, this, "No Branding URL found");
-				if (mcBridge == null)
-					return;
-
-				Debug.Console(2, this, "Setting QR code URL: {0}", mcBridge.QrCodeUrl);
-
-				mcBridge.UserCodeChanged += (o, a) => SendMcBrandingUrl(mcBridge);
-				mcBridge.UserPromptedForCode += (o, a) => DisplayUserCode(mcBridge.UserCode);
-
-				SendMcBrandingUrl(mcBridge);
-			}
-		}
-
 		public void PollSpeakerTrack()
 		{
 			EnqueueCommand("xStatus Cameras SpeakerTrack");
@@ -1698,64 +1632,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				string.Format(
 					"xcommand userinterface message alert display title:\"Mobile Control User Code:\" text:\"{0}\" duration: 30",
 					code
-				)
-			);
-		}
-
-#if SERIES4
-		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
-#else
-		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
-#endif
-		{
-			if (roomMessenger == null)
-			{
-				return;
-			}
-
-			Debug.Console(1, this, "Sending url: {0}", roomMessenger.QrCodeUrl);
-
-			EnqueueCommand(
-				"xconfiguration userinterface custommessage: \"Scan the QR code with a mobile phone to get started\""
-			);
-			EnqueueCommand(
-				"xconfiguration userinterface osd halfwakemessage: \"Tap the touch panel or scan the QR code with a mobile phone to get started\""
-			);
-
-			var checksum = !String.IsNullOrEmpty(roomMessenger.QrCodeChecksum)
-				? String.Format("checksum: {0} ", roomMessenger.QrCodeChecksum)
-				: String.Empty;
-
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch {1}type: branding url: {0}",
-					roomMessenger.QrCodeUrl,
-					checksum
-				)
-			);
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch {1}type: halfwakebranding url: {0}",
-					roomMessenger.QrCodeUrl,
-					checksum
-				)
-			);
-		}
-
-		private void SendBrandingUrl()
-		{
-			Debug.Console(1, this, "Sending url: {0}", _brandingUrl);
-
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch type: branding url: {0}",
-					_brandingUrl
-				)
-			);
-			EnqueueCommand(
-				String.Format(
-					"xcommand userinterface branding fetch type: halfwakebranding url: {0}",
-					_brandingUrl
 				)
 			);
 		}
@@ -4632,19 +4508,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParseCallHistoryResponseToken(JToken callHistoryResponseToken)
-		{
-			if (callHistoryResponseToken == null)
-				return;
-			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
-			PopulateObjectWithToken(
-				callHistoryResponseToken,
-				"CallHistoryRecentsResult",
-				codecCallHistory
-			);
-			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
-		}
-
 		private void ParsePhonebookSearchResultResponse(
 			JToken phonebookSearchResultResponseToken,
 			string resultId
@@ -5666,11 +5529,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				callId = ActiveCalls[0].Id;
 
 			return callId;
-		}
-
-		public void GetCallHistory()
-		{
-			EnqueueCommand("xCommand CallHistory Recents Limit: 20 Order: OccurrenceTime");
 		}
 
 		public void GetSchedule()
@@ -6927,16 +6785,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
          */
 
-		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
-		{
-			EnqueueCommand(
-				string.Format(
-					"xCommand CallHistory DeleteEntry CallHistoryId: {0} AcknowledgeConsecutiveDuplicates: True",
-					entry.OccurrenceHistoryId
-				)
-			);
-		}
-
 		#region IHasCameraSpeakerTrack
 
 		public void CameraAutoModeToggle()
@@ -7480,10 +7328,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public bool ExternalSourceListEnabled { get; private set; }
 
 		public string ExternalSourceInputPort { get; private set; }
-
-		public bool BrandingEnabled { get; private set; }
-		private string _brandingUrl;
-		private bool _sendMcUrl;
 
 		/*public void AddExternalSource(string connectorId, string key, string name, eExternalSourceType type)
         {
