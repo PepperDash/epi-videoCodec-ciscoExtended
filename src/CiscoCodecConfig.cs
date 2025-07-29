@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
-
-using Newtonsoft.Json;
-using Extensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Extensions;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
+using UiExtensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.UiExtensions;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -37,6 +37,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         [JsonProperty("showSelfViewByDefault")]
         public bool ShowSelfViewByDefault { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default monitor role for self view.
+        /// Valid values are defined in the EMonitorRole enum.
+        /// This property determines where the self view will be displayed on the codec's monitors.
+        /// </summary>
+        [JsonProperty("selfViewDefaultMonitorRole", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public EMonitorRole? SelfViewDefaultMonitorRole { get; set; }
 
         /// <summary>
         /// Gets or sets the content sharing configuration properties.
@@ -103,8 +112,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("Widgets")]
         public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
-		[JsonProperty("extensions")]
-		public Extensions Extensions { get; set; }
+        [JsonProperty("extensions")]
+        public UiExtensions Extensions { get; set; }
 
         [JsonProperty("emergency")]
         public Emergency Emergency { get; set; }
@@ -168,6 +177,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public string MobileControlPath { get; set; }
 
         [JsonProperty("uiWebViewDisplay")]
-        public UiWebViewDisplay UiWebViewDisplay { get; set; }
+        public WebViewDisplay UiWebViewDisplay { get; set; }
     }
 }

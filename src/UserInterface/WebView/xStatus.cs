@@ -1,21 +1,16 @@
 ﻿using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecStatus;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView
 {
-	public class Status 
+	public class Status
 	{
 		//Error Status
 		[JsonProperty("XPath", NullValueHandling = NullValueHandling.Ignore)]
 		public XPath XPath { get; set; }
 
 		[JsonProperty("Reason", NullValueHandling = NullValueHandling.Ignore)]
-		public CiscoCodecStatus.Reason Reason { get; set; }
+		public Reason Reason { get; set; }
 
 		[JsonProperty("status", NullValueHandling = NullValueHandling.Ignore)]
 		public string StatusString { get; set; }
@@ -25,11 +20,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 		public string Value { get; set; }
 	}
 
-	public class UiWebView
+	public class WebView
 	{
 		public Status Status { get; set; }
 
-		public CiscoCodecStatus.Type Type { get; set; }
+		public Type Type { get; set; }
 
 		[JsonProperty("URL")]
 		public Url URL { get; set; }

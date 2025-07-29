@@ -1,17 +1,13 @@
-﻿using Crestron.SimplSharp.Net;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System;
+using Crestron.SimplSharp.Net;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.CiscoCodecUserInterface.MobileControl
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
 	public static class StringExtensions
 	{
 		public static string MaskQParamTokenInUrl(this string url)
 		{
-			if(string.IsNullOrEmpty(url) || !url.Contains("token=")) return url;
+			if (string.IsNullOrEmpty(url) || !url.Contains("token=")) return url;
 			var uriBuilder = new UriBuilder(url);
 			var query = HttpUtility.ParseQueryString(uriBuilder.Query);
 			string token = query["token"];
