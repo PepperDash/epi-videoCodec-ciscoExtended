@@ -356,8 +356,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public BoolFeedback PresentationActiveFeedback { get; private set; }
 
-		public bool SpeakerTrackAvailability { get; private set; }
-		public bool SpeakerTrackStatus { get; private set; }
 		public bool PresenterTrackAvailability { get; private set; }
 		public bool PresenterTrackStatus { get; private set; }
 		public bool WebviewIsVisible { get; private set; }
@@ -380,7 +378,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		#region AutoCamera Feedbacks
 
 		public BoolFeedback CameraAutoModeIsOnFeedback { get; private set; }
-		public BoolFeedback SpeakerTrackStatusOnFeedback { get; private set; }
 		public BoolFeedback PresenterTrackStatusOnFeedback { get; private set; }
 
 		public StringFeedback PresenterTrackStatusNameFeedback { get; private set; }
@@ -390,7 +387,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public BoolFeedback PresenterTrackStatusPersistentFeedback { get; private set; }
 
 		public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
-		public BoolFeedback SpeakerTrackAvailableFeedback { get; private set; }
 		public BoolFeedback PresenterTrackAvailableFeedback { get; private set; }
 		public BoolFeedback DirectorySearchInProgress { get; private set; }
 
@@ -670,16 +666,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		protected Func<bool> PresenterTrackAvailableFeedbackFunc
 		{
 			get { return () => PresenterTrackAvailability; }
-		}
-
-		protected Func<bool> SpeakerTrackAvailableFeedbackFunc
-		{
-			get { return () => SpeakerTrackAvailability; }
-		}
-
-		protected Func<bool> SpeakerTrackStatusOnFeedbackFunc
-		{
-			get { return () => SpeakerTrackStatus; }
 		}
 
 		protected Func<string> PresenterTrackStatusNameFeedbackFunc
@@ -1615,11 +1601,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		//	var tl = new TieLine(OsdSource.AudioVideoOutputPort, CodecOsdIn);
 		//	TieLineCollection.Default.Add(tl);
 		//}
-
-		public void PollSpeakerTrack()
-		{
-			EnqueueCommand("xStatus Cameras SpeakerTrack");
-		}
 
 		public void PollPresenterTrack()
 		{
@@ -2805,31 +2786,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception e)
 			{
 				Debug.Console(0, this, "Exception in ParseWebviewStatusToken : ");
-				Debug.Console(0, this, "{0}", e.Message);
-			}
-		}
-		private void ParseSpeakerTrackToken(JToken speakerTrackToken)
-		{
-			try
-			{
-				if (String.IsNullOrEmpty(speakerTrackToken.ToString()))
-					return;
-				var speakerTrackObject = speakerTrackToken as JObject;
-				if (speakerTrackObject == null)
-					return;
-				var availabilityToken = speakerTrackObject.SelectToken("Availability.Value");
-				var statusToken = speakerTrackObject.SelectToken("Status.Value");
-				if (availabilityToken != null)
-					SpeakerTrackAvailability =
-						availabilityToken.ToString().ToLower() == "available";
-				if (statusToken != null)
-					SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
-
-				UpdateCameraAutoModeFeedbacks();
-			}
-			catch (Exception e)
-			{
-				Debug.Console(0, this, "Exception in ParseSpeakerTrackToken : ");
 				Debug.Console(0, this, "{0}", e.Message);
 			}
 		}
@@ -6859,26 +6815,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						break;
 					}
 			}
-		}
-
-		public void SpeakerTrackOn()
-		{
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras SpeakerTrack Activate");
-		}
-
-		public void SpeakerTrackOff()
-		{
-			if (CameraIsOffFeedback.BoolValue)
-			{
-				CameraMuteOff();
-			}
-
-			EnqueueCommand("xCommand Cameras SpeakerTrack Deactivate");
 		}
 
 		#endregion
