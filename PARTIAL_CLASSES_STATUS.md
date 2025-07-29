@@ -18,6 +18,26 @@
 - **File**: `CiscoCodecISpeakerTrack.cs`
 - **Members Moved**: SpeakerTrackAvailability, SpeakerTrackStatus properties, SpeakerTrackStatusOnFeedback, SpeakerTrackAvailableFeedback, PollSpeakerTrack(), SpeakerTrackOn(), SpeakerTrackOff(), ParseSpeakerTrackToken(), related feedback functions
 
+### ✅ IPresenterTrack
+- **File**: `CiscoCodecIPresenterTrack.cs`  
+- **Members Moved**: Comprehensive PresenterTrack functionality with properties, feedback methods, controls (On/Off/Follow/Background/Persistent), token parsing, feedback initialization
+
+### ✅ IHasDirectory
+- **File**: `CiscoCodecIHasDirectory.cs`
+- **Members Moved**: DirectoryRoot, CurrentDirectoryResult, DirectoryBrowseHistory, PhonebookSyncState properties, SearchDirectory(), GetDirectoryParentFolderContents(), SetCurrentDirectoryToRoot(), OnDirectoryResultReturned(), extensive directory/phonebook functionality
+
+### ✅ IHasCameraOff
+- **File**: `CiscoCodecIHasCameraOff.cs`
+- **Members Moved**: CameraIsOffFeedback, CameraOff() method
+
+### ✅ IHasCameraMute  
+- **File**: `CiscoCodecIHasCameraOff.cs` (combined implementation)
+- **Members Moved**: CameraIsMutedFeedback, CameraMuteOn(), CameraMuteOff(), CameraMuteToggle()
+
+### ✅ IHasCameraAutoMode
+- **File**: `CiscoCodecIHasCameraAutoMode.cs`
+- **Members Moved**: CameraAutoModeIsOnFeedback, CameraAutoModeAvailableFeedback, CameraAutoModeToggle(), CameraAutoModeOn(), CameraAutoModeOff(), camera tracking feedback functions
+
 ## Skeleton Files Created (Ready for Implementation)
 
 The following partial class files have been created with proper structure but need interface implementations moved:
@@ -51,9 +71,9 @@ The following partial class files have been created with proper structure but ne
 ## File Size Reduction
 
 - **Original**: 7,977 lines
-- **Current**: 7,757 lines  
-- **Reduction**: 220 lines moved to partial classes
-- **Remaining**: ~7,757 lines to be broken out across remaining interfaces
+- **Current**: ~7,000 lines  
+- **Reduction**: ~977 lines moved to partial classes (9 interfaces completed)
+- **Remaining**: ~7,000 lines to be broken out across remaining interfaces
 
 ## Implementation Pattern
 

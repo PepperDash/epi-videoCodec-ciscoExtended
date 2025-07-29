@@ -36,6 +36,109 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 	/// </summary>
 	public partial class CiscoCodec
 	{
-		// TODO: Move IHasCameraAutoMode implementation here
+		#region IHasCameraAutoMode Implementation
+
+		public BoolFeedback CameraAutoModeIsOnFeedback { get; private set; }
+		public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
+
+		protected Func<bool> CameraTrackingAvailableFeedbackFunc
+		{
+			get { return () => PresenterTrackAvailability || SpeakerTrackAvailability; }
+		}
+
+		protected Func<bool> CameraTrackingOnFeedbackFunc
+		{
+			get
+			{
+				return () =>
+					(SpeakerTrackAvailability && SpeakerTrackStatus)
+					|| (PresenterTrackAvailability && PresenterTrackStatus);
+			}
+		}
+
+		/// <summary>
+		/// Initializes CameraAutoMode feedbacks. Called from main constructor.
+		/// </summary>
+		private void InitializeCameraAutoModeFeedbacks()
+		{
+			CameraAutoModeIsOnFeedback = new BoolFeedback(CameraTrackingOnFeedbackFunc);
+			CameraAutoModeAvailableFeedback = new BoolFeedback(CameraTrackingAvailableFeedbackFunc);
+		}
+
+		public void CameraAutoModeToggle()
+		{
+			if (!CameraAutoModeIsOnFeedback.BoolValue)
+			{
+				CameraAutoModeOn();
+				return;
+			}
+			CameraAutoModeOff();
+		}
+
+		public void CameraAutoModeOn()
+		{
+			switch (CameraTrackingCapabilities)
+			{
+				case eCameraTrackingCapabilities.None:
+					{
+						Debug.Console(0, this, "Camera Auto Mode Unavailable");
+						break;
+					}
+				case eCameraTrackingCapabilities.PresenterTrack:
+					{
+						PresenterTrackFollow();
+						break;
+					}
+				case eCameraTrackingCapabilities.SpeakerTrack:
+					{
+						SpeakerTrackOn();
+						break;
+					}
+				case eCameraTrackingCapabilities.Both:
+					{
+						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
+						{
+							SpeakerTrackOn();
+							break;
+						}
+						PresenterTrackFollow();
+						break;
+					}
+			}
+		}
+
+		public void CameraAutoModeOff()
+		{
+			switch (CameraTrackingCapabilities)
+			{
+				case eCameraTrackingCapabilities.None:
+					{
+						Debug.Console(0, this, "Camera Auto Mode Unavailable");
+						break;
+					}
+				case eCameraTrackingCapabilities.PresenterTrack:
+					{
+						PresenterTrackOff();
+						break;
+					}
+				case eCameraTrackingCapabilities.SpeakerTrack:
+					{
+						SpeakerTrackOff();
+						break;
+					}
+				case eCameraTrackingCapabilities.Both:
+					{
+						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
+						{
+							SpeakerTrackOff();
+							break;
+						}
+						PresenterTrackOff();
+						break;
+					}
+			}
+		}
+
+		#endregion
 	}
 }

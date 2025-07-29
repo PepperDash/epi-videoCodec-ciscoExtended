@@ -371,10 +371,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region AutoCamera Feedbacks
 
-		public BoolFeedback CameraAutoModeIsOnFeedback { get; private set; }
-
-		public BoolFeedback CameraAutoModeAvailableFeedback { get; private set; }
-
 		#endregion
 
 		public IntFeedback RingtoneVolumeFeedback { get; private set; }
@@ -613,22 +609,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region CameraAutoTrackingFeedbackFunc
 
-
-		protected Func<bool> CameraTrackingAvailableFeedbackFunc
-		{
-			get { return () => PresenterTrackAvailability || SpeakerTrackAvailability; }
-		}
-
-		protected Func<bool> CameraTrackingOnFeedbackFunc
-		{
-			get
-			{
-				return () =>
-					(SpeakerTrackAvailability && SpeakerTrackStatus)
-					|| (PresenterTrackAvailability && PresenterTrackStatus);
-			}
-		}
-
 		#endregion
 
 
@@ -795,14 +775,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			#region CameraAutoFeedbackRegistration
 
-			CameraAutoModeIsOnFeedback = new BoolFeedback(CameraTrackingOnFeedbackFunc);
 			SpeakerTrackStatusOnFeedback = new BoolFeedback(SpeakerTrackStatusOnFeedbackFunc);
 
-			CameraAutoModeAvailableFeedback = new BoolFeedback(CameraTrackingAvailableFeedbackFunc);
 			SpeakerTrackAvailableFeedback = new BoolFeedback(SpeakerTrackAvailableFeedbackFunc);
 
 			// Initialize PresenterTrack feedbacks
 			InitializePresenterTrackFeedbacks();
+
+			// Initialize CameraAutoMode feedbacks
+			InitializeCameraAutoModeFeedbacks();
 
 			#endregion
 
@@ -6434,80 +6415,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
          */
 
 		#region IHasCameraSpeakerTrack
-
-		public void CameraAutoModeToggle()
-		{
-			if (!CameraAutoModeIsOnFeedback.BoolValue)
-			{
-				CameraAutoModeOn();
-				return;
-			}
-			CameraAutoModeOff();
-		}
-
-		public void CameraAutoModeOn()
-		{
-			switch (CameraTrackingCapabilities)
-			{
-				case eCameraTrackingCapabilities.None:
-					{
-						Debug.Console(0, this, "Camera Auto Mode Unavailable");
-						break;
-					}
-				case eCameraTrackingCapabilities.PresenterTrack:
-					{
-						PresenterTrackFollow();
-						break;
-					}
-				case eCameraTrackingCapabilities.SpeakerTrack:
-					{
-						SpeakerTrackOn();
-						break;
-					}
-				case eCameraTrackingCapabilities.Both:
-					{
-						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
-						{
-							SpeakerTrackOn();
-							break;
-						}
-						PresenterTrackFollow();
-						break;
-					}
-			}
-		}
-
-		public void CameraAutoModeOff()
-		{
-			switch (CameraTrackingCapabilities)
-			{
-				case eCameraTrackingCapabilities.None:
-					{
-						Debug.Console(0, this, "Camera Auto Mode Unavailable");
-						break;
-					}
-				case eCameraTrackingCapabilities.PresenterTrack:
-					{
-						PresenterTrackOff();
-						break;
-					}
-				case eCameraTrackingCapabilities.SpeakerTrack:
-					{
-						SpeakerTrackOff();
-						break;
-					}
-				case eCameraTrackingCapabilities.Both:
-					{
-						if (PreferredTrackingMode == eCameraTrackingCapabilities.SpeakerTrack)
-						{
-							SpeakerTrackOff();
-							break;
-						}
-						PresenterTrackOff();
-						break;
-					}
-			}
-		}
 
 		#endregion
 
