@@ -7,9 +7,6 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -25,9 +22,12 @@ using PepperDash.Essentials.Devices.Common.Cameras;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 using PepperDash.Essentials.Devices.Common.VideoCodec;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
 
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -780,9 +780,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public RoutingOutputPort HdmiOut1 { get; private set; }
 		public RoutingOutputPort HdmiOut2 { get; private set; }
-        public RoutingOutputPort HdmiOut3 { get; private set; }
+		public RoutingOutputPort HdmiOut3 { get; private set; }
 
-        public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
+		public ICiscoCodecUiExtensionsHandler CiscoCodecUiExtensionsHandler { get; set; }
 
 		private readonly IBasicCommunication _comms;
 
@@ -1112,16 +1112,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				null,
 				this
 			);
-            HdmiOut3 = new RoutingOutputPort(
-				RoutingPortNames.HdmiOut3,
-				eRoutingSignalType.Audio | eRoutingSignalType.Video,
-				eRoutingPortConnectionType.Hdmi,
-				null,
-				this
-			);
+			HdmiOut3 = new RoutingOutputPort(
+	RoutingPortNames.HdmiOut3,
+	eRoutingSignalType.Audio | eRoutingSignalType.Video,
+	eRoutingPortConnectionType.Hdmi,
+	null,
+	this
+);
 
-            //InputPorts.Add(CodecOsdIn);
-            InputPorts.Add(HdmiIn1);
+			//InputPorts.Add(CodecOsdIn);
+			InputPorts.Add(HdmiIn1);
 			InputPorts.Add(HdmiIn2);
 			InputPorts.Add(HdmiIn3);
 			InputPorts.Add(HdmiIn4);
@@ -1589,8 +1589,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			};
 			CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction += () =>
 			{
-                PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
-                PresenterTrackAvailableFeedback.FireUpdate();
+				PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
+				PresenterTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
 				OnCameraTrackingCapabilitiesChanged();
 			};
@@ -1795,10 +1795,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return base.CustomActivate();
 			}
 
-			var speakerTrackMessenger = new ISpeakerTrackMessenger($"speakerTrack-{Key}", $"/device/{Key}", this);
+			var speakerTrackMessenger = new ISpeakerTrackMessenger(string.Format("speakerTrack-{0}", Key), string.Format("/device/{0}", Key), this);
 			mc.AddDeviceMessenger(speakerTrackMessenger);
 
-			var presenterTrackMessenger = new IPresenterTrackMessenger($"presenterTrack-{Key}", $"/device/{Key}", this);
+			var presenterTrackMessenger = new IPresenterTrackMessenger(string.Format("presenterTrack-{0}", Key), string.Format("/device/{0}", Key), this);
 			mc.AddDeviceMessenger(presenterTrackMessenger);
 
 			return base.CustomActivate();
@@ -2965,7 +2965,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (String.IsNullOrEmpty(presenterTrackToken.ToString()))
 					return;
 				var presenterTrackObject = presenterTrackToken as JObject;
-                if (presenterTrackObject == null)
+				if (presenterTrackObject == null)
 					return;
 				var availabilityToken = presenterTrackObject.SelectToken("Availability.Value");
 				var statusToken = presenterTrackObject.SelectToken("Status.Value");
@@ -4018,7 +4018,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						var msg =
 							val == null
 								? "*** Got a Null Extensions Panel Event"
-								: $"*** Got an Extensions Panel Event {val}";
+								: String.Format("*** Got an Extensions Panel Event {0}", val);
 						Debug.LogMessage(LogEventLevel.Debug, msg, this);
 
 						if (val == null)
@@ -7054,8 +7054,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (!PresenterTrackAvailability)
 			{
-                Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
-                return;
+				Debug.Console(0, this, "Presenter Track is Unavailable on this Codec");
+				return;
 			}
 			if (CameraIsOffFeedback.BoolValue)
 			{
@@ -7330,25 +7330,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
 		{
 			Debug.Console(1, this, "Setting the serial number of camera {0} to {1}", cameraId, serialNumber);
-			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
+			EnqueueCommand(String.Format("xConfiguration Cameras Camera[{0}] AssignedSerialNumber: {1}", cameraId, serialNumber));
 		}
 
 		public void SetCameraName(uint videoConnectorId, string name)
 		{
 			Debug.Console(1, this, "Setting the name of video connector {0} to {1}", videoConnectorId, name);
-			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
+			EnqueueCommand(String.Format("xConfiguration Video Input Connector[{0}]  Name: \"{1}\"", videoConnectorId, name));
 		}
 
 		public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
 		{
 			Debug.Console(1, this, "Setting the camera id of video connector {0} to {1}", videoConnectorId, inputCameraId);
-			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
+			EnqueueCommand(String.Format("xConfiguration Video Input Connector[{0}] CameraControl CameraId: {1}", videoConnectorId, inputCameraId));
 		}
 
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
 			Debug.Console(1, this, "Setting the source type of video connector {0} to {1}", videoConnectorId, sourceType);
-			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
+			EnqueueCommand(String.Format("xConfiguration Video Input Connector[{0}]  InputSourceType: {1}", videoConnectorId, sourceType));
 		}
 
 		#endregion
@@ -7714,28 +7714,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		#endregion
 
 		public void ShowWebView(string url, string mode, string title, string target)
-        {
-			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= url, Mode=mode, Title=title, Target=target };
+		{
+			UiWebViewDisplay uwvd = new UiWebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
 			EnqueueCommand(uwvd.xCommand());
 		}
 
 		public void HideWebView()
-        {
-			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		{
+			EnqueueCommand(String.Format("xCommand UserInterface WebView Clear Target:OSD{0}", CiscoCodec.Delimiter));
 		}
 		public void ShowEmergencyMessage(string url)
-        {
+		{
 			string mode = _config.Emergency.UiWebViewDisplay.Mode;
 			string title = _config.Emergency.UiWebViewDisplay.Title;
 			string target = _config.Emergency.UiWebViewDisplay.Target;
 			string urlPath = url + _config.Emergency.MobileControlPath;
-			UiWebViewDisplay uwvd = new UiWebViewDisplay {Url= urlPath, Mode=mode, Title=title, Target=target };
+			UiWebViewDisplay uwvd = new UiWebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
 			EnqueueCommand(uwvd.xCommand());
 		}
 
 		public void HideEmergencyMessage()
-        {
-			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+		{
+			EnqueueCommand(String.Format("xCommand UserInterface WebView Clear Target:OSD{0}", CiscoCodec.Delimiter));
 		}
 	}
 
