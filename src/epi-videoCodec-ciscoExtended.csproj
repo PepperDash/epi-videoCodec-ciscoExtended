@@ -112,14 +112,14 @@
     <Compile Include="CiscoCodecFactory.cs" />
     <Compile Include="CiscoCodecJoinMap.cs" />
     <Compile Include="CiscoCodecPhonebookDataClasses.cs" />
-    <Compile Include="CiscoCamera.cs" />
+    <Compile Include="Cameras\CiscoCamera.cs" />
     <Compile Include="CiscoCodecRequest.cs" />
     <Compile Include="CiscoRoomOsCodec.cs" />
     <Compile Include="CiscoCodecConfig.cs" />
     <Compile Include="CiscoWebsocketClient.cs" />
     <Compile Include="CodecSyncState.cs" />
     <Compile Include="HttpApiServerExtended.cs" />
-    <Compile Include="IHasCiscoCodecLayouts.cs" />
+    <Compile Include="Interfaces\IHasCiscoCodecLayouts.cs" />
     <Compile Include="BlockingUnboundedQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="xConfiguration.cs" />
