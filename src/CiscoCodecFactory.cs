@@ -1,11 +1,4 @@
-﻿using System.Collections.Generic;
-using PepperDash.Core;
-using PepperDash.Essentials.Core;
-using PepperDash.Essentials.Core.Config;
-using static PepperDash.Essentials.Plugin.CiscoRoomOsCodec.CiscoCodecConfiguration;
-
-
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
+﻿namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
     /// Factory class for creating Cisco codec devices.
