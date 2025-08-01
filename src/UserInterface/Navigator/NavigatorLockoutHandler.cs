@@ -121,6 +121,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetupCustomLockouts()
         {
+            if (props.CustomLockouts == null)
+            {
+                return;
+            }
+
             foreach (var lockout in props.CustomLockouts)
             {
                 if (!(DeviceManager.GetDeviceForKey(lockout.DeviceKey) is IHasFeedback feedbackProvider))
