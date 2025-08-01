@@ -522,7 +522,7 @@ namespace epi_videoCodec_ciscoExtended
         public JoinDataComplete TeamsDial = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 411,
+                JoinNumber = 421,
                 JoinSpan = 1
             },
             new JoinMetadata
@@ -535,7 +535,7 @@ namespace epi_videoCodec_ciscoExtended
         public JoinDataComplete TeamsDialClear = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 412,
+                JoinNumber = 422,
                 JoinSpan = 1
             },
             new JoinMetadata
@@ -549,7 +549,7 @@ namespace epi_videoCodec_ciscoExtended
         public JoinDataComplete TeamsMeetingNumber = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 411,
+                JoinNumber = 421,
                 JoinSpan = 1
             },
             new JoinMetadata
@@ -562,7 +562,7 @@ namespace epi_videoCodec_ciscoExtended
         public JoinDataComplete TeamsMeetingPasscode = new JoinDataComplete(
             new JoinData
             {
-                JoinNumber = 412,
+                JoinNumber = 422,
                 JoinSpan = 1
             },
             new JoinMetadata
