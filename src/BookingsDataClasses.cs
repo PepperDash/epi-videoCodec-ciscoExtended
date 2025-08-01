@@ -376,12 +376,16 @@ namespace epi_videoCodec_ciscoExtended
 					meeting.Dialable = b.DialInfo.Calls.Call.Count > 0;
                     foreach (var c in b.DialInfo.Calls.Call)
                     {
+                        string number = c.Number != null ? c.Number.Value : string.Empty;
+                        string protocol = c.Protocol != null ? c.Protocol.Value : string.Empty;
+                        string callRate = (c.CallRate != null) ? c.CallRate.Value : string.Empty;
+                        string callType = c.CallType != null ? c.CallType.Value : string.Empty;
                         meeting.Calls.Add(new Call
                         {
-                            Number = c.Number.Value,
-                            Protocol = c.Protocol.Value,
-                            CallRate = c.CallRate.Value,
-                            CallType = c.CallType.Value
+                            Number = number,
+                            Protocol = protocol,
+                            CallRate = callRate,
+                            CallType = callType
                         });
 
                     }
