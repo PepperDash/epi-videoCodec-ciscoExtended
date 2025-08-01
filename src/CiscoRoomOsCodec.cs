@@ -190,6 +190,9 @@ namespace epi_videoCodec_ciscoExtended
         public string WebexMeetingRole { get; private set; }
         public string WebexMeetingPin { get; private set; }
 
+        public string TeamsMeetingNumber { get; private set; }
+        public string TeamsMeetingPasscode { get; private set; }
+
 
         public eCodecPresentationStates PresentationStates;
 
@@ -1026,6 +1029,31 @@ namespace epi_videoCodec_ciscoExtended
             var webexCmd = String.Format("xCommand Webex Join DisplayName: \"{0}\" {1} {2} {3}", this.CodecInfo.SipUri, webexNumber, webexRole, webexPin).Trim();
 
             EnqueueCommand(webexCmd);
+        }
+
+        public void DialTeams()
+        {
+            var teamsNumber =
+                TeamsMeetingNumber.NullIfEmpty() == null
+                    ? String.Empty
+                    : String.Format("Number: \"{0}\"", TeamsMeetingNumber);
+            var teamsPasscode =
+                TeamsMeetingPasscode.NullIfEmpty() == null
+                    ? String.Empty
+                    : String.Format("Pin: \"{0}\"", TeamsMeetingPasscode);
+
+            if (teamsNumber == null)
+                return;
+
+            var teamsCmd = String
+                .Format(
+                    "xCommand MicrosoftTeams Join MeetingNumber: {0} Passcode: {1}",
+                    teamsNumber,
+                    teamsPasscode
+                )
+                .Trim();
+
+            EnqueueCommand(teamsCmd);
         }
 
 
@@ -5085,6 +5113,8 @@ ConnectorID: {2}"
 
             LinkCiscoCodecWebex(trilist, joinMap);
 
+            LinkCiscoCodecTeams(trilist, joinMap);
+
             LinkCiscoCodecZoomConnector(trilist, joinMap);
 
             UIExtensionsHandler.LinkToApi(trilist, joinMap);
@@ -5131,6 +5161,29 @@ ConnectorID: {2}"
             });
 
 
+        }
+
+        private void LinkCiscoCodecTeams(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+        {
+            trilist.SetStringSigAction(
+                joinMap.TeamsMeetingNumber.JoinNumber,
+                s => TeamsMeetingNumber = s
+            );
+            trilist.SetStringSigAction(
+                joinMap.TeamsMeetingPasscode.JoinNumber,
+                s => TeamsMeetingPasscode = s
+            );
+
+            trilist.SetSigTrueAction(joinMap.TeamsDial.JoinNumber, DialTeams);
+
+            trilist.SetSigTrueAction(
+                joinMap.TeamsDialClear.JoinNumber,
+                () =>
+                {
+                    TeamsMeetingNumber = String.Empty;
+                    TeamsMeetingPasscode = String.Empty;
+                }
+            );
         }
 
         public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)

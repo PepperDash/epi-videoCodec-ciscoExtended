@@ -518,6 +518,59 @@ namespace epi_videoCodec_ciscoExtended
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Digital
             });
+        [JoinName("TeamsDial")]
+        public JoinDataComplete TeamsDial = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Dial Teams Meeting",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+        [JoinName("TeamsDialClear")]
+        public JoinDataComplete TeamsDialClear = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Clear Teams Dialer Data",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("TeamsMeetingNumber")]
+        public JoinDataComplete TeamsMeetingNumber = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 411,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Teams Meeting Number",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+        [JoinName("TeamsMeetingPasscode")]
+        public JoinDataComplete TeamsMeetingPasscode = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 412,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Set Teams Meeting Passcode",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
 
         #endregion
 
