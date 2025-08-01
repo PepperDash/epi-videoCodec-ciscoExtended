@@ -371,11 +371,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 var meeting = new Meeting(joinableCooldownSeconds);
 
                 if (b.Time == null) continue;
-                
+
                 meeting.StartTime = b.Time.StartTime.Value;
                 meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
                 meeting.EndTime = b.Time.EndTime.Value;
-                
+
                 if (meeting.EndTime <= DateTime.Now) continue;
 
                 meeting.Id = b.Id != null ? b.Id.Value : b.StringId;
@@ -399,7 +399,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 if (b.DialInfo.Calls.Call != null)
                 {
-					meeting.Dialable = b.DialInfo.Calls.Call.Count > 0;
+                    meeting.Dialable = b.DialInfo.Calls.Call.Count > 0;
                     foreach (var c in b.DialInfo.Calls.Call)
                     {
                         meeting.Calls.Add(new Call
@@ -416,9 +416,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 meetings.Add(meeting);
 
-                    Debug.Console(1, "Title: {0}, ID: {1}, Organizer: {2}, Agenda: {3}", meeting.Title, meeting.Id, meeting.Organizer, meeting.Agenda);
-                    Debug.Console(1, "    Start Time: {0}, End Time: {1}, Duration: {2}", meeting.StartTime, meeting.EndTime, meeting.Duration);
-                    Debug.Console(1, "    Joinable: {0}\n", meeting.Joinable);
+                Debug.LogDebug("Title: {title}, ID: {id}, Organizer: {organizer}, Agenda: {agenda}", meeting.Title, meeting.Id, meeting.Organizer, meeting.Agenda);
+                Debug.LogDebug("    Start Time: {startTime}, End Time: {endTime}, Duration: {duration}", meeting.StartTime, meeting.EndTime, meeting.Duration);
+                Debug.LogDebug("    Joinable: {joinable}\n", meeting.Joinable);
             }
 
             meetings.OrderBy(m => m.StartTime);

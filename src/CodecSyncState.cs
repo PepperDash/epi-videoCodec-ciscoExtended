@@ -2,6 +2,7 @@
 using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -63,7 +64,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             CrestronEnvironment.ProgramStatusEventHandler += type =>
                                                              {
-                                                                 if (type != eProgramStatusEventType.Stopping) 
+                                                                 if (type != eProgramStatusEventType.Stopping)
                                                                      return;
 
                                                                  Interlocked.Exchange(ref _isProcessing, Idle);
@@ -78,7 +79,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
             {
-                Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Unable to enqueue command:{0}", query);
+                this.LogDebug("Unable to enqueue command:{query}", query);
             }
 
             Schedule();
@@ -90,7 +91,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 if (!LoginMessageWasReceived)
                 {
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Login Message Received.");
+                    this.LogDebug("Login Message Received.");
                     LoginMessageWasReceived = true;
                 }
 
@@ -98,7 +99,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     _parent.SendText("xPreferences outputmode json");
                 }
-                    
+
                 CheckSyncStatus();
             });
 
@@ -110,7 +111,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!JsonResponseModeSet)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Json Response Mode Message Received.");
+                    this.LogDebug("Json Response Mode Message Received.");
 
                 JsonResponseModeSet = true;
                 CheckSyncStatus();
@@ -124,7 +125,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!InitialStatusMessageWasReceived)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Status Message Received.");
+                    this.LogDebug("Initial Codec Status Message Received.");
 
                 InitialStatusMessageWasReceived = true;
                 CheckSyncStatus();
@@ -138,8 +139,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!InitialConfigurationMessageWasReceived)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Configuration DiagnosticsMessage Received.");
-                    
+                    this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
+
                 InitialConfigurationMessageWasReceived = true;
                 CheckSyncStatus();
             });
@@ -152,7 +153,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Inital Codec Software Information received");
+                    this.LogDebug("Inital Codec Software Information received");
 
                 InitialSoftwareVersionMessageWasReceived = true;
 
@@ -167,7 +168,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!FeedbackWasRegistered)
-                    Debug.Console(1, this, Debug.ErrorLogLevel.Notice, "Initial Codec Feedback Registration Successful.");
+                    this.LogDebug("Initial Codec Feedback Registration Successful.");
 
                 FeedbackWasRegistered = true;
                 CheckSyncStatus();
@@ -196,7 +197,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                Debug.Console(1, this, "Codec Sync Complete");
+                this.LogInformation("Codec Sync Complete");
 
                 InitialSyncComplete = true;
                 _parent.PollSpeakerTrack();
@@ -213,7 +214,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 Processing,
                 Idle) ==
                 Idle)
-                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key +":Codec Sync State" };
+                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
 
             _waitHandle.Set();
         }
@@ -222,8 +223,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             while (_isProcessing == Processing)
             {
-                Action sys;
-                if (_systemActions.TryToDequeue(out sys))
+                if (_systemActions.TryToDequeue(out Action sys))
                 {
                     try
                     {
@@ -231,13 +231,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     }
                     catch (Exception ex)
                     {
-                        Debug.Console(1, this, "Error processing sys action:{0}", ex);
+                        this.LogError("Error processing system action: {message}", ex.Message);
+                        this.LogVerbose(ex, "Exception");
                     }
                     continue;
                 }
 
-                Action cmd;
-                if (_commandActions.TryToDequeue(out cmd))
+                if (_commandActions.TryToDequeue(out Action cmd))
                 {
                     try
                     {
@@ -245,7 +245,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     }
                     catch (Exception ex)
                     {
-                        Debug.Console(1, this, "Error processing usr action:{0}", ex);
+                        this.LogError("Error processing user action: {message}", ex.Message);
+                        this.LogVerbose(ex, "Exception");
                     }
                     continue;
                 }

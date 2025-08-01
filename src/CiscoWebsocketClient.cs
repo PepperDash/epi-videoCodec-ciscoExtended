@@ -3,6 +3,7 @@ using System.Text;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronWebSocketClient;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -18,7 +19,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             if (string.IsNullOrEmpty(key) || controlConfig == null)
             {
-                Debug.Console(0, "WebSocketClient key or Host is null or empty - failed to instantiate websocket client");
+                this.LogWarning("WebSocketClient key or Host is null or empty - failed to instantiate websocket client");
                 return;
             }
             _config = controlConfig;
@@ -26,7 +27,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(controlConfig.TcpSshProperties.Username) ||
                 string.IsNullOrEmpty(controlConfig.TcpSshProperties.Password))
             {
-                Debug.Console(0, "WebsocketClient has no login information - failed to instantiate websocked client");
+                this.LogWarning("WebsocketClient has no login information - failed to instantiate websocked client");
                 return;
             }
 
@@ -37,7 +38,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _client =
                 new WebSocketClient()
                 {
-                    URL = String.Format("wss://{0}:{1}@{2}/ws", _config.TcpSshProperties.Username,
+                    URL = string.Format("wss://{0}:{1}@{2}/ws", _config.TcpSshProperties.Username,
                     _config.TcpSshProperties.Password, _config.TcpSshProperties.Address),
                     KeepAlive = true,
                     ConnectionCallBack = WebsocketConnected,
@@ -49,13 +50,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public int WebsocketConnected(WebSocketClient.WEBSOCKET_RESULT_CODES error)
         {
-            Debug.Console(1, this, "Websocket Connected Result = {0}", error);
+            this.LogError("Websocket Connected Result = {error}", error);
             return (int)error;
         }
 
         public int WebsocketDisconnected(WebSocketClient.WEBSOCKET_RESULT_CODES error, object item)
         {
-            Debug.Console(1, this, "Websocket Disconnected Result = {0}", error);
+            this.LogError("Websocket Disconnected Result = {error}", error);
             return (int)error;
         }
 
@@ -64,29 +65,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             if (opcode != WebSocketClient.WEBSOCKET_PACKET_TYPES.LWS_WS_OPCODE_07__TEXT_FRAME) return (int)error;
             var strData = Encoding.ASCII.GetString(data, 0, data.Length);
-            Debug.Console(0, this, "Incoming Data Packet From Websocket");
-            Debug.Console(0, this, "{0}", strData);
+            this.LogDebug("Incoming Data Packet From Websocket: {data}", strData);
             return (int)error;
         }
-
-        /*
-        public void SendRequest(CiscoCodecJsonRpc data)
-        {
-            var request = new HttpsClientRequest
-            {
-                RequestType = RequestType.Get,
-                Url = new UrlParser(string.Format("wss://{0}/ws", _config.TcpSshProperties.Address)),
-                
-            };
-            request.KeepAlive = true;
-            request.Header.SetHeaderValue("Authorization", String.Format("Basic {0}", 
-                String.Format("{0}:{1}", _config.TcpSshProperties.Username, _config.TcpSshProperties.Password)
-                .EncodeBase64()));
-            request.Header.SetHeaderValue("Connection", "Upgrader");
-            request.Header.SetHeaderValue("Upgrade", "websocket");
-            request.Header.
-        }
-         * */
     }
 
 

@@ -2517,13 +2517,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     var preset = new CodecRoomPreset(UInt16.Parse(RoomPresetId), Description.Value, Defined.BoolValue, true);
 
-                    Debug.Console(2, "Preset ID {0} Converted from Cisco Codec Preset to Essentials Preset", RoomPresetId);
+                    Debug.LogVerbose("Preset ID {presetId} Converted from Cisco Codec Preset to Essentials Preset", RoomPresetId);
 
                     return preset;
                 }
-                catch (Exception e)
+                catch (Exception ex)
                 {
-                    Debug.Console(2, "Unable to convert preset: {0}. Error: {1}", RoomPresetId, e);
+                    Debug.LogError("Error processing user action: {message}", ex.Message);
+                    Debug.LogVerbose(ex, "Exception");
+
                     return null;
                 }
             }

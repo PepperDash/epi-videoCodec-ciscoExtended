@@ -206,6 +206,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         {
             mcTpController.LockedOut = true;
 
+            combinationLockout = true;
+
             ClearWebView();
 
             extensionsHandler.UiWebViewChangedEvent += LockoutWebViewChanged;
@@ -228,6 +230,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
 
             mcTpController.LockedOut = false;
+
+            combinationLockout = false;
 
             ClearWebView();
 

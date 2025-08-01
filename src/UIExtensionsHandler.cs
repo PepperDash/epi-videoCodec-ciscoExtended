@@ -17,6 +17,7 @@ using System;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
 
@@ -29,7 +30,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
-        private string _widgetEventData = String.Empty;
+        private string _widgetEventData = string.Empty;
         public StringFeedback WidgetEventFeedback { get; private set; }
 
         public UIExtensionsHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
@@ -39,29 +40,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _handler = handler;
             WidgetEventFeedback = new StringFeedback(() => _widgetEventData);
             WidgetEventFeedback.OutputChange +=
-                (sender, args) => Debug.Console(1, parent, "WidgetEventFeedback Event: {0}", _widgetEventData);
+                (sender, args) => parent.LogDebug("WidgetEventFeedback Event: {eventData}", _widgetEventData);
         }
 
         public void ParseStatus(CiscoCodecEvents.Widget val)
         {
-            Debug.Console(1, _parent, "Widget Action: {0}", val.ToString());
+            _parent.LogDebug("Widget Action: {value}", val.ToString());
             if (val.WidgetAction != null && val.WidgetAction.Type != null)
             {
                 var val_ = JsonConvert.SerializeObject(val);
-                Debug.Console(1, _parent, "Widget val: {0}", val_);
+                _parent.LogDebug("Widget val: {value}", val_);
 
                 var action_ = val.WidgetAction;
 
                 _widgetEventData = JsonConvert.SerializeObject(action_);
-                Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);
+                _parent.LogDebug("WidgetEventFeedback data: {value}", _widgetEventData);
                 WidgetEventFeedback.FireUpdate();
             }
         }
         public void ParseStatus(CiscoCodecEvents.UiEvent val)
         {
-            Debug.Console(1, _parent, "WidgetEvent: {0}", val.ToString());
+            _parent.LogDebug("WidgetEvent: {value}", val.ToString());
             var val_ = JsonConvert.SerializeObject(val);
-            Debug.Console(1, _parent, "WidgetEvent val: {0}", val_);
+            _parent.LogDebug("WidgetEvent value: {value}", val_);
 
             var action_ = new CiscoCodecEvents.WidgetAction();
             if (val.Pressed != null)
@@ -81,20 +82,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             else
             {
-                Debug.Console(1, _parent, "WidgetEvent exiting, no event Type");
+                _parent.LogDebug("WidgetEvent exiting, no event Type");
                 return;
             }
-            action_.Id = String.Empty;
+            action_.Id = string.Empty;
             var arr_ = action_.Value.Split(':'); // "tv_menu:menu";
             if (arr_.Length > 1)
             {
                 action_.Value = arr_[0]; // "tv_menu"
                 action_.Id = arr_[1]; // "menu"
-                _widgetEventData = String.Format("/{0} /{1} /{2}", action_.Value, action_.Type, action_.Id); // e.g. "/blinds_stop /pressed"
+                _widgetEventData = string.Format("/{0} /{1} /{2}", action_.Value, action_.Type, action_.Id); // e.g. "/blinds_stop /pressed"
             }
             else
-                _widgetEventData = String.Format("/{0} /{1}", action_.Value, action_.Type); // e.g. "/blinds /pressed /increment"
-            Debug.Console(1, _parent, "WidgetEventFeedback data: {0}", _widgetEventData);
+                _widgetEventData = string.Format("/{0} /{1}", action_.Value, action_.Type); // e.g. "/blinds /pressed /increment"
+            _parent.LogDebug("WidgetEventFeedback data: {data}", _widgetEventData);
             WidgetEventFeedback.FireUpdate();
         }
 
@@ -129,7 +130,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void UpdateWidget<T>(string WidgetId, T Value)
         {
-            var command = String.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"\r\n", WidgetId, Value);
+            var command = string.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"\r\n", WidgetId, Value);
             _coms.SendText(command);
         }
     }
