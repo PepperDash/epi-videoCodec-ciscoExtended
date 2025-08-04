@@ -1036,11 +1036,11 @@ namespace epi_videoCodec_ciscoExtended
             var teamsNumber =
                 TeamsMeetingNumber.NullIfEmpty() == null
                     ? String.Empty
-                    : String.Format("Number: \"{0}\"", TeamsMeetingNumber);
+                    : String.Format("\"{0}\"", TeamsMeetingNumber.Replace(" ", ""));
             var teamsPasscode =
                 TeamsMeetingPasscode.NullIfEmpty() == null
                     ? String.Empty
-                    : String.Format("Pin: \"{0}\"", TeamsMeetingPasscode);
+                    : String.Format("\"{0}\"", TeamsMeetingPasscode);
 
             if (teamsNumber == null)
                 return;
