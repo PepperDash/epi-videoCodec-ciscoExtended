@@ -4824,7 +4824,7 @@ ConnectorID: {2}"
             if(EndAllCallsOnMeetingJoin)EndAllCalls();
             foreach (Call c in meeting.Calls)
             {
-                Dial(c.Number, c.Protocol, c.CallRate, c.CallType, meeting.Id);
+                Dial(c.Number);
             }
         }
 
