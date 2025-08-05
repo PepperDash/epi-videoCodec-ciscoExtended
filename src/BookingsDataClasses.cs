@@ -355,7 +355,17 @@ namespace epi_videoCodec_ciscoExtended
                 meeting.Id = b.Id != null ? b.Id.Value : b.StringId;
 
                 if (b.Organizer != null)
-                    meeting.Organizer = string.Format("{0}, {1}", b.Organizer.LastName.Value, b.Organizer.FirstName.Value);
+                {
+                        var lastName = (b.Organizer.LastName != null && !string.IsNullOrEmpty(b.Organizer.LastName.Value)) ? b.Organizer.LastName.Value : string.Empty;
+                        var firstName = (b.Organizer.FirstName != null && !string.IsNullOrEmpty(b.Organizer.FirstName.Value)) ? b.Organizer.FirstName.Value : string.Empty;
+
+                        if (!string.IsNullOrEmpty(lastName) && !string.IsNullOrEmpty(firstName))
+                            meeting.Organizer = string.Format("{0}, {1}", lastName, firstName); //if both lastName and firstName are defined, use existing structure
+                        else if (!string.IsNullOrEmpty(lastName)) //otherwise, use lastName if it's defined
+                            meeting.Organizer = lastName;
+                        else if (!string.IsNullOrEmpty(firstName)) //if last name isn't defined, use first name if it's defined
+                            meeting.Organizer = firstName;                   
+                }
 
                 if (b.Title != null)
                     meeting.Title = b.Title.Value;
