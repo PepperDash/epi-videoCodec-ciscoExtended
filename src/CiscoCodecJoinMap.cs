@@ -545,8 +545,8 @@ namespace epi_videoCodec_ciscoExtended
                 JoinType = eJoinType.Digital
             });
 
-        [JoinName("TeamsMeetingNumber")]
-        public JoinDataComplete TeamsMeetingNumber = new JoinDataComplete(
+        [JoinName("TeamsTenantId")]
+        public JoinDataComplete TeamsTenantId = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 421,
@@ -554,12 +554,12 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Set Teams Meeting Number",
+                Description = "Set Teams Tenant ID",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Serial
             });
-        [JoinName("TeamsMeetingPasscode")]
-        public JoinDataComplete TeamsMeetingPasscode = new JoinDataComplete(
+        [JoinName("TeamsVideoID")]
+        public JoinDataComplete TeamsVideoID = new JoinDataComplete(
             new JoinData
             {
                 JoinNumber = 422,
@@ -567,7 +567,7 @@ namespace epi_videoCodec_ciscoExtended
             },
             new JoinMetadata
             {
-                Description = "Set Teams Meeting Passcode",
+                Description = "Set Teams VideoID",
                 JoinCapabilities = eJoinCapabilities.FromSIMPL,
                 JoinType = eJoinType.Serial
             });

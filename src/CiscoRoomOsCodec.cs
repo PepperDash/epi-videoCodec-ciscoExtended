@@ -190,8 +190,8 @@ namespace epi_videoCodec_ciscoExtended
         public string WebexMeetingRole { get; private set; }
         public string WebexMeetingPin { get; private set; }
 
-        public string TeamsMeetingNumber { get; private set; }
-        public string TeamsMeetingPasscode { get; private set; }
+        public string TeamsTenantId { get; private set; }
+        public string TeamsVideoID { get; private set; }
 
 
         public eCodecPresentationStates PresentationStates;
@@ -1033,27 +1033,18 @@ namespace epi_videoCodec_ciscoExtended
 
         public void DialTeams()
         {
-            var teamsNumber =
-                TeamsMeetingNumber.NullIfEmpty() == null
-                    ? String.Empty
-                    : String.Format("\"{0}\"", TeamsMeetingNumber.Replace(" ", ""));
-            var teamsPasscode =
-                TeamsMeetingPasscode.NullIfEmpty() == null
-                    ? String.Empty
-                    : String.Format("\"{0}\"", TeamsMeetingPasscode);
-
-            if (teamsNumber == null)
+            if (TeamsTenantId == null || TeamsVideoID == null)
                 return;
 
-            var teamsCmd = String
+            var teamsAddress = String
                 .Format(
-                    "xCommand MicrosoftTeams Join MeetingNumber: {0} Passcode: {1}",
-                    teamsNumber,
-                    teamsPasscode
+                    "{0}.{1}",
+                    TeamsVideoID,
+                    TeamsTenantId
                 )
                 .Trim();
 
-            EnqueueCommand(teamsCmd);
+            Dial(teamsAddress);
         }
 
 
@@ -5166,12 +5157,12 @@ ConnectorID: {2}"
         private void LinkCiscoCodecTeams(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
             trilist.SetStringSigAction(
-                joinMap.TeamsMeetingNumber.JoinNumber,
-                s => TeamsMeetingNumber = s
+                joinMap.TeamsTenantId.JoinNumber,
+                s => TeamsTenantId = s
             );
             trilist.SetStringSigAction(
-                joinMap.TeamsMeetingPasscode.JoinNumber,
-                s => TeamsMeetingPasscode = s
+                joinMap.TeamsVideoID.JoinNumber,
+                s => TeamsVideoID = s
             );
 
             trilist.SetSigTrueAction(joinMap.TeamsDial.JoinNumber, DialTeams);
@@ -5180,8 +5171,8 @@ ConnectorID: {2}"
                 joinMap.TeamsDialClear.JoinNumber,
                 () =>
                 {
-                    TeamsMeetingNumber = String.Empty;
-                    TeamsMeetingPasscode = String.Empty;
+                    TeamsTenantId = String.Empty;
+                    TeamsVideoID = String.Empty;
                 }
             );
         }
