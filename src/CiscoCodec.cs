@@ -1,4 +1,5 @@
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -6,9 +7,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
+using Crestron.SimplSharpPro;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Org.BouncyCastle.Crypto.Prng;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Core.Intersystem.Tokens;
@@ -1693,6 +1696,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
 
+				CommDebuggingIsOn = _config.EnableCommDebugOnStartup;
+
 				Communication.Connect();
 
 				CommunicationMonitor.Start();
@@ -1814,7 +1819,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				"Initial Sync Complete - There are {activeCallCount} Active Calls",
 				ActiveCalls.Count
 			);
-			SearchDirectory("");
+
+			if (_config.GetPhonebookOnStartup)
+			{
+				this.LogInformation("Getting phonebook on startup");
+				SearchDirectory("");
+			}
+
 			if (ActiveCalls.Count < 1)
 			{
 				OnCallStatusChange(
@@ -1884,13 +1895,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			GetCallHistory();
 
-			PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
-			// check each hour to see if the phonebook should be downloaded
-			GetPhonebook(null);
+			if (_config.GetPhonebookOnStartup)
+			{
+				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+				// check each hour to see if the phonebook should be downloaded
+				GetPhonebook(null);
+			}
 
-			BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
-			// 15 minute timer to check for new booking info
-			GetBookings(null);
+			if (_config.GetBookingsOnStartup)
+			{
+				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+				// 15 minute timer to check for new booking info
+				GetBookings(null);
+			}
 
 			var msg =
 				UiExtensions != null
@@ -3572,7 +3589,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				UiExtensionsHandler?.ParseErrorStatus(statusToken);
 				//This is an Error - Deal with it somehow?
-				this.LogError("Error in Status Response: {error}", errorToken.ToString());
+
+				this.LogError("Error in Status Response: {error}", statusToken.ToString());
 				return;
 			}
 
@@ -4214,7 +4232,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
+				this.LogError("Error deserializing feedback from codec: {error}\r\n{json}", ex.Message, ComTextHelper.GetDebugText(response));
 				this.LogVerbose(ex, "Exception");
 			}
 		}
