@@ -1,4 +1,5 @@
 ﻿using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 
@@ -29,7 +30,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
         {
             if (_presenterTrack == null)
             {
-                Debug.LogMessage(Serilog.Events.LogEventLevel.Error, $"{Key} does not implement IPresenterTrack", this, _presenterTrack.Key);
+                this.LogError("{Key} does not implement IPresenterTrack", _presenterTrack.Key);
                 return;
             }
 
