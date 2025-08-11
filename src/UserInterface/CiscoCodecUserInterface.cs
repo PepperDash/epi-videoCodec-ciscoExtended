@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.Devices;
@@ -60,17 +61,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
         public void PreActivateAction()
         {
             // Create an instance of IconHandler to call the method  
-            Debug.LogMessage(LogEventLevel.Debug, "iconHandler.DumpAllPngsToBase64() called.", this);
+            this.LogDebug("iconHandler.DumpAllPngsToBase64() called.");
 
             IconHandler.DumpAllPngsToBase64();
 
-            Debug.LogMessage(LogEventLevel.Debug, "Activating Video Codec UI Extensions", this);
+            this.LogDebug("Activating Video Codec UI Extensions");
             Parent = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
 
             if (Parent == null)
             {
-                var msg = $"Video codec UserInterface could not find codec with key '{ConfigProps.VideoCodecKey}'.";
-                Debug.LogMessage(new NullReferenceException(msg), msg, this);
+                this.LogError("Video codec UserInterface could not find codec with key '{videoCodecKey}'.", ConfigProps.VideoCodecKey);
                 return;
             }
 
@@ -82,18 +82,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 
             Parent.UiExtensionsHandler = UiExtensionsHandler;
 
-            Parent.IsReadyChange += (s, a) =>
-            {
-                if (!Parent.IsReady) return;
+            // Parent.IsReadyChange += (s, a) =>
+            // {
+            //     if (!Parent.IsReady) return;
 
-                var msg = UiExtensions != null ? "Initializing Video Codec UI Extensions" : "No Ui Extensions in config";
+            //     var msg = UiExtensions != null ? "Initializing Video Codec UI Extensions" : "No Ui Extensions in config";
 
-                Debug.LogMessage(LogEventLevel.Debug, msg, this);
+            //     this.LogDebug(msg);
 
-                UiExtensions.Initialize(this, Parent.EnqueueCommand);
+            //     UiExtensions.Initialize(this, Parent.EnqueueCommand);
 
-                Debug.LogMessage(LogEventLevel.Debug, "Video Codec UI Extensions Handler Initilizing", this);
-            };
+            //     this.LogDebug("Video Codec UI Extensions Handler Initializing");
+            // };
             return;
         }
     }

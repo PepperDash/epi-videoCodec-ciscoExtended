@@ -230,7 +230,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void CancelLockoutTimer()
         {
-            Debug.LogMessage(LogEventLevel.Verbose, "Canceling Lockout Poll Timer for: {Key}", this, mcTpController.Key);
+            this.LogVerbose("Canceling Lockout Poll Timer for: {Key}", mcTpController.Key);
 
             extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
 

@@ -20,7 +20,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombin
             //company room null check
             if (ui == null)
             {
-                Debug.LogMessage(LogEventLevel.Debug, $"[Error]: {ui.Key} is not a companyRoom", ui);
+                Debug.LogError($"{ui.Key} is not a companyRoom", ui);
                 return;
             }
             try
@@ -29,27 +29,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombin
 
                 if (combiners == null || combiners.Count == 0)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, $"[Warning]: {ui.Key} could not find RoomCombiner", ui);
+                    Debug.LogWarning("{uiKey} could not find RoomCombiner", ui);
                     return;
                 }
 
                 if (combiners.Count > 1)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, $"[Warning]: {ui.Key} found more than one RoomCombiner", ui);
+                    Debug.LogWarning("{uiKey} found more than one RoomCombiner", ui);
                     return;
                 }
 
                 EssentialsRoomCombiner = combiners[0];
 
-                Debug.LogMessage(LogEventLevel.Debug, "RoomCombinerHandler setup for {0}", ui, ui.Key);
+                Debug.LogDebug("RoomCombinerHandler setup for {0}", ui, ui.Key);
             }
             catch (Exception e)
             {
-                Debug.LogMessage(
-                    e,
-                    $"[ERROR] setting up RoomCombinerHandler for {ui.Key}",
-                    ui
-                );
+                Debug.LogError("SubscribeForMobileControlUpdates Error: {message}", e.Message);
+                Debug.LogVerbose(e, "Exception");
             }
         }
     }

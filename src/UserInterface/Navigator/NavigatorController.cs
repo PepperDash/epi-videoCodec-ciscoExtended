@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
@@ -60,17 +61,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 if (mobileControl == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "Mc is null", this);
+                    this.LogDebug("Mc is null");
                     return;
                 }
                 var bridge = mobileControl.GetRoomMessenger(props.DefaultRoomKey);
                 if (bridge == null)
                 {
-                    Debug.LogMessage(LogEventLevel.Debug, "No Mobile Control bridge for {defaultRoomKey} found ", this, props.DefaultRoomKey);
+                    this.LogDebug("No Mobile Control bridge for {defaultRoomKey} found ", props.DefaultRoomKey);
                     return;
                 }
 
-                Debug.LogMessage(LogEventLevel.Debug, "Got Bridge: {roomName}", this, bridge.RoomName);
+                this.LogDebug("Got Bridge: {roomName}", bridge.RoomName);
 
                 this.bridge = bridge;
 
@@ -81,7 +82,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 //SetAppUrl here fixing AppUrlFeedback.StringValue null after initial event
                 this.bridge.AppUrlChanged += (s, a) =>
                 {
-                    Debug.LogMessage(LogEventLevel.Information, "AppURL changed", this);
+                    this.LogInformation("AppURL changed");
 
                     UpdateFeedbacks(s, a);
 
@@ -94,7 +95,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
             catch (Exception e)
             {
-                Debug.LogMessage(e, "SubscribeForMobileControlUpdates Error", this);
+                this.LogError("SubscribeForMobileControlUpdates Error: {message}", e.Message);
+                this.LogVerbose(e, "Exception");
             }
         }
 
@@ -102,13 +104,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         {
             try
             {
-                Debug.LogMessage(LogEventLevel.Debug, "Setting AppUrl to: {url}", this, url);
+                this.LogDebug("Setting AppUrl to: {url}", url);
                 appUrl = url;
                 AppUrlFeedback.FireUpdate();
             }
             catch (Exception e)
             {
-                Debug.LogMessage(e, "SetAppUrl Error", this);
+                this.LogError("SetAppUrl Error: {message}", e.Message);
+                this.LogVerbose(e, "Exception");
             }
         }
 

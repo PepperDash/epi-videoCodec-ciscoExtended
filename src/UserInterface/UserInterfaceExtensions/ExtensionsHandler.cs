@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 
@@ -62,10 +63,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 		{
 			try
 			{
-				var status = JsonConvert.DeserializeObject<Status>(statusToken.ToString());
+				var status = statusToken.ToObject<Status>();
+
 				if (status?.XPath?.Value != null && status?.XPath?.Value != WebViewDisplay.xStatusPath)
 				{
-					Debug.LogMessage(Serilog.Events.LogEventLevel.Error, "[UiExtensionsHandler] XPath Uknown [Parse Status Error] XPath: {0}. Reason:  {1}", _parent, status.XPath.Value, status.Reason.Value);
 					return;
 				}
 
@@ -73,13 +74,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 			}
 			catch (Exception e)
 			{
-				Debug.LogMessage(Serilog.Events.LogEventLevel.Error, $"[UiExtensionsHandler] Parse Status Error: {e.Message} {e.StackTrace}", _parent, null);
+				_parent.LogError("ParseErrorStatus Error: {message}", e.Message);
+				_parent.LogVerbose(e, "Exception");
 			}
 		}
 
 		public void ParseStatus(Panels.CiscoCodecEvents.Panel panel)
 		{
-			Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "[UiExtensionsHandler] Parse Status Panel Clicked: {0}", _parent, panel.Clicked.PanelId.Value);
+			_parent.LogDebug("[UiExtensionsHandler] Parse Status Panel Clicked: {panelId}", panel.Clicked.PanelId.Value);
 
 			if (panel.Clicked == null || panel.Clicked.PanelId == null || panel.Clicked.PanelId.Value == null)
 			{

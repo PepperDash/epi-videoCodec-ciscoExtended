@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
@@ -57,18 +58,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         {
             this.parent = parent;
 
-            Debug.LogMessage(LogEventLevel.Debug, "Extensions Initialize, Panels from config: null: {0}, length: {1}", parent, Panels == null, Panels.Count);
-            PanelsHandler = new PanelsHandler(parent, enqueueCommand, Panels);
-            //Debug.LogMessage(LogEventLevel.Warning, xCommand(), parent);
+            parent.LogDebug("Extensions Initialize, Panels from config length: {count}", Panels.Count);
+            PanelsHandler = new PanelsHandler(parent, this, enqueueCommand, Panels);
 
             if (SkipXml)
             {
                 return;
             }
 
-            var xml = xCommand();
+            var xml = XCommand();
 
-            Debug.LogDebug(parent, "Sending XML data: {xml}", xml);
+            parent.LogDebug("Sending XML data: {xml}", xml);
 
             enqueueCommand(xml);
         }
@@ -84,9 +84,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
                 return;
             }
 
-            var xml = xCommand();
+            var xml = XCommand();
 
-            Debug.LogDebug(parent, "Sending XML data: {xml}", xml);
+            parent.LogDebug("Sending XML data: {xml}", xml);
 
             enqueueCommand(xml);
         }
@@ -97,8 +97,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         /// Generates the xCommand string for configuring UI Extensions on the Cisco codec.
         /// </summary>
         /// <returns>The complete xCommand string including ConfigId and XML configuration data.</returns>
-        public string xCommand() => $@"xCommand UserInterface Extensions Set ConfigId: {ConfigId}
-{ToXmlString()}.{CiscoCodec.Delimiter}";
+        public string XCommand() => $"xCommand UserInterface Extensions Set ConfigId: {ConfigId}{CiscoCodec.Delimiter}{ToXmlString()}{CiscoCodec.Delimiter}.{CiscoCodec.Delimiter}";
 
         /// <summary>
         /// converts the props on this object with xml attributes to 
@@ -113,7 +112,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             }
             catch (Exception ex)
             {
-                Debug.LogMessage(ex, "XML Command Serialize Failed", null);
+                parent.LogError("XML Command Serialize Failed: {message}", ex.Message);
+                parent.LogVerbose(ex, "Exception");
                 return "";
             }
         }

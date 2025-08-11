@@ -18,7 +18,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 
         public override EssentialsDevice BuildDevice(DeviceConfig dc)
         {
-            Debug.LogMessage(Serilog.Events.LogEventLevel.Debug, "Factory Attempting to create new Cisco RoomOs User Interface Device", null, null);
+            Debug.LogDebug("Factory Attempting to create new Cisco RoomOs User Interface Device");
 
             var type = dc.Type;
 
