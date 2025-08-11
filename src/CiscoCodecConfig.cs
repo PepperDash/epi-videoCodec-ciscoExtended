@@ -74,6 +74,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("overrideMeetingsLimit")]
         public bool OverrideMeetingsLimit { get; set; }
 
+        public bool EnableCommDebugOnStartup { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to get the phonebook on startup.
+        /// If true, the codec will fetch the phonebook data when it starts up.
+        /// Default is true.
+        /// </summary>
+        [JsonProperty("getPhonebookOnStartup")]
+        public bool GetPhonebookOnStartup { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to get bookings on startup.
+        /// If true, the codec will fetch the bookings data when it starts up.
+        /// Default is true.
+        /// </summary>
+        [JsonProperty("getBookingsOnStartup")]
+        public bool GetBookingsOnStartup { get; set; } = true;
+
         [JsonProperty("phonebookDisableAutoPopulate")]
         public bool PhonebookDisableAutoPopulate { get; set; }
 
