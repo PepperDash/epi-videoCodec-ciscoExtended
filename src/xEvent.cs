@@ -1,5 +1,4 @@
 ﻿using Newtonsoft.Json;
-using System;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -141,7 +140,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public RequestedUri RequestedUri { get; set; }
             public PeopleCountAverage PeopleCountAverage { get; set; }
         }
- 
+
         public class UserInterface // /Event/UserInterface/
         {
             [JsonProperty("id")]
@@ -166,10 +165,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string Id { get; set; }
 
             [JsonProperty("Event")]
-            public UiEvent WidgetEvent 
-            { 
-                get { return _event; } 
-                set {
+            public UiEvent WidgetEvent
+            {
+                get { return _event; }
+                set
+                {
                     _event = value;
                     /*
                     Action = new WidgetAction();
@@ -200,7 +200,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                      * */
                 }
             }
- 
+
             public Widget Widget { get; set; }
 
             public PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel Panel { get; set; }
@@ -211,12 +211,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 //PageClosed = new PageClosed();
                 //WidgetEvent = new WidgetEvent();
                 Widget = new Widget();
-				Panel = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
+                Panel = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels.CiscoCodecEvents.Panel();
             }
         }
 
         public class UiEvent // /Event/UserInterface/Extensions/Event
-        {            
+        {
             //Clicked Signal: "tv_menu:menu"\n
             [JsonProperty("id")]
             public string Id { get; set; }
@@ -246,10 +246,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string Value { get; set; }
         }
 
-        public class Widget: ValueProperty // /Event/UserInterface/Extensions/Widget/
+        public class Widget : ValueProperty // /Event/UserInterface/Extensions/Widget/
         {
             //public LayoutUpdated LayoutUpdated { get; set; }
-            
+
             private WidgetAction _action;
             [JsonProperty("Action")]
             public WidgetAction WidgetAction { get { return _action; } set { _action = value; OnValueChanged(); } }
@@ -270,7 +270,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string Value { get; set; }
             [JsonProperty("Type")]
             public string Type { get; set; }
-            
+
             //private string _value;
             //public string Value { get { return _value; } set { _value = value; OnValueChanged(); } 
         }

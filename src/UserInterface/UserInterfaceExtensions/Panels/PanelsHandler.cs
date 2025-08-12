@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Timers;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 
 //see comments at bottom for xCommand examples
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels
@@ -21,10 +24,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
   /// - Updating panel feedback based on device status changes
   /// - Validating panel configurations (e.g., order values must be >= 1)
   /// </remarks>
-  public class PanelsHandler : ICiscoCodecUiExtensionsPanelClickedEventHandler
+  public class PanelsHandler
   {
-    private readonly IKeyed _parent;
-    private readonly List<Panel> _panelConfigs;
+    private const string hexColorPattern = @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
+    private readonly IKeyed parent;
+
+    private readonly UiExtensions extensionsHandler;
+    private readonly List<Panel> panelConfigs;
     private readonly Action<string> EnqueueCommand;
 
     private readonly Timer feedbackTimer;
@@ -39,19 +45,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     /// The constructor validates that all panel configurations have valid order values (>= 1).
     /// If any panel has an invalid order value, the handler will not be registered and an error will be logged.
     /// </remarks>
-    public PanelsHandler(IKeyed parent, Action<string> enqueueCommand, List<Panel> config)
+    public PanelsHandler(IKeyed parent, UiExtensions extensions, Action<string> enqueueCommand, List<Panel> config)
     {
-      _parent = parent;
-      _panelConfigs = config;
+      this.parent = parent;
+      extensionsHandler = extensions;
+
+      panelConfigs = config;
       EnqueueCommand = enqueueCommand;
       if (config == null || config.Count == 0)
       {
-        Debug.LogInformation(_parent, "No Cisco Panels Configured {config}", config);
+        parent.LogInformation("No Cisco Panels Configured {config}", config);
         return;
       }
       else if (config.Any((p) => p.Order == 0))
       {
-        Debug.LogError(_parent, "0 is an invalid order value. Must be >= 1 {config}.  PanelHandler will not be registered.  Please update order values in config.", config);
+        parent.LogError("0 is an invalid order value. Must be >= 1 {config}.  PanelHandler will not be registered.  Please update order values in config.", config);
         return;
       }
 
@@ -69,9 +77,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
     {
-      if (!(_parent is ICiscoCodecUiExtensions extensions))
+      if (!(extensionsHandler is UiExtensions extensions))
       {
-        Debug.LogError(_parent, "Parent is not ICiscoCodecUiExtensions, cannot update panels");
+        parent.LogError("Parent is not UiExtensions, cannot update panels");
         return;
       }
 
@@ -80,11 +88,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void RegisterForDeviceFeedback()
     {
-      var panelsWithFeedback = _panelConfigs.Where(p => p.PanelFeedback != null);
+      var panelsWithFeedback = panelConfigs.Where(p => p.PanelFeedback != null);
 
       if (!panelsWithFeedback.Any())
       {
-        Debug.LogDebug(_parent, "No panels with feedback to register for");
+        parent.LogDebug("No panels with feedback to register");
         return;
       }
 
@@ -92,7 +100,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       {
         if (!(DeviceManager.GetDeviceForKey(panel.PanelFeedback.DeviceKey) is IHasFeedback device))
         {
-          Debug.LogError(_parent, "Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, panel.PanelFeedback.DeviceKey);
+          parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, panel.PanelFeedback.DeviceKey);
           continue;
         }
 
@@ -100,9 +108,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
         if (feedback == null)
         {
-          Debug.LogError(_parent, "Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panel.PanelFeedback.FeedbackKey, panel.PanelFeedback.DeviceKey);
+          parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panel.PanelFeedback.FeedbackKey, panel.PanelFeedback.DeviceKey);
           continue;
         }
+
+        parent.LogDebug("Registering for feedback {feedbackKey}", feedback.Key);
 
         feedback.OutputChange += (sender, args) =>
         {
@@ -111,7 +121,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             case eFeedbackEventType.TypeBool:
               {
                 var value = args.BoolValue;
-                Debug.LogDebug(_parent, "Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
                 UpdatePanelProperty(panel, panel.PanelFeedback, value);
 
@@ -120,7 +130,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             case eFeedbackEventType.TypeString:
               {
                 var value = args.StringValue;
-                Debug.LogDebug(_parent, "Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
                 UpdatePanelProperty(panel, panel.PanelFeedback, value);
 
@@ -129,7 +139,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             case eFeedbackEventType.TypeInt:
               {
                 var value = args.IntValue;
-                Debug.LogDebug(_parent, "Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}", panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
                 UpdatePanelProperty(panel, panel.PanelFeedback, value);
 
@@ -156,13 +166,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           {
             var color = value ? feedbackConfig.TruePropertyValue : feedbackConfig.FalsePropertyValue;
             // Regex pattern for hex colors: # followed by exactly 3 or 6 hex digits
-            var hexColorPattern = @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
+
             if (!Regex.IsMatch(color, hexColorPattern))
             {
-              Debug.LogWarning(_parent, "Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, color);
+              parent.LogWarning("Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, color);
               return;
             }
             panel.Color = color;
+            break;
+          }
+        case EPanelProperty.Location:
+          {
+            var locationFromConfig = value ? feedbackConfig.TruePropertyValue : feedbackConfig.FalsePropertyValue;
+
+            if (!Enum.TryParse<ECiscoPanelLocation>(locationFromConfig, out var location))
+            {
+              parent.LogWarning("Panel {panelId} feedback location value is not a valid enum: {value}", panel.PanelId, locationFromConfig);
+              return;
+            }
+
+            panel.Location = location;
             break;
           }
       }
@@ -172,7 +195,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     {
       if (!(feedbackConfig.StringFeedbackPropertyValues != null && feedbackConfig.StringFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
-        Debug.LogWarning(_parent, "Panel {panelId} feedback string value not found: {value}", panel.PanelId, value);
+        parent.LogWarning("Panel {panelId} feedback string value not found: {value}", panel.PanelId, value);
         return;
       }
 
@@ -185,14 +208,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           }
         case EPanelProperty.Color:
           {
-            // Regex pattern for hex colors: # followed by exactly 3 or 6 hex digits
-            var hexColorPattern = @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
+            // Regex pattern for hex colors: # followed by exactly 3 or 6 hex digits            
             if (!Regex.IsMatch(propertyValue, hexColorPattern))
             {
-              Debug.LogWarning(_parent, "Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, propertyValue);
+              parent.LogWarning("Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, propertyValue);
               return;
             }
             panel.Color = propertyValue;
+            break;
+          }
+        case EPanelProperty.Location:
+          {
+            parent.LogWarning("Location is not currently supported for string feedbacks");
             break;
           }
       }
@@ -202,7 +229,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     {
       if (!(feedbackConfig.IntFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
-        Debug.LogWarning(_parent, "Panel {panelId} feedback integer value not found: {value}", panel.PanelId, value);
+        parent.LogWarning("Panel {panelId} feedback integer value not found: {value}", panel.PanelId, value);
         return;
       }
 
@@ -219,22 +246,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             var hexColorPattern = @"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
             if (!Regex.IsMatch(propertyValue, hexColorPattern))
             {
-              Debug.LogWarning(_parent, "Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, propertyValue);
+              parent.LogWarning("Panel {panelId} feedback color value is not a valid hex color: {value}", panel.PanelId, propertyValue);
               return;
             }
             panel.Color = propertyValue;
             break;
           }
+        case EPanelProperty.Location:
+          {
+            parent.LogWarning("Location is not currently supported for string feedbacks");
+            break;
+          }
+
       }
     }
 
     public void ParseStatus(CiscoCodecEvents.Panel panel)
     {
-      Debug.LogDebug(_parent, "PanelsHandler Parse Status Panel Clicked: {panelId}", panel.Clicked.PanelId.Value);
-      var pconfig = _panelConfigs.FirstOrDefault((p) => p.PanelId == panel.Clicked.PanelId.Value);
+      parent.LogDebug("PanelsHandler Parse Status Panel Clicked: {panelId}", panel.Clicked.PanelId.Value);
+      var pconfig = panelConfigs.FirstOrDefault((p) => p.PanelId == panel.Clicked.PanelId.Value);
       if (pconfig == null)
       {
-        Debug.LogDebug(_parent, "Panel not found in config id: {panelId}", panel.Id);
+        parent.LogDebug("Panel not found in config id: {panelId}", panel.Id);
         return;
       }
       pconfig.OnClickedEvent();

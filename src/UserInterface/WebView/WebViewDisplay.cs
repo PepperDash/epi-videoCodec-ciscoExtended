@@ -1,15 +1,15 @@
-﻿namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay
+﻿namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView
 {
     /// <summary>
     /// xCommand UserInterface WebView Display Header: value Mode: value Options: value Target: value Title: value Url: value
     /// </summary>
-    public class UiWebViewDisplay
-	{
-		public const string xStatusPath = "Status/UserInterface/WebView";
-		/// <summary>
-		/// <0 - 8192> An HTTP header field.You can add up 15 Header parameters in one command, each holding one HTTP header field.
-		/// </summary>
-		public string Header { get; set; }
+    public class WebViewDisplay
+    {
+        public const string xStatusPath = "Status/UserInterface/WebView";
+        /// <summary>
+        /// <0 - 8192> An HTTP header field.You can add up 15 Header parameters in one command, each holding one HTTP header field.
+        /// </summary>
+        public string Header { get; set; }
 
         /// <summary>
         /// Fullscreen, Modal Full screen: Display the web page on the entire screen.Modal: Display the web page in a window.

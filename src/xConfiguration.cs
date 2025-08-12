@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using PepperDash.Core;
-
 using Newtonsoft.Json;
+using PepperDash.Core;
 
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -14,19 +13,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         public class DefaultVolume
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Dereverberation
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Mode : ValueProperty
         {
-            
+
 
             string _value;
 
@@ -76,7 +75,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class NoiseReduction
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -89,7 +88,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Level
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -109,7 +108,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Enabled
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -136,13 +135,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class RingTone
         {
-            
+
             public string Value { get; set; }
         }
 
         public class RingVolume : ValueProperty
         {
-            
+
 
             string _value;
 
@@ -199,7 +198,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultMode
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -210,7 +209,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultLevel
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -237,7 +236,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Mirror
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -251,7 +250,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Framerate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -268,7 +267,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Closeup
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -314,15 +313,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                             l.Add(reader.Value as Camera);
                             reader.Read();
                         }
-                        Debug.Console(1, "[xConfiguration]: Cameras converted as list");
+                        Debug.LogDebug("[xConfiguration]: Cameras converted as list");
                         return l;
                     }
-                    Debug.Console(1, "[xConfiguration]: CameraList converted as single object and added to list");
+                    Debug.LogDebug("[xConfiguration]: CameraList converted as single object and added to list");
                     return new List<Camera> { reader.Value as Camera };
                 }
                 catch (Exception e)
                 {
-                    Debug.Console(1, "[xConfiguration]: Unable to convert JSON for camera objects: {0}", e);
+                    Debug.LogError("[xConfiguration]: Unable to convert JSON for camera objects: {message}", e.Message);
+                    Debug.LogVerbose(e, "Exception");
 
                     return new List<Camera>();
                 }
@@ -344,14 +344,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Delay
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class MuteString
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -373,13 +373,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Protocol
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Rate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -391,7 +391,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultTimeout
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -414,25 +414,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class MaxReceiveCallRate
         {
-            
+
             public string Value { get; set; }
         }
 
         public class MaxTotalReceiveCallRate
         {
-            
+
             public string Value { get; set; }
         }
 
         public class MaxTotalTransmitCallRate
         {
-            
+
             public string Value { get; set; }
         }
 
         public class MaxTransmitCallRate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -463,13 +463,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class LoginName
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class Password
-        {         
+        {
             public string Value { get; set; }
         }
 
@@ -488,7 +488,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class KeySize
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -499,7 +499,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Address
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -511,7 +511,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public class E164 : ValueProperty
         {
             private string _value;
-            public string Value { get { return _value; }
+            public string Value
+            {
+                get { return _value; }
                 set
                 {
                     _value = value;
@@ -567,7 +569,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         public class Name
-        {    
+        {
             public string Value { get; set; }
         }
 
@@ -598,31 +600,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class AnonymousIdentity
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Md5
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Peap
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Tls
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Ttls
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -636,7 +638,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Identity
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -644,13 +646,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class TlsVerify
         {
-            
+
             public string Value { get; set; }
         }
 
         public class UseClientCertificate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -667,30 +669,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class IpStack
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class Assignment
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Gateway
         {
-            
+
             public string Value { get; set; }
         }
 
         public class SubnetMask
         {
-            
+
             public string Value { get; set; }
         }
 
-// ReSharper disable once InconsistentNaming
+        // ReSharper disable once InconsistentNaming
         public class IPv4
         {
             public Address Address { get; set; }
@@ -708,17 +710,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DhcpOptions
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Gateway2
         {
-            
+
             public string Value { get; set; }
         }
 
-// ReSharper disable once InconsistentNaming
+        // ReSharper disable once InconsistentNaming
         public class IPv6
         {
             public Address Address { get; set; }
@@ -729,43 +731,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Mtu
         {
-            
+
             public string Value { get; set; }
         }
 
         public class AudioString
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Data
         {
-            
+
             public string Value { get; set; }
         }
 
         public class IcmPv6
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Ntp
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Signalling
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Video
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -789,7 +791,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Allow
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -800,7 +802,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Speed
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -808,7 +810,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class VlanId
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -830,9 +832,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public Dns Dns { get; set; }
             public Ieee8021X Ieee8021X { get; set; }
             public IpStack IpStack { get; set; }
-// ReSharper disable once InconsistentNaming
+            // ReSharper disable once InconsistentNaming
             public IPv4 IPv4 { get; set; }
-// ReSharper disable once InconsistentNaming
+            // ReSharper disable once InconsistentNaming
             public IPv6 IPv6 { get; set; }
             public Mtu Mtu { get; set; }
             public QoS QoS { get; set; }
@@ -869,7 +871,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class MinimumTlsVersion
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -880,19 +882,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class StrictTransportSecurity
         {
-            
+
             public string Value { get; set; }
         }
 
         public class VerifyClientCertificate
         {
-            
+
             public string Value { get; set; }
         }
 
         public class VerifyServerCertificate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -921,7 +923,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class CommunityName
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -936,13 +938,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class SystemContact
         {
-            
+
             public string Value { get; set; }
         }
 
         public class SystemLocation
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -970,7 +972,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class WelcomeText
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -992,19 +994,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class ProfileCameras
         {
-            
+
             public string Value { get; set; }
         }
 
         public class ControlSystems
         {
-            
+
             public string Value { get; set; }
         }
 
         public class TouchPanels
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1024,13 +1026,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Type
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Url
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1047,32 +1049,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Connectivity
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class AlternateAddress
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Domain2
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Path
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Protocol2
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1087,7 +1089,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class HttpMethod
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1107,19 +1109,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class CallControl
         {
-            
+
             public string Value { get; set; }
         }
 
         public class FromClients
         {
-            
+
             public string Value { get; set; }
         }
 
         public class ToClients
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1143,13 +1145,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class PeopleCountOutOfCall
         {
-            
+
             public string Value { get; set; }
         }
 
         public class PeoplePresenceDetector
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1162,7 +1164,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class UserName
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1174,19 +1176,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultTransport
         {
-            
+
             public string Value { get; set; }
         }
 
         public class DisplayName
         {
-            
+
             public string Value { get; set; }
         }
 
         public class DefaultCandidate
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1199,7 +1201,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class ListenPort
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1214,7 +1216,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class TurnServer
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1228,7 +1230,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class CiscoCodecUri
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1248,13 +1250,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class BaudRate
         {
-            
+
             public string Value { get; set; }
         }
 
         public class LoginRequired
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1268,25 +1270,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class BootAction
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Control
         {
-            
+
             public string Value { get; set; }
         }
 
         public class StandbyAction
         {
-            
+
             public string Value { get; set; }
         }
 
         public class WakeupAction
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1307,19 +1309,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DateFormat
         {
-            
+
             public string Value { get; set; }
         }
 
         public class TimeFormat
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Zone
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1344,12 +1346,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Language
         {
-            
+
             public string Value { get; set; }
         }
 
         public class OsdOutput
-        {         
+        {
             public string Value { get; set; }
         }
 
@@ -1369,13 +1371,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Filter
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Group
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1387,19 +1389,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Attribute
         {
-            
+
             public string Value { get; set; }
         }
 
         public class BaseDn
         {
-            
+
             public string Value { get; set; }
         }
 
         public class LdapEncryption
         {
-            
+
             public string Value { get; set; }
 
         }
@@ -1409,7 +1411,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Port
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1441,13 +1443,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultMainSource
         {
-            
+
             public string Value { get; set; }
         }
 
         public class CameraId
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1460,32 +1462,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class InputSourceType
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class PreferredResolution
         {
-            
+
             public string Value { get; set; }
         }
 
         public class PresentationSelection
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Quality
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Visibility
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1510,7 +1512,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Monitors
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1522,13 +1524,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class MonitorRole
         {
-            
+
             public string Value { get; set; }
         }
 
         public class Resolution
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1549,7 +1551,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class DefaultSource
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1560,20 +1562,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class FullscreenMode
         {
-            
+
             public string Value { get; set; }
         }
 
 
         public class OnMonitorRole
         {
-            
+
             public string Value { get; set; }
         }
 
         public class PipPosition
         {
-            
+
             public string Value { get; set; }
         }
 
@@ -1587,7 +1589,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public class Duration
         {
-            
+
             public string Value { get; set; }
         }
 

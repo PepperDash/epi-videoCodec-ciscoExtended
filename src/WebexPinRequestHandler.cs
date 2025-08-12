@@ -5,6 +5,7 @@ using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
 
@@ -151,7 +152,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 _authRequested = authRequest.AuthenticationRequest.Value != "None";
                 _authRequestedCallInstance = request.Call.IndexOf(authRequest);
-                Debug.Console(0, _parent, "Auth Requested Call Instance:{0} | {1}", _authRequestedCallInstance,
+                _parent.LogInformation("Auth Requested Call Instance: {instance} | {value}", _authRequestedCallInstance,
                     authRequest.AuthenticationRequest.Value);
                 AuthRequestedCallInstance.FireUpdate();
                 AuthRequested.FireUpdate();
@@ -169,19 +170,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (pinEntered != null)
             {
                 var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
-                if (!String.IsNullOrEmpty(role) && role == "Guest")
+                if (!string.IsNullOrEmpty(role) && role == "Guest")
                 {
                     JoinedAsGuest.Start();
                     _hostPin = string.Empty;
-                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    _parent.LogInformation("Joined as {instance} | {role}", _authRequestedCallInstance, role);
                     return;
                 }
 
-                if (!String.IsNullOrEmpty(role) && role == "Host")
+                if (!string.IsNullOrEmpty(role) && role == "Host")
                 {
                     JoinedAsHost.Start();
                     _hostPin = string.Empty;
-                    Debug.Console(0, _parent, "Joined as {1}", _authRequestedCallInstance, role);
+                    _parent.LogInformation("Joined as {instance} | {role}", _authRequestedCallInstance, role);
                     return;
                 }
             }
@@ -191,21 +192,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 PinIncorrect.Start();
                 _hostPin = string.Empty;
-                Debug.Console(0, _parent, "Pin error", _authRequestedCallInstance);
+                _parent.LogError("Pin error | {instance}", _authRequestedCallInstance);
             }
         }
 
         public void JoinAsGuest()
         {
             const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance, String.IsNullOrEmpty(_hostPin) ? String.Empty : String.Format(" Pin: {0}#", _hostPin));
+            var command = string.Format(commandFormat, _authRequestedCallInstance, string.IsNullOrEmpty(_hostPin) ? string.Empty : string.Format(" Pin: {0}#", _hostPin));
             _coms.SendText(command);
         }
 
         public void JoinAsHost()
         {
             const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#\x0D\x0A";
-            var command = String.Format(commandFormat, _authRequestedCallInstance, _hostPin);
+            var command = string.Format(commandFormat, _authRequestedCallInstance, _hostPin);
             _coms.SendText(command);
         }
 

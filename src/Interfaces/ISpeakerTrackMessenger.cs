@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Devices.Common.Codec.Cisco;
 
@@ -13,15 +14,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
         public ISpeakerTrackMessenger(string key, string messagePath, ISpeakerTrack device)
             : base(key, messagePath, device as Device)
         {
-            _speakerTrack = device ;
+            _speakerTrack = device;
         }
 
         protected override void RegisterActions()
         {
-            if(_speakerTrack == null)
+            if (_speakerTrack == null)
             {
 
-                Debug.LogMessage(Serilog.Events.LogEventLevel.Error, $"{Key} does not implement ISpeakerTrack", this, _speakerTrack.Key);
+                this.LogError("{Key} does not implement ISpeakerTrack", _speakerTrack.Key);
                 return;
             }
 
@@ -35,18 +36,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces
         }
 
         private void SendFullStatus()
-        {            
+        {
             var message = new ISpeakerTrackStateMessage
             {
                 SpeakerTrackAvailability = _speakerTrack.SpeakerTrackAvailability,
                 SpeakerTrackStatus = _speakerTrack.SpeakerTrackStatus
             };
-        
+
             PostStatusMessage(message);
         }
     }
 
-    public class ISpeakerTrackStateMessage: DeviceStateMessageBase
+    public class ISpeakerTrackStateMessage : DeviceStateMessageBase
     {
         [JsonProperty("speakerTrackAvailability", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public bool? SpeakerTrackAvailability { get; set; }

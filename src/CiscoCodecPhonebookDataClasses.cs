@@ -179,7 +179,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             else if (result.Folder.Count > 0)
             {
                 if (Debug.Level > 0)
-                    Debug.Console(1, "Phonebook Folders:\n");
+                    Debug.LogDebug("Phonebook Folders:\r\n");
 
                 foreach (Folder f in result.Folder)
                 {
@@ -192,7 +192,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         rootFolders.Add(folder);
 
                     if (Debug.Level > 0)
-                        Debug.Console(1, "+ {0}", folder.Name);
+                        Debug.LogDebug("+ {value}", folder.Name);
                 }
             }
 
@@ -219,7 +219,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
                 else if (result.Contact.Count > 0)
                 {
-                    Debug.Console(1, "Root Contacts:\n");
+                    Debug.LogDebug("Root Contacts:\r\n");
 
                     foreach (Contact c in result.Contact)
                     {
@@ -233,7 +233,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                             if (!string.IsNullOrEmpty(c.Title.Value))
                                 contact.Title = c.Title.Value;
 
-                                Debug.Console(1, "{0}\nContact Methods:", contact.Name);
+                            Debug.LogDebug("{value}\r\nContact Methods:", contact.Name);
 
                             foreach (ContactMethod m in c.ContactMethod)
                             {
@@ -270,7 +270,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                                     tempContactMethod.Device = device;
                                 }
 
-                                    Debug.Console(1, "Number: {0}", m.Number.Value);
+                                Debug.LogDebug("Number: {value}", m.Number.Value);
 
                                 tempContactMethod.Number = m.Number.Value;
                                 tempContactMethod.ContactMethodId = m.ContactMethodId.Value;
@@ -287,8 +287,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return rootContacts;
             }
             catch (Exception ex)
-            { 
-                Debug.Console(0, "Exception in CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult : {0}", ex.Message);
+            {
+                Debug.LogError("Error processing user action: {message}", ex.Message);
+                Debug.LogVerbose(ex, "Exception");
+
                 return null;
             }
         }
@@ -391,7 +393,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             catch (Exception e)
             {
-                Debug.Console(1, "Error converting Cisco Phonebook results to generic: {0}", e);
+                Debug.LogError("Error converting Cisco Phonebook results to generic: {message}", e.Message);
+                Debug.LogVerbose(e, "Exception");
             }
 
             return directory;

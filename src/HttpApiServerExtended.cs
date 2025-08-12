@@ -25,20 +25,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public HttpApiServerExtended()
         {
             ExtensionContentTypes = new Dictionary<string, string>
-			{
-				{ ".css", "text/css" },
-				{ ".htm", "text/html" },
-				{ ".html", "text/html" },
-				{ ".jpg", "image/jpeg" },
-				{ ".jpeg", "image/jpeg" },
-				{ ".js", "application/javascript" },
-				{ ".json", "application/json" },
+            {
+                { ".css", "text/css" },
+                { ".htm", "text/html" },
+                { ".html", "text/html" },
+                { ".jpg", "image/jpeg" },
+                { ".jpeg", "image/jpeg" },
+                { ".js", "application/javascript" },
+                { ".json", "application/json" },
                 { ".xml", "text/xml" },
-				{ ".map", "application/x-navimap" },
-				{ ".pdf", "application.pdf" },
-				{ ".png", "image/png" },
-				{ ".txt", "text/plain" },
-			};
+                { ".map", "application/x-navimap" },
+                { ".pdf", "application.pdf" },
+                { ".png", "image/png" },
+                { ".txt", "text/plain" },
+            };
             HtmlRoot = @"\HTML";
         }
 
@@ -47,7 +47,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             // TEMP - this should be inserted by configuring class
 
-            HttpServer = new HttpServer {ServerName = "Cisco API Servers", KeepAlive = true, Port = port};
+            HttpServer = new HttpServer { ServerName = "Cisco API Servers", KeepAlive = true, Port = port };
             HttpServer.OnHttpRequest += Server_Request;
             HttpServer.Open();
 
@@ -55,7 +55,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 if (a != eProgramStatusEventType.Stopping) return;
                 HttpServer.Close();
-                Debug.Console(1, "Shutting down HTTP Servers on port {0}", HttpServer.Port);
+                Debug.LogDebug("Shutting down HTTP Servers on port {port}", HttpServer.Port);
             };
         }
 
@@ -63,7 +63,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             if (args.Request.Header.RequestType == "OPTIONS")
             {
-                Debug.Console(2, "Asking for OPTIONS");
+                Debug.LogVerbose("Asking for OPTIONS");
                 args.Response.Header.SetHeaderValue("Access-Control-Allow-Origin", "*");
                 args.Response.Header.SetHeaderValue("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
                 return;
@@ -73,13 +73,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             var host = args.Request.DataConnection.RemoteEndPointAddress;
             //string authToken;
 
-            Debug.Console(2, "HTTP Request: {2}: Path='{0}' ?'{1}'", path, args.Request.QueryString, host);
+            Debug.LogVerbose("HTTP Request: {2}: Path='{0}' ?'{1}'", path, args.Request.QueryString, host);
 
             // ----------------------------------- ADD AUTH HERE
             if (!path.StartsWith("/cisco/api")) return;
-            var handler = ApiRequest;
-            if (handler != null)
-                handler(this, args);
+
+            ApiRequest?.Invoke(this, args);
         }
 
         public static string GetContentType(string extension)

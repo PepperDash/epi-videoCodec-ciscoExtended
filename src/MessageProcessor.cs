@@ -1,6 +1,7 @@
 ﻿using System;
 using Crestron.SimplSharp;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -58,7 +59,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
                 catch (Exception ex)
                 {
-                    Debug.Console(1, _parent, Debug.ErrorLogLevel.Notice, "Error processing message:{0}", ex);
+                    _parent.LogError("Error processing user action: {message}", ex.Message);
+                    _parent.LogVerbose(ex, "Exception");
                 }
             }
         }

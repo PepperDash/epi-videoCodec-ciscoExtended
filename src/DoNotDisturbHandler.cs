@@ -1,6 +1,7 @@
 ﻿using System;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
+using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Queues;
 using PepperDash.Essentials.Devices.Common.Codec;
@@ -22,7 +23,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _handler = handler;
             DoNotDisturbModeIsOnFeedback = new BoolFeedback(() => _doNotDisturbEnabled);
             DoNotDisturbModeIsOnFeedback.OutputChange +=
-                (sender, args) => Debug.Console(1, parent, "Do Not Disturb:{0}", _doNotDisturbEnabled);
+                (sender, args) => parent.LogDebug("Do Not Disturb:{0}", _doNotDisturbEnabled);
         }
 
         public void ParseStatus(JToken token)
@@ -30,7 +31,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             const string doNotDisturbKey = "DoNotDisturb.Value";
 
             var doNoDistubToken = (string)token.SelectToken(doNotDisturbKey);
-            if (String.IsNullOrEmpty(doNoDistubToken))
+            if (string.IsNullOrEmpty(doNoDistubToken))
                 return;
 
             _doNotDisturbEnabled = doNoDistubToken.Equals("Active", StringComparison.OrdinalIgnoreCase) ||

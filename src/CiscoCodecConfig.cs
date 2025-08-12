@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
-
-using Newtonsoft.Json;
-using Extensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Extensions;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceWebViewDisplay;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
+using UiExtensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.UiExtensions;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -39,6 +39,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public bool ShowSelfViewByDefault { get; set; }
 
         /// <summary>
+        /// Gets or sets the default monitor role for self view.
+        /// Valid values are defined in the EMonitorRole enum.
+        /// This property determines where the self view will be displayed on the codec's monitors.
+        /// </summary>
+        [JsonProperty("selfViewDefaultMonitorRole", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public EMonitorRole? SelfViewDefaultMonitorRole { get; set; }
+
+        /// <summary>
         /// Gets or sets the content sharing configuration properties.
         /// </summary>
         [JsonProperty("sharing")]
@@ -64,6 +73,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         [JsonProperty("overrideMeetingsLimit")]
         public bool OverrideMeetingsLimit { get; set; }
+
+        public bool EnableCommDebugOnStartup { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to get the phonebook on startup.
+        /// If true, the codec will fetch the phonebook data when it starts up.
+        /// Default is true.
+        /// </summary>
+        [JsonProperty("getPhonebookOnStartup")]
+        public bool GetPhonebookOnStartup { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to get bookings on startup.
+        /// If true, the codec will fetch the bookings data when it starts up.
+        /// Default is true.
+        /// </summary>
+        [JsonProperty("getBookingsOnStartup")]
+        public bool GetBookingsOnStartup { get; set; } = true;
 
         [JsonProperty("phonebookDisableAutoPopulate")]
         public bool PhonebookDisableAutoPopulate { get; set; }
@@ -103,8 +130,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("Widgets")]
         public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
 
-		[JsonProperty("extensions")]
-		public Extensions Extensions { get; set; }
+        [JsonProperty("extensions")]
+        public UiExtensions Extensions { get; set; }
 
         [JsonProperty("emergency")]
         public Emergency Emergency { get; set; }
@@ -168,6 +195,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public string MobileControlPath { get; set; }
 
         [JsonProperty("uiWebViewDisplay")]
-        public UiWebViewDisplay UiWebViewDisplay { get; set; }
+        public WebViewDisplay UiWebViewDisplay { get; set; }
     }
 }
