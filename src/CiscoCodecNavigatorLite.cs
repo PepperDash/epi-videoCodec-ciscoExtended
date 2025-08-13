@@ -30,7 +30,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     /// - Scheduling and booking integration
     /// - Advanced codec status monitoring
     /// </remarks>
-    public class CiscoCodecNavigatorLite : Device, ICiscoCodecBase
+    public class CiscoCodecNavigatorLite : EssentialsDevice, ICiscoCodecBase
     {
         private readonly IBasicCommunication _communication;
         private readonly CiscoCodecConfig _config;
@@ -73,7 +73,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         /// <param name="config">Device configuration</param>
         /// <param name="communication">Communication interface</param>
-        public CiscoCodecNavigatorLite(DeviceConfig config, IBasicCommunication communication) : base(config.Key)
+        public CiscoCodecNavigatorLite(DeviceConfig config, IBasicCommunication communication) : base(config.Key, config.Name)
         {
             _communication = communication;
             _config = JsonConvert.DeserializeObject<CiscoCodecConfig>(config.Properties.ToString());
