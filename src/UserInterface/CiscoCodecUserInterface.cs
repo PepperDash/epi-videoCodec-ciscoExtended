@@ -82,18 +82,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 
             Parent.UiExtensionsHandler = UiExtensionsHandler;
 
-            // Parent.IsReadyChange += (s, a) =>
-            // {
-            //     if (!Parent.IsReady) return;
-
-            //     var msg = UiExtensions != null ? "Initializing Video Codec UI Extensions" : "No Ui Extensions in config";
-
-            //     this.LogDebug(msg);
-
-            //     UiExtensions.Initialize(this, Parent.EnqueueCommand);
-
-            //     this.LogDebug("Video Codec UI Extensions Handler Initializing");
-            // };
             return;
         }
     }

@@ -137,7 +137,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void ShowWebViewOsd(string url, WebViewDisplayConfig webviewConfig)
         {
-            router.SendWebViewUrl(url, webviewConfig);
+            var uriSuccess = Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri);
+            if (!uriSuccess)
+            {
+                this.LogError("Invalid URL: {url}", url);
+                return;
+            }
+
+            if (uri.IsAbsoluteUri)
+            {
+                router.SendWebViewUrl(uri.ToString(), webviewConfig);
+                return;
+            }
+
+            router.SendWebViewMcUrl(uri.ToString(), webviewConfig);
         }
     }
 }
