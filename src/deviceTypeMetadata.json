@@ -191,7 +191,15 @@
         }
       ]
     },
-    "controlMethods": ["com", "ssh"],
-    "controlPorts": {}
+  },
+  {
+    "typeNames": ["ciscoRoomOSNavigatorLite"],
+    "routingPorts": {
+      "inputs": [],
+      "outputs": []
+    },
+    "controlMethods": ["ssh"],
+    "controlPorts": {},
+    "description": "Lightweight Cisco Room OS implementation for Navigator-only scenarios. Provides essential codec communication without full video conferencing features."
   }
 ]
