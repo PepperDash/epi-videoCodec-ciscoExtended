@@ -29,6 +29,7 @@ using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Enums;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 using Serilog.Events;
@@ -6373,8 +6374,39 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void ShowWebView(string url, string mode, string title, string target)
 		{
-			WebViewDisplay uwvd = new WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
-			EnqueueCommand(uwvd.xCommand());
+			// target is OSD. Doesn't need any special handling;
+			if (target == "OSD")
+			{
+				var uriSuccess = Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri);
+
+				if (!uri.IsAbsoluteUri)
+				{
+					this.LogError("Invalid URL provided for WebView: {url}. Must be absolute URL, IE https://roomos.cisco.com", url);
+					return;
+				}
+				var uwvd = new WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
+				EnqueueCommand(uwvd.xCommand());
+
+				return;
+			}
+
+			var navigator = DeviceManager.AllDevices.OfType<NavigatorController>().Where(n => n.Parent.Key == Key).FirstOrDefault();
+
+			if (navigator == null)
+			{
+				this.LogError("No NavigatorController found for key: {key}", Key);
+				return;
+			}
+
+			var config = new WebViewDisplayConfig
+			{
+				Url = url,
+				Mode = mode,
+				Title = title,
+				Target = target
+			};
+
+			navigator.ShowWebViewOsd(url, config);
 		}
 
 		public void HideWebView()

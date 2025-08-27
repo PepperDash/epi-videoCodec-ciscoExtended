@@ -306,7 +306,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                             DeviceManager.GetDeviceForKey(primaryRoomKey) is IKeyName room ? room.Name : primaryRoomKey;
             }
 
-            SendCiscoCodecUiToWebViewMcUrl(path, webViewConfig);
+            SendWebViewMcUrl(path, webViewConfig);
         }
 
         private async void VideoCodecUiExtensionsClickedMcEventHandler(
@@ -370,7 +370,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
                 {
-                    SendCiscoCodecUiToWebViewMcUrl(mcPanel.MobileControlPath, webView);
+                    SendWebViewMcUrl(mcPanel.MobileControlPath, webView);
                 }
             }
             catch (Exception ex)
@@ -385,7 +385,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         /// </summary>
         /// <param name="mcPath"></param>
         /// <param name="webViewConfig"></param>
-        public void SendCiscoCodecUiToWebViewMcUrl(
+        public void SendWebViewMcUrl(
             string mcPath,
             WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
 
