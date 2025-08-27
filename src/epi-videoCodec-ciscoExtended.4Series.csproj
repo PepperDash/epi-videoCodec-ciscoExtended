@@ -43,7 +43,6 @@
 	    <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
-    <PackageReference Include="Stateless" Version="5.18.0" />
   </ItemGroup>
 
 </Project>
