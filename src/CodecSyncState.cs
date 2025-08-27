@@ -8,7 +8,7 @@ using PepperDash.Core.Logging;
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     /// <summary>
-    /// Tracks the initial sycnronization state of the codec when making a connection
+    /// Tracks the initial synchronization state of the codec when making a connection
     /// </summary>
     public class CodecSyncState : IKeyed
     {
@@ -153,7 +153,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
-                    this.LogDebug("Inital Codec Software Information received");
+                    this.LogDebug("Initial Codec Software Information received");
 
                 InitialSoftwareVersionMessageWasReceived = true;
 
