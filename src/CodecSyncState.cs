@@ -3,7 +3,6 @@ using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
 using PepperDash.Core.Logging;
-using Stateless;
 
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -13,411 +12,249 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     /// </summary>
     public class CodecSyncState : IKeyed
     {
-        #region State Machine Definitions
+        bool _initialSyncComplete;
 
-        /// <summary>
-        /// Represents the various states of the codec synchronization process.
-        /// </summary>
-        /// <remarks>
-        /// The states are ordered to reflect the progression of the synchronization process.
-        /// </remarks>
-        public enum SyncState
-        {
-            Disconnected,
-            Connected,
-            LoginReceived,
-            JsonModeSet,
-            StatusReceived,
-            ConfigReceived,
-            SoftwareVersionReceived,
-            FeedbackRegistered,
-            FullySynced
-        }
-
-        /// <summary>
-        /// Represents the triggers that can cause transitions between states in the codec synchronization process.
-        /// </summary>
-        /// <remarks>
-        /// The triggers are ordered to reflect the sequence of events that can occur during synchronization.
-        /// </remarks>
-        public enum SyncTrigger
-        {
-            Connect,
-            LoginMessageReceived,
-            JsonResponseModeSet,
-            StatusMessageReceived,
-            ConfigMessageReceived,
-            SoftwareVersionReceived,
-            FeedbackRegistered,
-            Disconnect,
-            AddCommand
-        }
-
-        #endregion
-
-        #region Private Fields
+        private const int Idle = 0;
+        private const int Processing = 1;
+        private int _isProcessing;
 
         private readonly CiscoCodec _parent;
-        private StateMachine<SyncState, SyncTrigger> _stateMachine;
-        private StateMachine<SyncState, SyncTrigger>.TriggerWithParameters<string> _addCommandTrigger;
+
+        public event EventHandler<EventArgs> InitialSyncCompleted;
+
+        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
         private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
-        private readonly object _lockObject = new object();
 
-        #endregion
-
-        #region Public Properties
+        private Thread _worker;
+        private readonly CEvent _waitHandle = new CEvent();
 
         public string Key { get; private set; }
 
-        public event EventHandler InitialSyncCompleted;
+        public bool InitialSyncComplete
+        {
+            get { return _initialSyncComplete; }
+            private set
+            {
+                if (value && !_initialSyncComplete)
+                {
+                    var handler = InitialSyncCompleted;
+                    if (handler != null)
+                        handler(this, new EventArgs());
+                }
+                _initialSyncComplete = value;
+            }
+        }
 
-        public bool InitialSyncComplete => _stateMachine.State == SyncState.FullySynced;
+        public bool LoginMessageWasReceived { get; private set; }
 
-        // Backward compatibility properties
-        public bool LoginMessageWasReceived => _stateMachine.State != SyncState.Disconnected && _stateMachine.State != SyncState.Connected;
-        public bool JsonResponseModeSet => IsInStateOrBeyond(SyncState.JsonModeSet);
-        public bool InitialStatusMessageWasReceived => IsInStateOrBeyond(SyncState.StatusReceived);
-        public bool InitialConfigurationMessageWasReceived => IsInStateOrBeyond(SyncState.ConfigReceived);
-        public bool InitialSoftwareVersionMessageWasReceived => IsInStateOrBeyond(SyncState.SoftwareVersionReceived);
-        public bool FeedbackWasRegistered => IsInStateOrBeyond(SyncState.FeedbackRegistered);
+        public bool JsonResponseModeSet { get; private set; }
 
-        #endregion
+        public bool InitialStatusMessageWasReceived { get; private set; }
 
-        #region Constructor
+        public bool InitialConfigurationMessageWasReceived { get; private set; }
+
+        public bool InitialSoftwareVersionMessageWasReceived { get; private set; }
+
+        public bool FeedbackWasRegistered { get; private set; }
 
         public CodecSyncState(string key, CiscoCodec parent)
         {
             Key = key;
             _parent = parent;
 
-            // Initialize state machine
-            _stateMachine = new StateMachine<SyncState, SyncTrigger>(SyncState.Disconnected);
-            _addCommandTrigger = _stateMachine.SetTriggerParameters<string>(SyncTrigger.AddCommand);
-
-            ConfigureStateMachine();
-
             CrestronEnvironment.ProgramStatusEventHandler += type =>
-            {
-                if (type == eProgramStatusEventType.Stopping)
-                {
-                    lock (_lockObject)
-                    {
-                        if (_stateMachine.CanFire(SyncTrigger.Disconnect))
-                        {
-                            _stateMachine.Fire(SyncTrigger.Disconnect);
-                        }
-                    }
-                }
-            };
+                                                             {
+                                                                 if (type != eProgramStatusEventType.Stopping)
+                                                                     return;
+
+                                                                 Interlocked.Exchange(ref _isProcessing, Idle);
+                                                                 _waitHandle.Set();
+                                                             };
         }
-
-        #endregion
-
-        #region State Machine Configuration
-
-        private void ConfigureStateMachine()
-        {
-            // Disconnected State
-            _stateMachine.Configure(SyncState.Disconnected)
-                .Permit(SyncTrigger.Connect, SyncState.Connected)
-                .OnEntry(() => this.LogDebug("Codec sync state: Disconnected"));
-
-            // Connected State
-            _stateMachine.Configure(SyncState.Connected)
-                .Permit(SyncTrigger.LoginMessageReceived, SyncState.LoginReceived)
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() => this.LogDebug("Codec sync state: Connected"));
-
-            // Login Received State
-            _stateMachine.Configure(SyncState.LoginReceived)
-                .Permit(SyncTrigger.JsonResponseModeSet, SyncState.JsonModeSet)
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() =>
-                {
-                    this.LogDebug("Login Message Received.");
-                    _parent.SendText("xPreferences outputmode json");
-                });
-
-            // JSON Mode Set State - This is where multiple paths can converge
-            _stateMachine.Configure(SyncState.JsonModeSet)
-                .Permit(SyncTrigger.StatusMessageReceived, SyncState.StatusReceived)
-                .Permit(SyncTrigger.ConfigMessageReceived, SyncState.ConfigReceived)
-                .Permit(SyncTrigger.SoftwareVersionReceived, SyncState.SoftwareVersionReceived)
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() => this.LogDebug("Json Response Mode Message Received."));
-
-            // Status Received State
-            _stateMachine.Configure(SyncState.StatusReceived)
-                .Permit(SyncTrigger.ConfigMessageReceived, SyncState.ConfigReceived)
-                .Permit(SyncTrigger.SoftwareVersionReceived, SyncState.SoftwareVersionReceived)
-                .PermitIf(SyncTrigger.FeedbackRegistered, SyncState.FeedbackRegistered, () =>
-                    HasReceivedAllMessages())
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() => this.LogDebug("Initial Codec Status Message Received."));
-
-            // Config Received State
-            _stateMachine.Configure(SyncState.ConfigReceived)
-                .Permit(SyncTrigger.StatusMessageReceived, SyncState.StatusReceived)
-                .Permit(SyncTrigger.SoftwareVersionReceived, SyncState.SoftwareVersionReceived)
-                .PermitIf(SyncTrigger.FeedbackRegistered, SyncState.FeedbackRegistered, () =>
-                    HasReceivedAllMessages())
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() => this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received."));
-
-            // Software Version Received State
-            _stateMachine.Configure(SyncState.SoftwareVersionReceived)
-                .Permit(SyncTrigger.StatusMessageReceived, SyncState.StatusReceived)
-                .Permit(SyncTrigger.ConfigMessageReceived, SyncState.ConfigReceived)
-                .PermitIf(SyncTrigger.FeedbackRegistered, SyncState.FeedbackRegistered, () =>
-                    HasReceivedAllMessages())
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() => this.LogDebug("Initial Codec Software Information received"));
-
-            // Feedback Registered State
-            _stateMachine.Configure(SyncState.FeedbackRegistered)
-                .PermitIf(SyncTrigger.StatusMessageReceived, SyncState.FullySynced, () =>
-                    HasReceivedAllMessages())
-                .PermitIf(SyncTrigger.ConfigMessageReceived, SyncState.FullySynced, () =>
-                    HasReceivedAllMessages())
-                .PermitIf(SyncTrigger.SoftwareVersionReceived, SyncState.FullySynced, () =>
-                    HasReceivedAllMessages())
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() =>
-                {
-                    this.LogDebug("Initial Codec Feedback Registration Successful.");
-                    // Check if we should transition to fully synced immediately
-                    if (HasReceivedAllMessages())
-                    {
-                        _stateMachine.Fire(SyncTrigger.StatusMessageReceived); // Use any trigger to move to FullySynced
-                    }
-                });
-
-            // Fully Synced State
-            _stateMachine.Configure(SyncState.FullySynced)
-                .Permit(SyncTrigger.Disconnect, SyncState.Disconnected)
-                .InternalTransition(_addCommandTrigger, (command, transition) => ProcessCommand(command))
-                .OnEntry(() =>
-                {
-                    this.LogInformation("Codec Sync Complete");
-                    InitialSyncCompleted?.Invoke(this, EventArgs.Empty);
-                    _parent.PollSpeakerTrack();
-                    _parent.PollPresenterTrack();
-                });
-
-            // Global disconnect handling for all states
-            _stateMachine.OnUnhandledTrigger((state, trigger) =>
-            {
-                this.LogWarning(String.Format("Unhandled trigger {0} in state {1}", trigger, state));
-            });
-        }
-
-        #endregion
-
-        #region Helper Methods
-
-        private bool IsInStateOrBeyond(SyncState targetState)
-        {
-            var currentStateValue = (int)_stateMachine.State;
-            var targetStateValue = (int)targetState;
-            return currentStateValue >= targetStateValue;
-        }
-
-        private bool HasReceivedAllMessages()
-        {
-            return IsInStateOrBeyond(SyncState.StatusReceived) &&
-                   IsInStateOrBeyond(SyncState.ConfigReceived) &&
-                   IsInStateOrBeyond(SyncState.SoftwareVersionReceived);
-        }
-
-        private void ProcessCommand(string query)
-        {
-            if (!string.IsNullOrEmpty(query))
-            {
-                if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
-                {
-                    this.LogDebug("Unable to enqueue command: {command}", query);
-                }
-                ProcessCommandQueue();
-            }
-        }
-
-        private void ProcessCommandQueue()
-        {
-            while (_commandActions.TryToDequeue(out Action cmd))
-            {
-                try
-                {
-                    cmd();
-                }
-                catch (Exception ex)
-                {
-                    this.LogError("Error processing user action: {message}", ex.Message);
-                    this.LogVerbose(ex, "Exception");
-                }
-            }
-        }
-
-        #endregion
-
-        #region Public Methods
 
         public void AddCommandToQueue(string query)
         {
-            lock (_lockObject)
+            if (string.IsNullOrEmpty(query))
+                return;
+
+            if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
             {
-                if (_stateMachine.CanFire(SyncTrigger.AddCommand))
-                {
-                    _stateMachine.Fire(_addCommandTrigger, query);
-                }
-                else
-                {
-                    this.LogDebug("Cannot add command in current state: {state}", _stateMachine.State);
-                }
+                this.LogDebug("Unable to enqueue command:{query}", query);
             }
+
+            Schedule();
         }
 
         public void LoginMessageReceived()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.LoginMessageReceived))
+                if (!LoginMessageWasReceived)
                 {
-                    _stateMachine.Fire(SyncTrigger.LoginMessageReceived);
+                    this.LogDebug("Login Message Received.");
+                    LoginMessageWasReceived = true;
                 }
-                else
+
+                if (!JsonResponseModeSet)
                 {
-                    this.LogDebug("Login message received but cannot transition from state: {state}", _stateMachine.State);
+                    _parent.SendText("xPreferences outputmode json");
                 }
-            }
+
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void JsonResponseModeMessageReceived()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.JsonResponseModeSet))
-                {
-                    _stateMachine.Fire(SyncTrigger.JsonResponseModeSet);
-                }
-                else
-                {
-                    this.LogDebug("JSON response mode message received but cannot transition from state: {state}", _stateMachine.State);
-                }
-            }
+                if (!JsonResponseModeSet)
+                    this.LogDebug("Json Response Mode Message Received.");
+
+                JsonResponseModeSet = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialStatusMessageReceived()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.StatusMessageReceived))
-                {
-                    _stateMachine.Fire(SyncTrigger.StatusMessageReceived);
-                }
-                else
-                {
-                    this.LogDebug("Status message received but cannot transition from state: {state}", _stateMachine.State);
-                }
-            }
+                if (!InitialStatusMessageWasReceived)
+                    this.LogDebug("Initial Codec Status Message Received.");
+
+                InitialStatusMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialConfigurationMessageReceived()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.ConfigMessageReceived))
-                {
-                    _stateMachine.Fire(SyncTrigger.ConfigMessageReceived);
-                }
-                else
-                {
-                    this.LogDebug("Config message received but cannot transition from state: {state}", _stateMachine.State);
-                }
-            }
+                if (!InitialConfigurationMessageWasReceived)
+                    this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
+
+                InitialConfigurationMessageWasReceived = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialSoftwareVersionMessageReceived()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.SoftwareVersionReceived))
-                {
-                    _stateMachine.Fire(SyncTrigger.SoftwareVersionReceived);
-                }
-                else
-                {
-                    this.LogDebug("Software version message received but cannot transition from state: {state}", _stateMachine.State);
-                }
-            }
+                if (!InitialSoftwareVersionMessageWasReceived)
+                    this.LogDebug("Initial Codec Software Information received");
+
+                InitialSoftwareVersionMessageWasReceived = true;
+
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void FeedbackRegistered()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.FeedbackRegistered))
-                {
-                    _stateMachine.Fire(SyncTrigger.FeedbackRegistered);
-                }
-                else
-                {
-                    this.LogDebug("Feedback registered but cannot transition from state: {state}", _stateMachine.State);
-                }
-            }
+                if (!FeedbackWasRegistered)
+                    this.LogDebug("Initial Codec Feedback Registration Successful.");
+
+                FeedbackWasRegistered = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void CodecDisconnected()
         {
-            lock (_lockObject)
+            _systemActions.Enqueue(() =>
             {
-                if (_stateMachine.CanFire(SyncTrigger.Disconnect))
-                {
-                    _stateMachine.Fire(SyncTrigger.Disconnect);
-                }
-                else
-                {
-                    // If we can't fire disconnect, recreate the state machine
-                    this.LogDebug("Forcing codec sync state to Disconnected");
-                    ReinitializeStateMachine();
-                }
-            }
+                LoginMessageWasReceived = false;
+                JsonResponseModeSet = false;
+                InitialConfigurationMessageWasReceived = false;
+                InitialStatusMessageWasReceived = false;
+                FeedbackWasRegistered = false;
+                InitialSyncComplete = false;
+            });
+
+            Schedule();
         }
 
-        private void ReinitializeStateMachine()
+        void CheckSyncStatus()
         {
-            _stateMachine = new StateMachine<SyncState, SyncTrigger>(SyncState.Disconnected);
-            _addCommandTrigger = _stateMachine.SetTriggerParameters<string>(SyncTrigger.AddCommand);
-            ConfigureStateMachine();
-        }
-
-        public void Connect()
-        {
-            lock (_lockObject)
+            if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
+                InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                if (_stateMachine.CanFire(SyncTrigger.Connect))
-                {
-                    _stateMachine.Fire(SyncTrigger.Connect);
-                }
-                else
-                {
-                    this.LogDebug("Cannot connect from state: {state}", _stateMachine.State);
-                }
+                this.LogInformation("Codec Sync Complete");
+
+                InitialSyncComplete = true;
+                _parent.PollSpeakerTrack();
+                _parent.PollPresenterTrack();
             }
+            else
+                InitialSyncComplete = false;
         }
 
-        // Diagnostic method to get current state information
-        public string GetStateInfo()
+        private void Schedule()
         {
-            return $"Current State: {_stateMachine.State}";
+            if (Interlocked.CompareExchange(
+                ref _isProcessing,
+                Processing,
+                Idle) ==
+                Idle)
+                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
+
+            _waitHandle.Set();
         }
 
-        #endregion
+        private object RunSyncState(object o)
+        {
+            while (_isProcessing == Processing)
+            {
+                if (_systemActions.TryToDequeue(out Action sys))
+                {
+                    try
+                    {
+                        sys();
+                    }
+                    catch (Exception ex)
+                    {
+                        this.LogError("Error processing system action: {message}", ex.Message);
+                        this.LogVerbose(ex, "Exception");
+                    }
+                    continue;
+                }
+
+                if (_commandActions.TryToDequeue(out Action cmd))
+                {
+                    try
+                    {
+                        cmd();
+                    }
+                    catch (Exception ex)
+                    {
+                        this.LogError("Error processing user action: {message}", ex.Message);
+                        this.LogVerbose(ex, "Exception");
+                    }
+                    continue;
+                }
+
+                _waitHandle.Wait();
+            }
+
+            return null;
+        }
     }
 }
