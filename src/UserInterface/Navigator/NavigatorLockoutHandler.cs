@@ -193,6 +193,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 {
                     CancelLockoutTimer();
                     this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
+                    return;
                 }
 
                 this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
