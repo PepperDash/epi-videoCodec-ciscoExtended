@@ -137,20 +137,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         public void ShowWebViewOsd(string url, WebViewDisplayConfig webviewConfig)
         {
-            var uriSuccess = Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri);
-            if (!uriSuccess)
-            {
-                this.LogError("Invalid URL: {url}", url);
-                return;
-            }
+            // Check if the URL starts with a protocol scheme (http:// or https://)
+            // This handles the case where paths starting with '/' on Linux would be 
+            // incorrectly treated as absolute file:// URLs by Uri.TryCreate
+            bool isAbsoluteUrl = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                               url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
-            if (uri.IsAbsoluteUri)
+            if (isAbsoluteUrl)
             {
+                var uriSuccess = Uri.TryCreate(url, UriKind.Absolute, out var uri);
+                if (!uriSuccess)
+                {
+                    this.LogError("Invalid absolute URL: {url}", url);
+                    return;
+                }
+                this.LogDebug("Sending absolute URL to WebViewOsd: {url}", uri);
                 router.SendWebViewUrl(uri.ToString(), webviewConfig);
                 return;
             }
 
-            router.SendWebViewMcUrl(uri.ToString(), webviewConfig);
+            // Treat everything else as a relative URL (including paths starting with '/')
+            this.LogDebug("Sending relative URL to WebViewOsd: {url}", url);
+            router.SendWebViewMcUrl(url, webviewConfig, true);
         }
     }
 }
