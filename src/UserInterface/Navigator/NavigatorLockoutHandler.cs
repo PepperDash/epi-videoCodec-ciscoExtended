@@ -17,7 +17,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
     internal class NavigatorLockoutHandler : IKeyed
     {
-        private const string LOCKOUT_SCENARIO_KEY = "lockout"
+        private const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
 
         private ExtensionsHandler extensionsHandler;
