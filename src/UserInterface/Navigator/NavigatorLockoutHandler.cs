@@ -53,6 +53,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         {
             this.props = props;
             mcTpController = ui;
+            // Initialize defaultRoomKey from props, fallback to null or throw if not available
+            defaultRoomKey = props?.DefaultRoomKey ?? null;
             currentScenarioRoomKey = defaultRoomKey;
 
             Key = ui.Key + "-NavigatorLockout";
@@ -181,36 +183,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                 void HandleLockoutFeedbackChange(object s, FeedbackEventArgs a)
                 {
-                    this.LogDebug("Custom lockout feedback changed. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
-                    // skip this lockout update if the current lockout is a combination lockout
-                    if (combinationLockout)
-                    {
-                        this.LogDebug("Skipping custom lockout update because currently in combination lockout or in other lockout mode");
-                        return;
-                    }
-
-                    if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
-                    {
-                        this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
-                        return;
-                    }
-
-                    if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
-                    {
-                        this.LogDebug("Custom lockout activated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
-                        currentLockout = lockout;
-
-                        StartLockout(false);
-                    }
-                    else
-                    {
-                        this.LogDebug("Custom lockout deactivated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
-                        CancelLockoutTimer();
-                    }
+                    HandleLockout(lockout, a);
                 }
 
                 // Setup lockout for feedback
                 feedback.OutputChange += HandleLockoutFeedbackChange;
+            }
+        }
+
+        private void HandleLockout(Lockout lockout, FeedbackEventArgs a)
+        {
+            this.LogDebug("Custom lockout feedback changed. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+            // skip this lockout update if the current lockout is a combination lockout
+            if (combinationLockout)
+            {
+                this.LogDebug("Skipping custom lockout update because currently in combination lockout or in other lockout mode");
+                return;
+            }
+
+            if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
+            {
+                this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
+                return;
+            }
+
+            if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
+            {
+                this.LogDebug("Custom lockout activated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+                currentLockout = lockout;
+
+                StartLockout(false);
+            }
+            else
+            {
+                this.LogDebug("Custom lockout deactivated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+                CancelLockoutTimer();
             }
         }
 
