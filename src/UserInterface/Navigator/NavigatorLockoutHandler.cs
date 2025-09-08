@@ -17,6 +17,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
     internal class NavigatorLockoutHandler : IKeyed
     {
+        private const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
 
         private ExtensionsHandler extensionsHandler;
@@ -30,7 +31,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private readonly Timer lockoutPollTimer;
 
         private string defaultRoomKey;
+
         private string primaryRoomKey;
+
+        private string currentScenarioRoomKey;
 
         private Lockout currentLockout;
 
@@ -50,6 +54,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         {
             this.props = props;
             mcTpController = ui;
+            // Initialize defaultRoomKey from props, fallback to null or throw if not available
+            defaultRoomKey = props?.DefaultRoomKey ?? null;
+            currentScenarioRoomKey = defaultRoomKey;
 
             Key = ui.Key + "-NavigatorLockout";
 
@@ -128,39 +135,90 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             foreach (var lockout in props.CustomLockouts)
             {
-                if (!(DeviceManager.GetDeviceForKey(lockout.DeviceKey) is IHasFeedback feedbackProvider))
+                this.LogDebug("Setting up custom lockout for device key: {DeviceKey}, default room key: {defaultRoomKey} current scenario room key: {currentScenarioRoomKey}", lockout.DeviceKey, defaultRoomKey, currentScenarioRoomKey);
+
+                var deviceKey = lockout.DeviceKey;
+
+                if (deviceKey == defaultRoomKey && currentScenarioRoomKey != defaultRoomKey)
                 {
-                    this.LogDebug("No feedback provider found for device key: {DeviceKey}", lockout.DeviceKey);
+                    if (DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback oldFeedbackProvider)
+                    {
+                        if (oldFeedbackProvider.Feedbacks[lockout.FeedbackKey] is BoolFeedback oldFeedback)
+                        {
+                            this.LogDebug("Unsubscribing from old feedback {feedbackKey} for roomKey: {roomKey}", lockout.FeedbackKey, deviceKey);
+
+                            oldFeedback.OutputChange -= HandleLockoutFeedbackChange;
+                        }
+                        else
+                        {
+                            this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
+                        }
+                    }
+                    else
+                    {
+                        this.LogDebug("No feedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
+                    }
+
+                    if (currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY)
+                    {
+                        continue;
+                    }
+                    this.LogDebug("Using current scenario room key for custom lockout: {RoomKey}", currentScenarioRoomKey);
+                    deviceKey = currentScenarioRoomKey;
+                }
+
+                this.LogDebug("Subscribing to feedback changes for device key: {DeviceKey}, feedback key: {FeedbackKey}", deviceKey, lockout.FeedbackKey);
+
+                if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback feedbackProvider))
+                {
+                    this.LogDebug("No feedback provider found for device key: {DeviceKey}", deviceKey);
                     continue;
                 }
 
                 // Setup lockout for feedback provider
                 if (!(feedbackProvider.Feedbacks[lockout.FeedbackKey] is BoolFeedback feedback))
                 {
-                    this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, lockout.DeviceKey);
+                    this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
                     continue;
                 }
 
+                void HandleLockoutFeedbackChange(object s, FeedbackEventArgs a)
+                {
+                    HandleLockout(lockout, a);
+                }
+
                 // Setup lockout for feedback
-                feedback.OutputChange += (s, a) =>
-                        {
-                            // skip this lockout update if the current lockout is a combination lockout
-                            if (combinationLockout)
-                            {
-                                return;
-                            }
+                feedback.OutputChange += HandleLockoutFeedbackChange;
+            }
+        }
 
-                            if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
-                            {
-                                currentLockout = lockout;
+        private void HandleLockout(Lockout lockout, FeedbackEventArgs a)
+        {
+            this.LogDebug("Custom lockout feedback changed. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+            // skip this lockout update if the current lockout is a combination lockout
+            if (combinationLockout)
+            {
+                this.LogDebug("Skipping custom lockout update because currently in combination lockout or in other lockout mode");
+                return;
+            }
 
-                                StartLockout();
-                            }
-                            else
-                            {
-                                CancelLockoutTimer();
-                            }
-                        };
+            if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
+            {
+                this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
+                return;
+            }
+
+            if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
+            {
+                this.LogDebug("Custom lockout activated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+                currentLockout = lockout;
+
+                StartLockout(false);
+            }
+            else
+            {
+                this.LogDebug("Custom lockout deactivated. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+                CancelLockoutTimer();
             }
         }
 
@@ -178,7 +236,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     return;
                 }
 
-                if (!uiMap.TryGetValue(defaultRoomKey, out var currentScenarioRoomKey))
+                if (!uiMap.TryGetValue(defaultRoomKey, out currentScenarioRoomKey))
                 {
                     this.LogDebug("[ERROR] UiMap default room key: {DefaultRoomKey} Error: UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey} or lockout", defaultRoomKey, currentScenario.Key);
                     return;
@@ -189,10 +247,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
-                if (currentScenarioRoomKey != "lockout")
+                if (currentScenarioRoomKey != LOCKOUT_SCENARIO_KEY)
                 {
                     CancelLockoutTimer();
                     this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
+
+                    SetupCustomLockouts();
+                    return;
                 }
 
                 this.LogDebug("UiMap default room key {DefaultRoomKey} is in lockout state", defaultRoomKey);
@@ -207,11 +268,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
         }
 
-        private void StartLockout()
+        private void StartLockout(bool isCombinationLockout = true)
         {
             mcTpController.LockedOut = true;
 
-            combinationLockout = true;
+            combinationLockout = isCombinationLockout;
 
             ClearWebView();
 
@@ -306,7 +367,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                             DeviceManager.GetDeviceForKey(primaryRoomKey) is IKeyName room ? room.Name : primaryRoomKey;
             }
 
-            SendWebViewMcUrl(path, webViewConfig);
+            SendWebViewMcUrl(path, webViewConfig, true);
         }
 
         private async void VideoCodecUiExtensionsClickedMcEventHandler(
@@ -332,6 +393,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("Panel not found for VideoCodecMobileControlRouter");
                     return;
                 }
+
                 if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
                 {
                     foreach (DeviceActionWrapper action in mcPanel.DeviceActions)
@@ -341,6 +403,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                             this.LogDebug("DeviceAction is null");
                             continue;
                         }
+
+                        if (action.DeviceKey == defaultRoomKey && action.DeviceKey != currentScenarioRoomKey)
+                        {
+                            this.LogInformation("Sending action {ActionId} to primary room {PrimaryRoomId}", action.MethodName, currentScenarioRoomKey);
+                            action.DeviceKey = currentScenarioRoomKey;
+                        }
+
                         this.LogDebug("Running DeviceAction {MethodName}", action.MethodName);
                         await DeviceJsonApi.DoDeviceActionAsync(action);
                     }
@@ -388,7 +457,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         public void SendWebViewMcUrl(
             string mcPath,
             WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
-
         )
         {
             this.LogDebug("SendCiscoCodecUiToWebViewMcUrl: {McPath}, webViewConfig null: {WebViewConfigNull}, _McTouchPanelController: {McTpControllerNull}, AppUrlFeedback null: {AppUrlFeedbackNull}, appUrl: {AppUrl}", mcPath, webViewConfig == null, mcTpController == null, mcTpController?.AppUrlFeedback == null, mcTpController?.AppUrlFeedback?.StringValue);

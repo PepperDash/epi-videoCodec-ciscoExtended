@@ -66,6 +66,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
+			IRoutingSinkWithSwitching,
 			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,
@@ -2654,11 +2655,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var status = statusToken.ToString().ToLower();
 					if (!string.IsNullOrEmpty(status))
 					{
-						var handler = WebViewStatusChanged;
-						if (handler != null)
-						{
-							handler(this, new WebViewStatusChangedEventArgs(status));
-						}
+						WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(status));
 						if (status == "visible")
 						{
 							WebviewIsVisible = true;
@@ -5454,9 +5451,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand("xCommand Video Selfview Set Mode: On");
 		}
 
-		public void SelfViewModeOn(EMonitorRole monitorRole, bool fullScreen = false)
+		public void SelfViewModeOnForMonitor(string monitorRole, bool fullScreen)
 		{
-			EnqueueCommand($"xCommand Video Selfview Set Mode: On MonitorRole: {monitorRole}${(fullScreen ? " FullscreenMode: On" : string.Empty)}");
+			EnqueueCommand($"xCommand Video Selfview Set Mode: On OnMonitorRole: {monitorRole}{(fullScreen ? " FullscreenMode: On" : string.Empty)}");
 		}
 
 		public void SelfViewModeOff()
@@ -6298,6 +6295,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public DeviceInfo DeviceInfo { get; private set; }
 
 		public event DeviceInfoChangeHandler DeviceInfoChanged;
+		public event SourceInfoChangeHandler CurrentSourceChange;
 
 		public void UpdateDeviceInfo()
 		{
@@ -6362,7 +6360,34 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		}
 
 		public BoolFeedback PhoneOffHookFeedback { get; private set; }
+		/// <summary>
+		/// Gets or sets the CurrentSourceInfoKey
+		/// </summary>
+		public string CurrentSourceInfoKey { get; set; }
 
+		/// <summary>
+		/// Gets or sets the current source information for the display.
+		/// </summary>
+		public SourceListItem CurrentSourceInfo
+		{
+			get
+			{
+				return currentSourceInfo;
+			}
+			set
+			{
+				if (value == currentSourceInfo) return;
+
+				var handler = CurrentSourceChange;
+
+				handler?.Invoke(currentSourceInfo, ChangeType.WillChange);
+
+				currentSourceInfo = value;
+
+				handler?.Invoke(currentSourceInfo, ChangeType.DidChange);
+			}
+		}
+		private SourceListItem currentSourceInfo;
 		public void SendDtmfToPhone(string digit)
 		{
 			var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);
