@@ -17,6 +17,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
     internal class NavigatorLockoutHandler : IKeyed
     {
+        private const string LOCKOUT_SCENARIO_KEY = "lockout"
         private NavigatorController mcTpController;
 
         private ExtensionsHandler extensionsHandler;
@@ -158,7 +159,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         this.LogDebug("No feedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
                     }
 
-                    if (currentScenarioRoomKey == "lockout")
+                    if (currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY)
                     {
                         continue;
                     }
@@ -246,7 +247,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
-                if (currentScenarioRoomKey != "lockout")
+                if (currentScenarioRoomKey != LOCKOUT_SCENARIO_KEY)
                 {
                     CancelLockoutTimer();
                     this.LogDebug("ui with default room key {DefaultRoomKey} is not locked out", defaultRoomKey);
