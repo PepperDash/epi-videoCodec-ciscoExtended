@@ -85,7 +85,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ISpeakerTrack,
 			IPresenterTrack,
 			IEmergencyOSD,
-			IHasWebView
+			IHasWebView,
+			ICiscoCodecBase
 	{
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
