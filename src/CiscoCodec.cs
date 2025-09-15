@@ -29,6 +29,7 @@ using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Enums;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;

@@ -2,14 +2,11 @@
 using System.Collections.Generic;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
-using PepperDash.Core;
 using PepperDash.Core.Logging;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
-using Serilog.Events;
 
-namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions
+namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 {
     /// <summary>
     /// json config to build xml commands
@@ -19,7 +16,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     [XmlRoot("Extensions")]
     public class UiExtensions
     {
-        private IKeyed parent;
+        private CiscoCodec parent;
         [XmlElement("Version")]
         public string Version { get; set; }
 
@@ -54,12 +51,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         /// </remarks>
         /// <exception cref="Exception">Thrown if XML serialization fails.</exception>       
 
-        public void Initialize(IKeyed parent, Action<string> enqueueCommand)
+        public void Initialize(CiscoCodec parent, Action<string> enqueueCommand)
         {
             this.parent = parent;
 
-            parent.LogDebug("Extensions Initialize, Panels from config length: {count}", Panels.Count);
-            PanelsHandler = new PanelsHandler(parent, this, enqueueCommand, Panels);
+            this.parent.LogDebug("Extensions Initialize, Panels from config length: {count}", Panels.Count);
+
+            PanelsHandler = new PanelsHandler(this.parent, this, enqueueCommand, Panels);
 
             if (SkipXml)
             {
@@ -71,6 +69,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             parent.LogDebug("Sending XML data: {xml}", xml);
 
             enqueueCommand(xml);
+        }
+
+        public void SetDefaultRoomKey(string defaultRoomKey)
+        {
+            PanelsHandler?.SetDefaultRoomKey(defaultRoomKey);
         }
 
         /// <summary>
