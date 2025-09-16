@@ -57,7 +57,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 
             this.parent.LogDebug("Extensions Initialize, Panels from config length: {count}", Panels.Count);
 
-            PanelsHandler = new PanelsHandler(this.parent, this, enqueueCommand, Panels);
+            if (PanelsHandler == null)
+            {
+                this.parent.LogDebug("Initializing Panels Handler");
+                PanelsHandler = new PanelsHandler(this.parent, this, enqueueCommand, Panels);
+            }
 
             if (SkipXml)
             {
@@ -69,11 +73,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
             parent.LogDebug("Sending XML data: {xml}", xml);
 
             enqueueCommand(xml);
-        }
-
-        public void SetDefaultRoomKey(string defaultRoomKey)
-        {
-            PanelsHandler?.SetDefaultRoomKey(defaultRoomKey);
         }
 
         /// <summary>

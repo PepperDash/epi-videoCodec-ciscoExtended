@@ -76,13 +76,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       feedbackTimer.Elapsed += UpdateExtension;
 
       RegisterFeedback();
-      RegisterForDeviceFeedback();
-      GetRoomCombiner();
     }
 
-    public void SetDefaultRoomKey(string defaultRoomKey)
+    public void Initialize(string defaultRoomKey)
     {
       this.defaultRoomKey = defaultRoomKey;
+
+      GetRoomCombiner();
     }
 
     private void GetRoomCombiner()
@@ -108,6 +108,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogDebug("RoomCombinerHandler setup for {0}", parent, parent.Key);
 
         combiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
+
+        // Calling event handler directly here to ensure that things are subscribed correctly on startup and the correct room is set up
+        HandleRoomCombineScenarioChanged(combiner, EventArgs.Empty);
       }
       catch (Exception e)
       {
@@ -117,17 +120,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void HandleRoomCombineScenarioChanged(object sender, EventArgs e)
     {
-      var combiner = sender as EssentialsRoomCombiner;
-      if (combiner == null)
+      if (!(sender is EssentialsRoomCombiner combiner))
       {
         parent.LogError("RoomCombiner is null in scenario changed event");
         return;
       }
+
       var currentScenario = combiner.CurrentScenario;
       var uiMap = currentScenario.UiMap;
+
       if (!uiMap.TryGetValue(defaultRoomKey, out currentScenarioRoomKey))
       {
-        Debug.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
+        parent.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
         return;
       }
 

@@ -39,8 +39,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             AppUrlFeedback = new StringFeedback("appUrl", () => appUrl);
         }
 
+        private void HandleCodecReady(object sender, EventArgs e)
+        {
+            if (Parent.UiExtensions != null)
+            {
+                this.LogError("****Unable to add extensions from navigator. Parent codec possible has different configuration****");
+                return;
+            }
+
+            this.LogInformation("Initializing Extensions");
+
+            UiExtensions.Initialize(Parent, Parent.EnqueueCommand);
+
+            UiExtensions.PanelsHandler?.Initialize(props.DefaultRoomKey);
+        }
+
         public override bool CustomActivate()
         {
+            if (Parent != null)
+            {
+                this.LogDebug("Subscribing for IsReady Change");
+                Parent.IsReadyChange += HandleCodecReady;
+            }
+
             mobileControl = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();
 
             if (mobileControl == null)

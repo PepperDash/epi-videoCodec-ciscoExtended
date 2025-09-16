@@ -1025,7 +1025,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				props.UiBranding.BrandingUrl
 			);
 
-			_brandingUrl = props.UiBranding.BrandingUrl;			
+			_brandingUrl = props.UiBranding.BrandingUrl;
 		}
 
 		private void EndGracefully()
@@ -1916,10 +1916,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			var msg =
 				UiExtensions != null
-					? "[DEBUG] Initializing Video Codec UI Extensions"
-					: "[DEBUG] No Ui Extensions in config";
-			Debug.LogMessage(LogEventLevel.Debug, msg, this);
+					? "Initializing Video Codec UI Extensions"
+					: "No Ui Extensions in config";
+			this.LogDebug(msg);
+
 			UiExtensions?.Initialize(this, EnqueueCommand);
+			UiExtensions.PanelsHandler.Initialize(string.Empty);
 
 			// Fire the ready event
 			SetIsReady();

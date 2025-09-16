@@ -78,9 +78,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 
             UiExtensionsHandler = new ExtensionsHandler(this, Parent.EnqueueCommand);
 
-            Parent.UiExtensions = UiExtensions;
+            // Removing this to allow the navigator to control the initialization. If the codec itself has extensions, then it will initialize those separately. This should allow for
+            // controlling and possibly separating out extensions/panels and their behavior.
+            // Parent.UiExtensions = UiExtensions;
 
-            Parent.UiExtensionsHandler = UiExtensionsHandler;
+            // Parent.UiExtensionsHandler = UiExtensionsHandler;
 
             return;
         }
