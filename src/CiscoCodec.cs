@@ -1918,10 +1918,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				UiExtensions != null
 					? "Initializing Video Codec UI Extensions"
 					: "No Ui Extensions in config";
+
 			this.LogDebug(msg);
 
-			UiExtensions?.Initialize(this, EnqueueCommand);
-			UiExtensions.PanelsHandler.Initialize(string.Empty);
+			if (UiExtensions != null)
+			{
+				UiExtensions?.Initialize(this, EnqueueCommand);
+				UiExtensions?.PanelsHandler?.Initialize(string.Empty);
+			}
 
 			// Fire the ready event
 			SetIsReady();
