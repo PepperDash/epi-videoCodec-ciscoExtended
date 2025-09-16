@@ -704,7 +704,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this,
 					EnqueueCommand
 				);
-
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -1009,6 +1008,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ExternalSourceListEnabled = props.ExternalSourceListEnabled;
 			ExternalSourceInputPort = props.ExternalSourceInputPort;
 
+			// moved these event subscriptions prior to checking for UI Braning, as they weren't being subscribed to at all.
+			AvailableLayoutsChanged += CiscoCodec_AvailableLayoutsChanged;
+			CurrentLayoutChanged += CiscoCodec_CurrentLayoutChanged;
+			CallStatusChange += CiscoCodec_CallStatusChange;
+			CodecInfoChanged += CiscoCodec_CodecInfoChanged;
+
 			if (props.UiBranding == null)
 			{
 				return;
@@ -1020,10 +1025,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				props.UiBranding.BrandingUrl
 			);
 
-			AvailableLayoutsChanged += CiscoCodec_AvailableLayoutsChanged;
-			CurrentLayoutChanged += CiscoCodec_CurrentLayoutChanged;
-			CallStatusChange += CiscoCodec_CallStatusChange;
-			CodecInfoChanged += CiscoCodec_CodecInfoChanged;
+			_brandingUrl = props.UiBranding.BrandingUrl;			
 		}
 
 		private void EndGracefully()
