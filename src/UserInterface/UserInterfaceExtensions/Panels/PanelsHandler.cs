@@ -197,45 +197,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     void HandleFeedbackOutputChange(object s, FeedbackEventArgs args)
     {
-      var feedback = s as Feedback;
-
-      if (feedback == null)
+      if (!(s is Feedback feedback))
       {
         parent.LogError("Received feedback event but sender is not a feedback object");
         return;
       }
 
-      // Find the device that owns this feedback by checking all devices
-      var feedbackDevice = DeviceManager.AllDevices.OfType<IHasFeedback>()
-        .FirstOrDefault(d =>
-        {
-          try
-          {
-            var deviceFeedback = d.Feedbacks[feedback.Key];
-            return deviceFeedback != null && deviceFeedback == feedback;
-          }
-          catch
-          {
-            return false;
-          }
-        });
-
-      if (feedbackDevice == null)
-      {
-        parent.LogError("Could not find device that owns feedback {feedbackKey}", feedback.Key);
-        return;
-      }
 
       // Find all panels that correspond to this feedback AND device combination
       var matchingPanels = panelConfigs.Where(p =>
         p.PanelFeedback != null &&
-        p.PanelFeedback.FeedbackKey == feedback.Key &&
-        GetEffectiveDeviceKey(p.PanelFeedback.DeviceKey) == feedbackDevice.Key).ToList();
+        p.PanelFeedback.FeedbackKey == feedback.Key).ToList();
 
       if (!matchingPanels.Any())
       {
-        parent.LogWarning("Received feedback event for {feedbackKey} on device {deviceKey} but could not find corresponding panel",
-          feedback.Key, feedbackDevice.Key);
+        parent.LogWarning("Received feedback event for {feedbackKey} but could not find corresponding panel",
+          feedback.Key);
         return;
       }
 
@@ -247,8 +224,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           case eFeedbackEventType.TypeBool:
             {
               var value = args.BoolValue;
-              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} on {deviceKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, feedbackDevice.Key, value);
+              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
+                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
               UpdatePanelProperty(panel, panel.PanelFeedback, value);
               break;
@@ -256,8 +233,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           case eFeedbackEventType.TypeString:
             {
               var value = args.StringValue;
-              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} on {deviceKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, feedbackDevice.Key, value);
+              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
+                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
               UpdatePanelProperty(panel, panel.PanelFeedback, value);
               break;
@@ -265,8 +242,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           case eFeedbackEventType.TypeInt:
             {
               var value = args.IntValue;
-              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} on {deviceKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, feedbackDevice.Key, value);
+              parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
+                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
 
               UpdatePanelProperty(panel, panel.PanelFeedback, value);
               break;

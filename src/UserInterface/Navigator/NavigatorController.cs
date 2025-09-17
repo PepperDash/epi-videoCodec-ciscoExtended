@@ -54,6 +54,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 UiExtensions.Initialize(Parent, Parent.EnqueueCommand);
 
                 UiExtensions.PanelsHandler?.Initialize(props.DefaultRoomKey);
+
+                // Set the extensions and handler on the parent codec as they are used to process feedback
+
+                Parent.UiExtensions = UiExtensions;
+
+                Parent.UiExtensionsHandler = UiExtensionsHandler;
             }
             catch (Exception ex)
             {
