@@ -1,5 +1,4 @@
 ﻿using Newtonsoft.Json;
-using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 {
