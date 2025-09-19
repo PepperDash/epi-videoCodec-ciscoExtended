@@ -82,29 +82,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     {
       this.defaultRoomKey = defaultRoomKey;
 
-      GetRoomCombiner();
+      var combiners = DeviceManager.AllDevices.OfType<EssentialsRoomCombiner>().ToList();
+
+      if (combiners == null || combiners.Count == 0)
+      {
+        parent.LogWarning("{uiKey} could not find RoomCombiner", parent.Key);
+        RegisterForDeviceFeedback();
+        return;
+      }
+
+      if (combiners.Count > 1)
+      {
+        parent.LogWarning("{uiKey} found more than one RoomCombiner", parent.Key);
+        return;
+      }
+
+      RegisterForCombinerFeedback(combiners[0]);
     }
 
-    private void GetRoomCombiner()
+    private void RegisterForCombinerFeedback(EssentialsRoomCombiner combiner)
     {
       try
       {
-        var combiners = DeviceManager.AllDevices.OfType<EssentialsRoomCombiner>().ToList();
-
-        if (combiners == null || combiners.Count == 0)
-        {
-          parent.LogWarning("{uiKey} could not find RoomCombiner", parent.Key);
-          return;
-        }
-
-        if (combiners.Count > 1)
-        {
-          parent.LogWarning("{uiKey} found more than one RoomCombiner", parent.Key);
-          return;
-        }
-
-        var combiner = combiners[0];
-
         parent.LogDebug("RoomCombinerHandler setup for {0}", parent, parent.Key);
 
         combiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
