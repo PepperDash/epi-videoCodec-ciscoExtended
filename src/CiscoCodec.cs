@@ -3613,9 +3613,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						|| currentStandbyStatusToken.Equals(
 							"on",
 							StringComparison.OrdinalIgnoreCase
-						);
+						)
+                        || currentStandbyStatusToken.Equals(
+                            "EnteringStandby",
+                            StringComparison.OrdinalIgnoreCase
+                        );
 
-					StandbyIsOnFeedback.FireUpdate();
+                    StandbyIsOnFeedback.FireUpdate();
 					return;
 				}
 			}
