@@ -29,6 +29,7 @@ using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Enums;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
@@ -703,7 +704,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this,
 					EnqueueCommand
 				);
-
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -1008,6 +1008,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ExternalSourceListEnabled = props.ExternalSourceListEnabled;
 			ExternalSourceInputPort = props.ExternalSourceInputPort;
 
+			// moved these event subscriptions prior to checking for UI Braning, as they weren't being subscribed to at all.
+			AvailableLayoutsChanged += CiscoCodec_AvailableLayoutsChanged;
+			CurrentLayoutChanged += CiscoCodec_CurrentLayoutChanged;
+			CallStatusChange += CiscoCodec_CallStatusChange;
+			CodecInfoChanged += CiscoCodec_CodecInfoChanged;
+
 			if (props.UiBranding == null)
 			{
 				return;
@@ -1019,10 +1025,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				props.UiBranding.BrandingUrl
 			);
 
-			AvailableLayoutsChanged += CiscoCodec_AvailableLayoutsChanged;
-			CurrentLayoutChanged += CiscoCodec_CurrentLayoutChanged;
-			CallStatusChange += CiscoCodec_CallStatusChange;
-			CodecInfoChanged += CiscoCodec_CodecInfoChanged;
+			_brandingUrl = props.UiBranding.BrandingUrl;
 		}
 
 		private void EndGracefully()
@@ -1913,10 +1916,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			var msg =
 				UiExtensions != null
-					? "[DEBUG] Initializing Video Codec UI Extensions"
-					: "[DEBUG] No Ui Extensions in config";
-			Debug.LogMessage(LogEventLevel.Debug, msg, this);
-			UiExtensions?.Initialize(this, EnqueueCommand);
+					? "Initializing Video Codec UI Extensions"
+					: "No Ui Extensions in config";
+
+			this.LogDebug(msg);
+
+			if (UiExtensions != null)
+			{
+				UiExtensions?.Initialize(this, EnqueueCommand);
+				UiExtensions?.PanelsHandler?.Initialize(string.Empty);
+			}
 
 			// Fire the ready event
 			SetIsReady();
@@ -5457,7 +5466,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelfViewModeOnForMonitor(string monitorRole, bool fullScreen)
 		{
-			EnqueueCommand($"xCommand Video Selfview Set Mode: On OnMonitorRole: {monitorRole}{(fullScreen ? " FullscreenMode: On" : string.Empty)}");
+			EnqueueCommand($"xCommand Video Selfview Set Mode: On OnMonitorRole: {monitorRole} FullscreenMode: {(fullScreen ? "On" : "Off")}");
 		}
 
 		public void SelfViewModeOff()

@@ -4,7 +4,7 @@ using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
-using UiExtensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.UiExtensions;
+using UiExtensions = PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config.UiExtensions;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
