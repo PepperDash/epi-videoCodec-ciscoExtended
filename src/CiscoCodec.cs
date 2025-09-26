@@ -810,10 +810,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SupportsCameraOff = true;
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Standby.State.Value.ToLower() == "halfwake"
+				() => (CodecStatus?.Status?.Standby?.State?.Value?.ToLower() ?? "") == "halfwake"
 			);
+
 			EnteringStandbyModeFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Standby.State.Value.ToLower() == "enteringstandby"
+				() => (CodecStatus?.Status?.Standby?.State?.Value?.ToLower() ?? "") == "enteringstandby"
 			);
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
