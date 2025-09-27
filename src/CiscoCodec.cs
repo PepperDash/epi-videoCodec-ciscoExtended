@@ -814,7 +814,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             );
 
 			EnteringStandbyModeFeedback = new BoolFeedback(
-				() => _standbyState == StandbyState.Standby
+				() => _standbyState == StandbyState.EnteringStandby
             );
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
@@ -3619,19 +3619,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						case "standby":
 							_standbyState = StandbyState.Standby;
-							this.LogDebug("Standby State = Standby");
+							this.LogInformation("Standby State = Standby");
                             break;
 						case "enteringstandby":
 							_standbyState = StandbyState.EnteringStandby;
-							this.LogDebug("Standby State = EnteringStandby");
+							this.LogInformation("Standby State = EnteringStandby");
                             break;
 						case "off":
 							_standbyState = StandbyState.Off;
-							this.LogDebug("Standby State = Off");
+							this.LogInformation("Standby State = Off");
                             break;
 						case "halfwake":
                             _standbyState = StandbyState.HalfWake;
-							this.LogDebug("Standby State = HalfWake");
+							this.LogInformation("Standby State = HalfWake");
                             break;
 						default:
 							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
