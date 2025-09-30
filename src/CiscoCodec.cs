@@ -3634,6 +3634,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							this.LogInformation("Standby State = HalfWake");
                             break;
 						default:
+							_standbyState = StandbyState.Unknown;
 							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
 							break;
                     }
