@@ -155,7 +155,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private Meeting _currentMeeting;
 
-		private bool _standbyIsOn;
+		private StandbyState _standbyState;
 		private bool _presentationActive;
 		public UiExtensions UiExtensions { get; set; }
 
@@ -343,7 +343,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		protected override Func<bool> StandbyIsOnFeedbackFunc
 		{
-			get { return () => _standbyIsOn; }
+			get { return () => _standbyState == StandbyState.Standby; }
 		}
 
 		protected override Func<string> SharingSourceFeedbackFunc
@@ -810,11 +810,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SupportsCameraOff = true;
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Standby.State.Value.ToLower() == "halfwake"
-			);
+				() => _standbyState == StandbyState.HalfWake
+            );
+
 			EnteringStandbyModeFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Standby.State.Value.ToLower() == "enteringstandby"
-			);
+				() => _standbyState == StandbyState.EnteringStandby
+            );
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
 				() => _currentPresentationView == "Maximized"
@@ -3614,18 +3615,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var currentStandbyStatusToken = (string)standbyToken.SelectToken("State.Value");
 				if (!string.IsNullOrEmpty(currentStandbyStatusToken))
 				{
-					_standbyIsOn =
-						currentStandbyStatusToken.Equals(
-							"standby",
-							StringComparison.OrdinalIgnoreCase
-						)
-						|| currentStandbyStatusToken.Equals(
-							"on",
-							StringComparison.OrdinalIgnoreCase
-						);
+					switch (currentStandbyStatusToken.ToLower())
+					{
+						case "standby":
+							_standbyState = StandbyState.Standby;
+							this.LogInformation("Standby State = Standby");
+                            break;
+						case "enteringstandby":
+							_standbyState = StandbyState.EnteringStandby;
+							this.LogInformation("Standby State = EnteringStandby");
+                            break;
+						case "off":
+							_standbyState = StandbyState.Off;
+							this.LogInformation("Standby State = Off");
+                            break;
+						case "halfwake":
+                            _standbyState = StandbyState.HalfWake;
+							this.LogInformation("Standby State = HalfWake");
+                            break;
+						default:
+							_standbyState = StandbyState.Unknown;
+							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
+							break;
+                    }
 
 					StandbyIsOnFeedback.FireUpdate();
-					return;
+					EnteringStandbyModeFeedback.FireUpdate();
+					HalfWakeModeIsOnFeedback.FireUpdate();
+
+                    return;
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
