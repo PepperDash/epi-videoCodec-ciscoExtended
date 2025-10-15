@@ -1813,6 +1813,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "Status/Network/Ethernet/MacAddress"
 				+ Delimiter
 				+ prefix
+				+ "/Event/UserInterface/Extensions/Panel/Clicked"
+				+ Delimiter
+                + prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
