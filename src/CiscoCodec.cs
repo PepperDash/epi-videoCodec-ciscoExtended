@@ -1807,7 +1807,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
-				+ "Status/UserInterface/WebView"
+				+ "Status/UserInterface/WebView/Status"
 				+ Delimiter
 				+ prefix
 				+ "Status/Network/Ethernet/MacAddress"
@@ -2658,26 +2658,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				// the WebView token is an array that has ALL visible webviews in it
-				if (!(webviewStatusToken is JArray webviewStatusObject))
+				// the WebView token is an object that has whatever property just changed
+				if (!(webviewStatusToken is JObject webviewStatusObject))
 					return;
 
-				var integrationWebviewStatus = webviewStatusObject.Children<JObject>().Where(o =>
-				{
-					var typeToken = o.SelectToken("Type.Value");
+				var webviewStatus = webviewStatusObject.SelectToken("Status.Value");
+				if (webviewStatus == null)
+					return;
 
-					if (typeToken == null)
-						return false;
-					var type = typeToken.ToString().ToLower();
+				this.LogDebug("Webview Integration Status: {status}", webviewStatus);
 
-					return type.Contains("integration");
-				}).Select(o => o.SelectToken("Status.Value").ToString().ToLower());
+				WebviewIsVisible = webviewStatus.ToString().ToLowerInvariant() == "visible";
 
-				var webviewIntegrationIsOpen = integrationWebviewStatus.Any(s => s.ToLowerInvariant() == "visible");
-
-				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(webviewIntegrationIsOpen ? "visible" : "notvisible"));
-
-				WebviewIsVisible = webviewIntegrationIsOpen;
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(webviewStatus.ToString()));
 			}
 			catch (Exception e)
 			{
@@ -3772,7 +3765,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			if (webViewStatusToken != null)
 			{
-				ParseWebviewStatusToken(webViewStatusToken);
+				// there may be more than one WebView open when the initial status comes in...only handling first token for now.
+				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
 
 			// we don't want to do this... this will expand lists infinitely
