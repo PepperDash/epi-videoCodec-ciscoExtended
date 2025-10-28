@@ -2673,7 +2673,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return type.Contains("integration");
 				}).Select(o => o.SelectToken("Status.Value").ToString().ToLower());
 
-				var webviewIntegrationIsOpen = integrationWebviewStatus.Any(s => s == "visible");
+				var webviewIntegrationIsOpen = integrationWebviewStatus.Any(s => s.ToLowerInvariant() == "visible");
 
 				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(webviewIntegrationIsOpen ? "visible" : "notvisible"));
 
