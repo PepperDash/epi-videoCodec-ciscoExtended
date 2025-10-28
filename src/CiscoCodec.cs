@@ -811,11 +811,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.HalfWake
-            );
+						);
 
 			EnteringStandbyModeFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.EnteringStandby
-            );
+						);
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
 				() => _currentPresentationView == "Maximized"
@@ -1807,7 +1807,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
-				+ "Status/UserInterface/WebView/Status"
+				+ "Status/UserInterface/WebView"
 				+ Delimiter
 				+ prefix
 				+ "Status/Network/Ethernet/MacAddress"
@@ -1815,7 +1815,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
 				+ Delimiter
-                + prefix
+								+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
@@ -2658,27 +2658,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				if (string.IsNullOrEmpty(webviewStatusToken.ToString()))
+				// the WebView token is an array that has ALL visible webviews in it
+				if (!(webviewStatusToken is JArray webviewStatusObject))
 					return;
-				if (!(webviewStatusToken is JObject webviewStatusObject))
-					return;
-				var statusToken = webviewStatusObject.SelectToken("Status.Value");
-				if (statusToken != null)
+
+				var integrationWebviewStatus = webviewStatusObject.Children<JObject>().Where(o =>
 				{
-					var status = statusToken.ToString().ToLower();
-					if (!string.IsNullOrEmpty(status))
-					{
-						WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(status));
-						if (status == "visible")
-						{
-							WebviewIsVisible = true;
-						}
-						else if (status == "notvisible")
-						{
-							WebviewIsVisible = false;
-						}
-					}
-				}
+					var typeToken = o.SelectToken("Type.Value");
+
+					if (typeToken == null)
+						return false;
+					var type = typeToken.ToString().ToLower();
+
+					return type.Contains("integration");
+				}).Select(o => o.SelectToken("Status.Value").ToString().ToLower());
+
+				var webviewIntegrationIsOpen = integrationWebviewStatus.Any(s => s == "visible");
+
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(webviewIntegrationIsOpen ? "visible" : "notvisible"));
+
+				WebviewIsVisible = webviewIntegrationIsOpen;
 			}
 			catch (Exception e)
 			{
@@ -3623,30 +3622,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						case "standby":
 							_standbyState = StandbyState.Standby;
 							this.LogInformation("Standby State = Standby");
-                            break;
+							break;
 						case "enteringstandby":
 							_standbyState = StandbyState.EnteringStandby;
 							this.LogInformation("Standby State = EnteringStandby");
-                            break;
+							break;
 						case "off":
 							_standbyState = StandbyState.Off;
 							this.LogInformation("Standby State = Off");
-                            break;
+							break;
 						case "halfwake":
-                            _standbyState = StandbyState.HalfWake;
+							_standbyState = StandbyState.HalfWake;
 							this.LogInformation("Standby State = HalfWake");
-                            break;
+							break;
 						default:
 							_standbyState = StandbyState.Unknown;
 							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
 							break;
-                    }
+					}
 
 					StandbyIsOnFeedback.FireUpdate();
 					EnteringStandbyModeFeedback.FireUpdate();
 					HalfWakeModeIsOnFeedback.FireUpdate();
 
-                    return;
+					return;
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -3773,7 +3772,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			if (webViewStatusToken != null)
 			{
-				ParseWebviewStatusToken(webViewStatusToken[0]);
+				ParseWebviewStatusToken(webViewStatusToken);
 			}
 
 			// we don't want to do this... this will expand lists infinitely
