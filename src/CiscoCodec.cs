@@ -1,5 +1,4 @@
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -7,11 +6,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Crypto.Prng;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Core.Intersystem.Tokens;
@@ -97,7 +94,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public eCameraTrackingCapabilities CameraTrackingCapabilities { get; private set; }
 
-		private CTimer _scheduleCheckTimer;
+		private readonly CTimer _scheduleCheckTimer;
 		private DateTime _scheduleCheckLast;
 
 		public Meeting ActiveMeeting { get; private set; }
@@ -163,7 +160,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private bool _phonebookInitialSearch;
 
 		private string _lastSearched;
-		private CiscoCodecConfig _config;
+		private readonly CiscoCodecConfig _config;
 		private readonly int _joinableCooldownSeconds;
 
 		public string ZoomMeetingId { get; private set; }
@@ -291,12 +288,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			new CodecCommandWithLabel("UpperRight", "Upper Right"),
 		};
 
-		private CiscoCodecConfiguration.RootObject CodecConfiguration =
+		private readonly CiscoCodecConfiguration.RootObject CodecConfiguration =
 			new CiscoCodecConfiguration.RootObject();
 
-		private CiscoCodecStatus.RootObject CodecStatus;
+		private readonly CiscoCodecStatus.RootObject CodecStatus;
 
-		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
+		private readonly CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
 
 		public CodecCallHistory CallHistory { get; private set; }
 
@@ -466,9 +463,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private Func<JObject, string, JToken> JTokenValidInObject = CheckJTokenInObject;
+		private readonly Func<JObject, string, JToken> JTokenValidInObject = CheckJTokenInObject;
 
-		private Func<JToken, string, JToken> JTokenValidInToken = CheckJTokenInToken;
+		private readonly Func<JToken, string, JToken> JTokenValidInToken = CheckJTokenInToken;
 
 		private static JToken CheckJTokenInToken(JToken jToken, string tokenSelector)
 		{
@@ -600,9 +597,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#endregion
 
+		// Simple initialization state management (replacing SyncState)
+		private bool isInitialized = false;
+		private readonly Queue<string> commandQueue = new Queue<string>();
+		private bool isConnected = false;
 
-		public CodecSyncState SyncState { get; }
-
+		// Add PhonebookSyncState property for interface compatibility 
 		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
 
 		private StringBuilder _jsonMessage;
@@ -631,9 +631,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private bool _presentationLocalRemote;
 
-		private string _phonebookMode = "Local"; // Default to Local
+		private readonly string _phonebookMode = "Local"; // Default to Local
 
-		private uint _phonebookResultsLimit = 255; // Could be set later by config.
+		private readonly uint _phonebookResultsLimit = 255; // Could be set later by config.
 
 		private CTimer _loginMessageReceivedTimer;
 		private CTimer _retryConnectionTimer;
@@ -661,8 +661,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public ExtensionsHandler UiExtensionsHandler { get; set; }
 
-		private readonly IBasicCommunication _comms;
-
 		// Constructor for IBasicCommunication
 		public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
 			: base(config)
@@ -677,7 +675,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
 			DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 			UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
-			_comms = comm;
 
 			CrestronEnvironment.ProgramStatusEventHandler += a =>
 			{
@@ -811,11 +808,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.HalfWake
-            );
+						);
 
 			EnteringStandbyModeFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.EnteringStandby
-            );
+						);
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
 				() => _currentPresentationView == "Maximized"
@@ -888,11 +885,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_phonebookMode = props.PhonebookMode;
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
 
-			SyncState = new CodecSyncState(Key + "--Sync", this);
-
 			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
-
-			SyncState.InitialSyncCompleted += SyncState_InitialSyncCompleted;
 
 			PortGather = new CommunicationGather(Communication, Delimiter)
 			{
@@ -904,8 +897,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (props.Favorites != null)
 			{
-				CallFavorites = new CodecCallFavorites();
-				CallFavorites.Favorites = props.Favorites;
+				CallFavorites = new CodecCallFavorites
+				{
+					Favorites = props.Favorites
+				};
 			}
 
 			DirectoryRoot = new CodecDirectory();
@@ -931,19 +926,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			//	this
 			//);
 			HdmiIn1 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn1,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(SelectPresentationSource1),
-	this
-);
+				RoutingPortNames.HdmiIn1,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				new Action(SelectPresentationSource1),
+				this
+			);
 			HdmiIn2 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn2,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(SelectPresentationSource2),
-	this
-);
+				RoutingPortNames.HdmiIn2,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				new Action(SelectPresentationSource2),
+				this
+			);
 			HdmiIn3 = new RoutingInputPort(
 				RoutingPortNames.HdmiIn3,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -952,12 +947,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this
 			);
 			HdmiIn4 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn4,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(() => SelectPresentationSource(4)),
-	this
-);
+				RoutingPortNames.HdmiIn4,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				new Action(() => SelectPresentationSource(4)),
+				this
+			);
 			HdmiIn5 = new RoutingInputPort(
 					RoutingPortNames.HdmiIn5,
 					eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -1027,6 +1022,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 
 			_brandingUrl = props.UiBranding.BrandingUrl;
+
+			// REMOVE ME!!!!!!!!
+			if (comm is IStreamDebugging streamDebugging)
+			{
+				streamDebugging.StreamDebugging.SetDebuggingWithDefaultTimeout(eStreamDebuggingSetting.Rx);
+			}
 		}
 
 		private void EndGracefully()
@@ -1078,7 +1079,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					DeviceInfo.FirmwareVersion = CodecFirmware.ToString();
 					UpdateDeviceInfo();
 				}
-				SyncState.InitialSoftwareVersionMessageReceived();
 			}
 			if (args.InfoChangeType == eCodecInfoChangeType.SerialNumber)
 			{
@@ -1529,11 +1529,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-#if SERIES4
+
 		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
-#else
-		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
-#endif
 		{
 			if (roomMessenger == null)
 			{
@@ -1815,126 +1812,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
 				+ Delimiter
-                + prefix
+								+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
-			// Keep CallDisconnect last to detect when feedback registration completes correctly
+
 			return feedbackRegistrationExpression;
-		}
-
-		private void SyncState_InitialSyncCompleted(object sender, EventArgs e)
-		{
-			this.LogInformation(
-				"Initial Sync Complete - There are {activeCallCount} Active Calls",
-				ActiveCalls.Count
-			);
-
-			if (_config.GetPhonebookOnStartup)
-			{
-				this.LogInformation("Getting phonebook on startup");
-				SearchDirectory("");
-			}
-
-			if (ActiveCalls.Count < 1)
-			{
-				OnCallStatusChange(
-					new CodecActiveCallItem()
-					{
-						Name = string.Empty,
-						Number = string.Empty,
-						Type = eCodecCallType.Unknown,
-						Status = eCodecCallStatus.Unknown,
-						Direction = eCodecCallDirection.Unknown,
-						Id = string.Empty
-					}
-				);
-			}
-
-			// Check for camera config info 
-			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
-			{
-				SetUpCamerasFromConfig(_config.CameraInfo);
-			}
-			else
-			{
-				this.LogDebug(
-					"No cameraInfo defined in video codec config.  Attempting to get camera info from codec status data"
-				);
-				try
-				{
-					var cameraInfo = new List<CameraInfo>();
-
-					this.LogDebug(
-						"Codec reports {cameraCount} camera(s)",
-						CodecStatus.Status.Cameras.CameraList.Count
-					);
-
-					foreach (var camera in CodecStatus.Status.Cameras.CameraList)
-					{
-						var id = Convert.ToUInt16(camera.CameraId);
-						var newCamera = cameraInfo.FirstOrDefault(o => o.CameraNumber == id);
-						if (newCamera != null)
-							continue;
-						var info = new CameraInfo()
-						{
-							CameraNumber = id,
-							Name = string.Format(
-								"{0} {1}",
-								camera.Manufacturer.Value,
-								camera.Model.Value
-							),
-							SourceId = camera.DetectedConnector.DetectedConnectorId
-						};
-						cameraInfo.Add(info);
-					}
-
-					this.LogDebug(
-						"Got cameraInfo for {0} cameras from codec.",
-						cameraInfo.Count
-					);
-
-					SetUpCameras(cameraInfo);
-				}
-				catch (Exception ex)
-				{
-					this.LogError("Error generating camera info from codec status data: {message}", ex.Message);
-					this.LogVerbose(ex, "Exception");
-				}
-			}
-
-			GetCallHistory();
-
-			if (_config.GetPhonebookOnStartup)
-			{
-				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
-				// check each hour to see if the phonebook should be downloaded
-				GetPhonebook(null);
-			}
-
-			if (_config.GetBookingsOnStartup)
-			{
-				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
-				// 15 minute timer to check for new booking info
-				GetBookings(null);
-			}
-
-			var msg =
-				UiExtensions != null
-					? "Initializing Video Codec UI Extensions"
-					: "No Ui Extensions in config";
-
-			this.LogDebug(msg);
-
-			if (UiExtensions != null)
-			{
-				UiExtensions?.Initialize(this, EnqueueCommand);
-				UiExtensions?.PanelsHandler?.Initialize(string.Empty);
-			}
-
-			// Fire the ready event
-			SetIsReady();
-
-			_registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
 		}
 
 		public void SetCommDebug(string s)
@@ -1956,20 +1838,37 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogDebug("Socket status change {clientStatus}", e.Client.ClientStatus);
 			if (e.Client.IsConnected)
 			{
-				if (!SyncState.LoginMessageWasReceived)
+				isConnected = true;
+
+				// Send any queued commands
+				while (commandQueue.Count > 0)
+				{
+					var queuedCommand = commandQueue.Dequeue();
+					SendText(queuedCommand);
+				}
+
+				// Set login timeout if not already initialized
+				if (!isInitialized)
+				{
 					_loginMessageReceivedTimer = new CTimer(
 						o => DisconnectClientAndReconnect(),
 						5000
 					);
+				}
 			}
 			else
 			{
-				SyncState.CodecDisconnected();
-				PhonebookSyncState.CodecDisconnected();
+				isConnected = false;
+				isInitialized = false;
+
+				// Stop timers when disconnected
+				PhonebookSyncState?.CodecDisconnected();
 				PhonebookRefreshTimer?.Stop();
 				PhonebookRefreshTimer = null;
 				BookingsRefreshTimer?.Stop();
 				BookingsRefreshTimer = null;
+				_registrationCheckTimer?.Stop();
+				_registrationCheckTimer = null;
 			}
 		}
 
@@ -1982,6 +1881,147 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_retryConnectionTimer = new CTimer(o => Communication.Connect(), 2000);
 		}
 
+		private void InitializeCodec()
+		{
+			this.LogInformation("Initializing codec with all required commands...");
+
+			// Send all initialization commands in sequence
+			var initCommands = new List<string>
+			{
+				// Set JSON output mode (if needed)
+				"xpreferences outputmode json",
+				
+				// Get initial status
+				"xStatus Cameras",
+				"xStatus SIP",
+				"xStatus Call",
+				"xStatus SystemUnit",
+				"xStatus",
+				
+				// Get configuration
+				"xConfiguration",
+				
+				// Register all feedback subscriptions
+				BuildFeedbackRegistrationExpression()
+			};
+
+			// Send all commands immediately
+			foreach (var command in initCommands)
+			{
+				SendText(command);
+			}
+
+			// Register UI Extensions feedback if needed
+			UIExtensionsHandler?.RegisterFeedback();
+
+			// Complete initialization after a short delay to allow responses
+			var initTimer = new CTimer(_ => CompleteInitialization(), 2000);
+		}
+
+		private void CompleteInitialization()
+		{
+			this.LogInformation("Completing codec initialization...");
+
+			// Get phonebook if configured
+			if (_config.GetPhonebookOnStartup)
+			{
+				this.LogInformation("Getting phonebook on startup");
+				SearchDirectory("");
+			}
+
+			// Handle active calls
+			if (ActiveCalls.Count < 1)
+			{
+				OnCallStatusChange(new CodecActiveCallItem()
+				{
+					Name = string.Empty,
+					Number = string.Empty,
+					Type = eCodecCallType.Unknown,
+					Status = eCodecCallStatus.Unknown,
+					Direction = eCodecCallDirection.Unknown,
+					Id = string.Empty
+				});
+			}
+
+			// Set up cameras from config or auto-detect
+			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
+			{
+				SetUpCamerasFromConfig(_config.CameraInfo);
+			}
+			else
+			{
+				SetUpCamerasFromCodecStatus();
+			}
+
+			// Get call history
+			GetCallHistory();
+
+			// Set up phonebook refresh timer if needed
+			if (_config.GetPhonebookOnStartup)
+			{
+				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+				GetPhonebook(null);
+			}
+
+			// Set up bookings refresh timer if needed  
+			if (_config.GetBookingsOnStartup)
+			{
+				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+				GetBookings(null);
+			}
+
+			// Initialize UI Extensions
+			if (UiExtensions != null)
+			{
+				UiExtensions?.Initialize(this, SendCommand);
+				UiExtensions?.PanelsHandler?.Initialize(string.Empty);
+			}
+
+			// Set device as ready
+			SetIsReady();
+
+			// Start periodic feedback check
+			_registrationCheckTimer = new CTimer(SendCommand, "xFeedback list", 90000, 90000);
+
+			this.LogInformation("Codec initialization complete");
+		}
+
+		private void SetUpCamerasFromCodecStatus()
+		{
+			this.LogDebug("No cameraInfo defined in config. Attempting to get camera info from codec status data");
+
+			try
+			{
+				var cameraInfo = new List<CameraInfo>();
+
+				this.LogDebug("Codec reports {cameraCount} camera(s)", CodecStatus.Status.Cameras.CameraList.Count);
+
+				foreach (var camera in CodecStatus.Status.Cameras.CameraList)
+				{
+					var id = Convert.ToUInt16(camera.CameraId);
+					var existingCamera = cameraInfo.FirstOrDefault(o => o.CameraNumber == id);
+					if (existingCamera != null)
+						continue;
+
+					var info = new CameraInfo()
+					{
+						CameraNumber = id,
+						Name = string.Format("{0} {1}", camera.Manufacturer.Value, camera.Model.Value),
+						SourceId = camera.DetectedConnector.DetectedConnectorId
+					};
+					cameraInfo.Add(info);
+				}
+
+				this.LogDebug("Got cameraInfo for {cameraCount} cameras from codec", cameraInfo.Count);
+				SetUpCameras(cameraInfo);
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Error generating camera info from codec status data: {message}", ex.Message);
+				this.LogVerbose(ex, "Exception");
+			}
+		}
+
 		private void Port_LineReceived(object dev, GenericCommMethodReceiveTextArgs args)
 		{
 			if (CommDebuggingIsOn)
@@ -1989,6 +2029,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (!_jsonFeedbackMessageIsIncoming)
 					this.LogDebug("RX: '{incomingMessage}'", ComTextHelper.GetDebugText(args.Text));
 			}
+
+			// Handle initial connection setup
+			if (!isInitialized)
+			{
+				var data = args.Text.Trim().ToLower();
+				if (data.Contains("*r login successful") || data.Contains("*s systemunit"))
+				{
+					this.LogInformation("Login successful, initializing codec...");
+
+					// Stop the login timeout timer since we got a successful login
+					_loginMessageReceivedTimer?.Stop();
+					_loginMessageReceivedTimer?.Dispose();
+					_loginMessageReceivedTimer = null;
+
+					InitializeCodec();
+					isInitialized = true;
+				}
+			}
+
 			var message = new ProcessStringMessage(args.Text, ProcessResponse);
 			_receiveQueue.Enqueue(message);
 		}
@@ -2028,38 +2087,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					_feedbackListMessage.Append(response);
 					return;
-				}
-
-				if (!SyncState.InitialSyncComplete)
-				{
-					var data = response.Trim().ToLower();
-					if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
-					{
-						SyncState.LoginMessageReceived();
-
-						_loginMessageReceivedTimer?.Stop();
-
-						//SendText("echo off");
-					}
-					else if (data.Contains("xpreferences outputmode json"))
-					{
-						if (SyncState.JsonResponseModeSet)
-							return;
-
-						SyncState.JsonResponseModeMessageReceived();
-
-						if (!SyncState.InitialStatusMessageWasReceived)
-						{
-							SendText("xStatus Cameras");
-							SendText("xStatus SIP");
-							SendText("xStatus Call");
-							SendText("xStatus");
-						}
-					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
-					}
 				}
 
 				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
@@ -2102,10 +2129,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogVerbose("Feedback List:\r\n{data}", data);
 
 			if (
-				data.Split('\n').Count()
-				>= BuildFeedbackRegistrationExpression().Split('\n').Count()
+				data.Split('\n').Count() >= BuildFeedbackRegistrationExpression().Split('\n').Count()
 			)
+			{
 				return;
+			}
 
 			this.LogWarning("Codec Feedback Registrations Lost - Registering Feedbacks");
 
@@ -2114,7 +2142,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void EnqueueCommand(string command)
 		{
-			SyncState.AddCommandToQueue(command);
+			SendCommand(command);
 		}
 
 		private void EnqueueCommand(object command)
@@ -2122,7 +2150,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var cmd = command as string;
 			if (string.IsNullOrEmpty(cmd))
 				return;
-			SyncState.AddCommandToQueue(cmd);
+			SendCommand(cmd);
+		}
+
+		public void SendCommand(string command)
+		{
+			if (string.IsNullOrEmpty(command))
+				return;
+
+			if (isConnected)
+			{
+				SendText(command);
+			}
+			else
+			{
+				// Queue commands if not connected
+				commandQueue.Enqueue(command);
+			}
+		}
+
+		private void SendCommand(object command)
+		{
+			var cmd = command as string;
+			if (!string.IsNullOrEmpty(cmd))
+				SendCommand(cmd);
 		}
 
 		public void SendText(string command)
@@ -2334,7 +2385,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			DeviceInfo.FirmwareVersion = codecFirmwareString;
 			UpdateDeviceInfo();
-			SyncState.InitialSoftwareVersionMessageReceived();
 		}
 
 		private void RegisterH323Configuration()
@@ -2524,7 +2574,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			DeviceInfo.FirmwareVersion = codecFirmwareString;
 			UpdateDeviceInfo();
-			SyncState.InitialSoftwareVersionMessageReceived();
 		}
 
 		private void RegisterSipEvents()
@@ -3623,30 +3672,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						case "standby":
 							_standbyState = StandbyState.Standby;
 							this.LogInformation("Standby State = Standby");
-                            break;
+							break;
 						case "enteringstandby":
 							_standbyState = StandbyState.EnteringStandby;
 							this.LogInformation("Standby State = EnteringStandby");
-                            break;
+							break;
 						case "off":
 							_standbyState = StandbyState.Off;
 							this.LogInformation("Standby State = Off");
-                            break;
+							break;
 						case "halfwake":
-                            _standbyState = StandbyState.HalfWake;
+							_standbyState = StandbyState.HalfWake;
 							this.LogInformation("Standby State = HalfWake");
-                            break;
+							break;
 						default:
 							_standbyState = StandbyState.Unknown;
 							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
 							break;
-                    }
+					}
 
 					StandbyIsOnFeedback.FireUpdate();
 					EnteringStandbyModeFeedback.FireUpdate();
 					HalfWakeModeIsOnFeedback.FireUpdate();
 
-                    return;
+					return;
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -3778,23 +3827,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			// we don't want to do this... this will expand lists infinitely
 			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
-
-			if (SyncState.InitialStatusMessageWasReceived)
-				return;
-
-			SyncState.InitialStatusMessageReceived();
-
-			if (!SyncState.InitialConfigurationMessageWasReceived)
-			{
-				this.LogDebug("Sending Configuration");
-				SendText("xConfiguration");
-			}
-			if (SyncState.FeedbackWasRegistered)
-				return;
-			this.LogDebug("Sending Feedback");
-
-			SendText(BuildFeedbackRegistrationExpression());
-			UIExtensionsHandler.RegisterFeedback();
 		}
 
 		private void ParseSelfviewToken(JToken selfviewToken)
@@ -3904,14 +3936,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this.LogError("Exception in ParseConfigurationObject.Populat Autoanswer: {message}", e.Message);
 					this.LogVerbose(e, "Exception");
 					throw;
-				}
-				if (SyncState.InitialConfigurationMessageWasReceived)
-					return;
-				this.LogVerbose("InitialConfig Received");
-				SyncState.InitialConfigurationMessageReceived();
-				if (!SyncState.InitialSoftwareVersionMessageWasReceived)
-				{
-					SendText("xStatus SystemUnit");
 				}
 			}
 			catch (Exception e)
@@ -6184,7 +6208,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public string ExternalSourceInputPort { get; private set; }
 
 		public bool BrandingEnabled { get; private set; }
-		private string _brandingUrl;
+		private readonly string _brandingUrl;
 		private bool _sendMcUrl;
 
 		public void AddExternalSource(

@@ -37,9 +37,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 if (value && !_initialSyncComplete)
                 {
-                    var handler = InitialSyncCompleted;
-                    if (handler != null)
-                        handler(this, new EventArgs());
+                    InitialSyncCompleted?.Invoke(this, new EventArgs());
                 }
                 _initialSyncComplete = value;
             }
@@ -98,6 +96,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (!JsonResponseModeSet)
                 {
                     _parent.SendText("xPreferences outputmode json");
+
+                    JsonResponseModeMessageReceived();
+
+                    if (!InitialStatusMessageWasReceived)
+                    {
+                        _parent.SendText("xStatus Cameras");
+                        _parent.SendText("xStatus SIP");
+                        _parent.SendText("xStatus Call");
+                        _parent.SendText("xStatus");
+                    }
                 }
 
                 CheckSyncStatus();
