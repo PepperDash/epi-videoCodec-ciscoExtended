@@ -404,14 +404,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                             continue;
                         }
 
-                        if (action.DeviceKey == defaultRoomKey && action.DeviceKey != currentScenarioRoomKey)
+                        var configDeviceKey = action.DeviceKey;
+
+                        if (action.DeviceKey == defaultRoomKey && defaultRoomKey != currentScenarioRoomKey)
                         {
                             this.LogInformation("Sending action {ActionId} to primary room {PrimaryRoomId}", action.MethodName, currentScenarioRoomKey);
                             action.DeviceKey = currentScenarioRoomKey;
                         }
 
-                        this.LogDebug("Running DeviceAction {MethodName}", action.MethodName);
+                        this.LogDebug("Running DeviceAction {MethodName} on device {key}", action.MethodName, action.DeviceKey);
                         await DeviceJsonApi.DoDeviceActionAsync(action);
+
+                        this.LogInformation("Resetting action deviceKey to config value");
+                        action.DeviceKey = configDeviceKey;
                     }
                 }
 
