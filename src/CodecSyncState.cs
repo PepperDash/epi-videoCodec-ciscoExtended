@@ -197,8 +197,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                this.LogInformation("Codec Sync Complete");
-
+                if (InitialSyncComplete)
+                {
+                    return;
+                }
+                
                 InitialSyncComplete = true;
                 _parent.PollSpeakerTrack();
                 _parent.PollPresenterTrack();
