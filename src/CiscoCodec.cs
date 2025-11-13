@@ -4137,11 +4137,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (JsonReaderException ex)
 			{
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
+				this.LogVerbose("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Exception");
 			}
 			catch (Exception ex)
 			{
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
+				this.LogVerbose("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
