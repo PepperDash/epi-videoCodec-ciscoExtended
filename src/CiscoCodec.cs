@@ -3104,7 +3104,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var callId = callIdToken != null ? callIdToken.ToString() : string.Empty;
 				if (string.IsNullOrEmpty(callId))
 					return null;
-				this.LogDebug("Found an ID! : {id}", callId);
 
 				var callStatusToken = CheckJTokenInObject(call, "Status.Value");
 				var callStatus =
