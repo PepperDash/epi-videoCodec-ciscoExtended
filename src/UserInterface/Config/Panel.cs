@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -140,6 +141,80 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         [JsonProperty("panelFeedback", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
         public PanelFeedback PanelFeedback { get; set; }
+
+        /// <summary>
+        /// Collection of feedback configurations for the panel.
+        /// This property allows multiple feedback sources to control different aspects of the panel.
+        /// Supports both numbered feedback properties (panelFeedback1, panelFeedback2, etc.) and the collection.
+        /// </summary>
+        [JsonIgnore]
+        [XmlIgnore]
+        public List<PanelFeedback> PanelFeedbacks { get; set; } = new List<PanelFeedback>();
+
+        /// <summary>
+        /// First additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback1", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback1 { get; set; }
+
+        /// <summary>
+        /// Second additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback2", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback2 { get; set; }
+
+        /// <summary>
+        /// Third additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback3", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback3 { get; set; }
+
+        /// <summary>
+        /// Fourth additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback4", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback4 { get; set; }
+
+        /// <summary>
+        /// Fifth additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback5", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback5 { get; set; }
+
+        /// <summary>
+        /// Gets all configured panel feedbacks (including the legacy single feedback and numbered feedbacks).
+        /// </summary>
+        /// <returns>Collection of all non-null panel feedback configurations.</returns>
+        public IEnumerable<PanelFeedback> GetAllPanelFeedbacks()
+        {
+            var feedbacks = new List<PanelFeedback>();
+            
+            // Add legacy single feedback for backward compatibility
+            if (PanelFeedback != null)
+                feedbacks.Add(PanelFeedback);
+            
+            // Add numbered feedbacks
+            if (PanelFeedback1 != null)
+                feedbacks.Add(PanelFeedback1);
+            if (PanelFeedback2 != null)
+                feedbacks.Add(PanelFeedback2);
+            if (PanelFeedback3 != null)
+                feedbacks.Add(PanelFeedback3);
+            if (PanelFeedback4 != null)
+                feedbacks.Add(PanelFeedback4);
+            if (PanelFeedback5 != null)
+                feedbacks.Add(PanelFeedback5);
+            
+            // Add any feedbacks from the collection
+            feedbacks.AddRange(PanelFeedbacks ?? new List<PanelFeedback>());
+            
+            return feedbacks;
+        }
     }
 
     /// <summary>
