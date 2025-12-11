@@ -82,12 +82,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     {
       this.defaultRoomKey = defaultRoomKey;
 
+      RegisterForDeviceFeedback();
+
       var combiners = DeviceManager.AllDevices.OfType<EssentialsRoomCombiner>().ToList();
 
       if (combiners == null || combiners.Count == 0)
       {
         parent.LogWarning("{uiKey} could not find RoomCombiner", parent.Key);
-        RegisterForDeviceFeedback();
         return;
       }
 
@@ -134,14 +135,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         return;
       }
 
-      if (currentScenarioRoomKey != NavigatorLockoutHandler.LOCKOUT_SCENARIO_KEY)
-      {
-        UnregisterForDevicefeedback();
+      // if (currentScenarioRoomKey != NavigatorLockoutHandler.LOCKOUT_SCENARIO_KEY)
+      // {
+      //   UnregisterForDevicefeedback();
 
-        RegisterForDeviceFeedback();
+      //   RegisterForDeviceFeedback();
 
-        return;
-      }
+      //   return;
+      // }
     }
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
@@ -155,6 +156,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       extensions.Update(EnqueueCommand);
     }
 
+    [Obsolete]
     private void UnregisterForDevicefeedback()
     {
       var panelsWithFeedback = panelConfigs.Where(p => p.GetAllPanelFeedbacks().Any());
@@ -207,22 +209,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       // Find all panels and their specific feedbacks that correspond to this feedback AND device combination
       var matchingPanelFeedbacks = new List<(Panel panel, PanelFeedback panelFeedback)>();
-      
+
       foreach (var panel in panelConfigs)
       {
         foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
         {
-          if (panelFeedback.FeedbackKey == feedback.Key)
+          if (panelFeedback.FeedbackKey != feedback.Key)
           {
-            // Verify device key matches (accounting for room combiner scenarios)
-            var effectiveDeviceKey = GetEffectiveDeviceKey(panelFeedback.DeviceKey);
-            var feedbackDevice = DeviceManager.GetDeviceForKey(effectiveDeviceKey) as IHasFeedback;
-            
-            if (feedbackDevice?.Feedbacks[panelFeedback.FeedbackKey] == feedback)
-            {
-              matchingPanelFeedbacks.Add((panel, panelFeedback));
-            }
+            continue;
           }
+
+          // Verify device key matches (accounting for room combiner scenarios)
+          // var effectiveDeviceKey = GetEffectiveDeviceKey(panelFeedback.DeviceKey);
+
+          var feedbackDevice = DeviceManager.GetDeviceForKey(panelFeedback.DeviceKey) as IHasFeedback;
+
+          if ((feedbackDevice?.Feedbacks[panelFeedback.FeedbackKey]) != feedback)
+          {
+            continue;
+          }
+
+          matchingPanelFeedbacks.Add((panel, panelFeedback));
         }
       }
 
@@ -277,6 +284,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     /// </summary>
     /// <param name="configuredDeviceKey">The device key from the panel configuration.</param>
     /// <returns>The effective device key to use for device lookup.</returns>
+    [Obsolete]
     private string GetEffectiveDeviceKey(string configuredDeviceKey)
     {
       if (configuredDeviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
@@ -285,6 +293,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       }
       return configuredDeviceKey;
     }
+
     private void RegisterForDeviceFeedback()
     {
       var panelsWithFeedback = panelConfigs.Where(p => p.GetAllPanelFeedbacks().Any());
@@ -301,10 +310,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         {
           var deviceKey = panelFeedback.DeviceKey;
 
-          if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-          {
-            deviceKey = currentScenarioRoomKey;
-          }
+          // if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
+          // {
+          //   deviceKey = currentScenarioRoomKey;
+          // }
 
           if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
           {

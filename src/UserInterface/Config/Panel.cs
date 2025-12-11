@@ -190,14 +190,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         /// Gets all configured panel feedbacks (including the legacy single feedback and numbered feedbacks).
         /// </summary>
         /// <returns>Collection of all non-null panel feedback configurations.</returns>
-        public IEnumerable<PanelFeedback> GetAllPanelFeedbacks()
+        public List<PanelFeedback> GetAllPanelFeedbacks()
         {
             var feedbacks = new List<PanelFeedback>();
-            
+
             // Add legacy single feedback for backward compatibility
             if (PanelFeedback != null)
                 feedbacks.Add(PanelFeedback);
-            
+
             // Add numbered feedbacks
             if (PanelFeedback1 != null)
                 feedbacks.Add(PanelFeedback1);
@@ -209,10 +209,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
                 feedbacks.Add(PanelFeedback4);
             if (PanelFeedback5 != null)
                 feedbacks.Add(PanelFeedback5);
-            
+
             // Add any feedbacks from the collection
             feedbacks.AddRange(PanelFeedbacks ?? new List<PanelFeedback>());
-            
+
             return feedbacks;
         }
     }
