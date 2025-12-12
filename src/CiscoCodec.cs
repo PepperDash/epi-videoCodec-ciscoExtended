@@ -2074,7 +2074,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						{
 							// SendText("xStatus Cameras");
 							// SendText("xStatus SIP");
-							// SendText("xStatus Call");							
+							// SendText("xStatus Call");						
 							SendText("xStatus");
 						}
 					}
@@ -3537,7 +3537,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (statusToken == null || (statusToken.Type == JTokenType.Object && !statusToken.HasValues))
 			{
-				this.LogWarning("ParseStatusObject called with null or empty token");
 				return;
 			}
 
