@@ -480,6 +480,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		public StringFeedback ProvisioningRoomTypeFeedback { get; private set; }
+
+		private string currentProvisioningRoomType;
+
+		public string CurrentProvisioningRoomType
+		{
+			get { return currentProvisioningRoomType; }
+			private set
+			{
+				if (currentProvisioningRoomType == value) return;
+
+				currentProvisioningRoomType = value;
+
+				ProvisioningRoomTypeFeedback.FireUpdate();
+			}
+		}
+
 		private Func<JObject, string, JToken> JTokenValidInObject = CheckJTokenInObject;
 
 		private Func<JToken, string, JToken> JTokenValidInToken = CheckJTokenInToken;
@@ -771,6 +788,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			PhoneOffHookFeedback = new BoolFeedback(PhoneOffHookFeedbackFunc);
 			CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
 			CallerIdNumberFeedback = new StringFeedback(CallerIdNumberFeedbackFunc);
+
+			ProvisioningRoomTypeFeedback = new StringFeedback("provisioningRoomType",
+				() => CurrentProvisioningRoomType
+			);
 
 			//PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
 
@@ -1819,7 +1840,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
 				+ Delimiter
-								+ prefix
+				+ prefix
+				+ "/Status/Provisioning/RoomType"
+				+ Delimiter
+				+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
@@ -3531,8 +3555,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
+			var provisioningToken = statusToken.SelectToken("Provisioning");
 
 			var serializedToken = statusToken.ToString();
+
 			if (errorToken != null)
 			{
 				UiExtensionsHandler?.ParseErrorStatus(statusToken);
@@ -3706,6 +3732,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
+			if (provisioningToken != null)
+			{
+				ParseProvisioningToken(provisioningToken);
+			}
 
 			// we don't want to do this... this will expand lists infinitely
 			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
@@ -3726,6 +3756,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendText(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+		}
+
+		private void ParseProvisioningToken(JToken provisioningToken)
+		{
+			var provisioningStatusToken = provisioningToken.SelectToken("RoomType.Value");
+
+			if (provisioningStatusToken == null)
+				return;
+
+			var provisioningStatus = provisioningStatusToken.ToString();
+
+			if (string.IsNullOrEmpty(provisioningStatus))
+				return;
+
+			CurrentProvisioningRoomType = provisioningStatus;
 		}
 
 		private void ParseSelfviewToken(JToken selfviewToken)
@@ -5939,6 +5984,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 		}
 
+		public void SetCodecProvisionMode(string mode)
+		{
+			this.LogDebug("Setting the codec provision mode to {mode}", mode);
+
+			EnqueueCommand($"xCommand Provisioning RoomType Activate Name: {mode}");
+		}
+
 		#region ICiscoCodecCameraConfig Members
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
@@ -6351,7 +6403,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			var navigator = DeviceManager.AllDevices.OfType<NavigatorController>().Where(n => n.Parent.Key == Key).FirstOrDefault();
+			var navigator = DeviceManager.AllDevices.OfType<NavigatorController>().FirstOrDefault(n => n.Parent.Key == Key);
 
 			if (navigator == null)
 			{
@@ -6386,7 +6438,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void HideEmergencyMessage()
 		{
-			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{Delimiter}");
 		}
+	}
+
+	public class CodecProvisionMode
+	{
+		public const string Briefing = "Briefing";
+		public const string Classroom = "Classroom";
+		public const string Standard = "Standard";
+		public const string PresenterAndAudience = "PresenterAndAudience";
 	}
 }
