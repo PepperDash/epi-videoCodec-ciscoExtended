@@ -4,6 +4,7 @@ using System.Xml.Serialization;
 using Newtonsoft.Json;
 using PepperDash.Core.Logging;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions.Panels;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Xml;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
@@ -38,6 +39,70 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         [JsonIgnore]
         [XmlIgnore]
         public PanelsHandler PanelsHandler { get; set; }
+
+        private static Panel classroomPanel = new Panel
+        {
+            PanelId = "Classroom",
+            Origin = "local",
+            ActivityType = "Custom",
+            Type = "StatusBar",
+            Icon = ECiscoPanelIcons.VideoLayoutPresenter,
+            Order = 1,
+            Name = "Classroom",
+            Location = ECiscoPanelLocation.HomeScreenAndCallControls,
+            Page = new Page
+            {
+                Name = "Classroom",
+                Rows = new List<Row>
+                {
+                    { new Row
+                        {
+                            Widgets = new List<Widget>
+                            {
+                                { new Widget
+                                    {
+                                        WidgetId = "local_presenter",
+                                        Type = WidgetType.Button,
+                                        Name = "Local Presenter",
+                                        Options = "size=3"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    { new Row
+                        {
+                            Widgets = new List<Widget>
+                            {
+                                { new Widget
+                                    {
+                                        WidgetId = "remote_presenter",
+                                        Type = WidgetType.Button,
+                                        Name = "Remote Presenter",
+                                        Options = "size=3"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    { new Row
+                        {
+                            Widgets = new List<Widget>
+                            {
+                                { new Widget
+                                    {
+                                        WidgetId = "discussion",
+                                        Type = WidgetType.Button,
+                                        Name = "Discussion",
+                                        Options = "size=3"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
 
         /// <summary>
         /// Initializes the Extensions object, setting up the PanelsHandler and sending the XML command if SkipXml is false.
@@ -110,6 +175,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         {
             try
             {
+                if (parent.CurrentProvisioningRoomType == CodecProvisionMode.Classroom && Panels.Find(p => p.PanelId == classroomPanel.PanelId) == null)
+                {
+                    // Check if any existing panel has the same order as the classroom panel
+                    var classroomOrder = classroomPanel.Order;
+                    var conflictingPanels = Panels.FindAll(p => p.Order >= classroomOrder);
+
+                    if (conflictingPanels.Count > 0)
+                    {
+                        // Increment the order of all panels with order >= classroom panel order
+                        foreach (var panel in conflictingPanels)
+                        {
+                            panel.Order++;
+                        }
+                        parent.LogDebug("Adjusted order of {count} existing panels to accommodate Classroom panel", conflictingPanels.Count);
+                    }
+
+                    Panels.Add(classroomPanel);
+                    parent.LogDebug("Added Classroom Panel to UI Extensions based on Provisioning Room Type");
+                }
+                else if (parent.CurrentProvisioningRoomType != CodecProvisionMode.Classroom)
+                {
+                    // Remove Classroom panel if it exists and the provisioning mode is not Classroom
+                    var existingClassroomPanel = Panels.Find(p => p.PanelId == classroomPanel.PanelId);
+                    if (existingClassroomPanel != null)
+                    {
+                        Panels.Remove(existingClassroomPanel);
+                        parent.LogDebug("Removed Classroom Panel from UI Extensions based on Provisioning Room Type");
+                    }
+                }
                 return XmlConverter.SerializeObject(this);
             }
             catch (Exception ex)
