@@ -53,10 +53,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
             Page = new Page
             {
                 Name = "Classroom",
+                Options = "hideRowNames=1",
+                PageId = "briefing_page",
                 Rows = new List<Row>
                 {
                     { new Row
-                        {
+                    {
                             Widgets = new List<Widget>
                             {
                                 { new Widget
@@ -120,6 +122,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         {
             this.parent = parent;
 
+            parent.ProvisioningRoomTypeFeedback.OutputChange += (s, e) => Update(enqueueCommand);
+
             this.parent.LogDebug("Extensions Initialize, Panels from config length: {count}", Panels.Count);
 
             if (PanelsHandler == null)
@@ -177,6 +181,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
             {
                 if (parent.CurrentProvisioningRoomType == CodecProvisionMode.Classroom && Panels.Find(p => p.PanelId == classroomPanel.PanelId) == null)
                 {
+                    parent.LogWarning("Provisioning Room Type is Classroom, adding Classroom Panel to UI Extensions");
                     // Check if any existing panel has the same order as the classroom panel
                     var classroomOrder = classroomPanel.Order;
                     var conflictingPanels = Panels.FindAll(p => p.Order >= classroomOrder);
@@ -196,6 +201,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
                 }
                 else if (parent.CurrentProvisioningRoomType != CodecProvisionMode.Classroom)
                 {
+                    parent.LogWarning("Provisioning Room Type is not Classroom, removing Classroom Panel from UI Extensions");
                     // Remove Classroom panel if it exists and the provisioning mode is not Classroom
                     var existingClassroomPanel = Panels.Find(p => p.PanelId == classroomPanel.PanelId);
                     if (existingClassroomPanel != null)

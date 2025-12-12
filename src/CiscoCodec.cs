@@ -2072,9 +2072,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						if (!SyncState.InitialStatusMessageWasReceived)
 						{
-							SendText("xStatus Cameras");
-							SendText("xStatus SIP");
-							SendText("xStatus Call");
+							// SendText("xStatus Cameras");
+							// SendText("xStatus SIP");
+							// SendText("xStatus Call");							
 							SendText("xStatus");
 						}
 					}
@@ -3537,6 +3537,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (statusToken == null || (statusToken.Type == JTokenType.Object && !statusToken.HasValues))
 			{
+				this.LogWarning("ParseStatusObject called with null or empty token");
 				return;
 			}
 
@@ -3608,8 +3609,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					StandbyIsOnFeedback.FireUpdate();
 					EnteringStandbyModeFeedback.FireUpdate();
 					HalfWakeModeIsOnFeedback.FireUpdate();
-
-					return;
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -4235,13 +4234,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
 				this.LogVerbose("Response JSON: {response}", response);
-				this.LogVerbose(ex, "Exception");
+				this.LogVerbose(ex, "Stack Trace: ");
 			}
 			catch (Exception ex)
 			{
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
 				this.LogVerbose("Response JSON: {response}", response);
-				this.LogVerbose(ex, "Exception");
+				this.LogVerbose(ex, "Stack Trace: ");
 			}
 		}
 
