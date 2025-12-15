@@ -3654,6 +3654,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
 						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+						listWasUpdated = true;
 					}
 					else
 					{
@@ -3666,8 +3667,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 								MissingMemberHandling = MissingMemberHandling.Ignore,
 							});
 					}
-
-					listWasUpdated = true;
 				}
 
 				if (listWasUpdated)
@@ -3790,7 +3789,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			else
 			{
 				this.LogDebug("No Camera found for Main Video Source ID: {sourceId}", mainSourceValue);
-				SelectedCamera = null;
 			}
 		}
 
@@ -6081,6 +6079,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelectCamera(string key)
 		{
+			if (Cameras == null || Cameras.Count == 0)
+			{
+				this.LogWarning("No cameras are available to select.");
+				return;
+			}
+
 			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c =>
 				c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
 			);
