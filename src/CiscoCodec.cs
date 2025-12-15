@@ -1767,10 +1767,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/DoNotDisturb"
-								+ Delimiter
-								+ prefix
-								+ "/Status/Cameras/Camera"
-								+ Delimiter
+				+ Delimiter
+				+ prefix
+				+ "/Status/Cameras/Camera"
+				+ Delimiter
 				+ prefix
 				+ "/Status/Cameras/SpeakerTrack"
 				+ Delimiter
@@ -1814,6 +1814,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Status/Video/Input/MainVideoMute"
 				+ Delimiter
 				+ prefix
+				+ "/Status/Video/Input/MainVideoSource"
+				+ Delimiter
+				+ prefix
 				+ "/Bookings"
 				+ Delimiter
 				+ prefix
@@ -1821,10 +1824,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Event/CameraPresetListUpdated"
-								+ Delimiter
-								+ prefix
-								+ "/Event/Peripherals"
-								+ Delimiter
+				+ Delimiter
+				+ prefix
+				+ "/Event/Peripherals"
+				+ Delimiter
 				+ prefix
 				+ "/Event/Conference/Call/AuthenticationResponse"
 				+ Delimiter
@@ -3544,6 +3547,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
+			var mainSourceToken = statusToken.SelectToken("Video.Input.MainVideoSource");
 			var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
 			var systemUnitToken = statusToken.SelectToken("SystemUnit");
 			var cameraToken = statusToken.SelectToken("Cameras.Camera");
@@ -3734,6 +3738,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseProvisioningToken(provisioningToken);
 			}
+			if (mainSourceToken != null)
+			{
+				ParseMainSourceToken(mainSourceToken);
+			}
 
 			// we don't want to do this... this will expand lists infinitely
 			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
@@ -3754,6 +3762,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendText(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+		}
+
+		private void ParseMainSourceToken(JToken mainSourceToken)
+		{
+			if (mainSourceToken == null)
+				return;
+
+			var mainSourceValueToken = mainSourceToken.SelectToken("Value");
+			if (mainSourceValueToken == null)
+				return;
+
+			if (!int.TryParse(mainSourceValueToken.ToString(), out int mainSourceValue))
+			{
+				this.LogDebug("Main Source Value is not an integer: {value}", mainSourceValueToken.ToString());
+				return;
+			}
+
+			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
+
+			if (camera != null)
+			{
+				SelectedCamera = camera;
+
+				this.LogDebug("Current Main Video Source Camera set to: {cameraId}", camera.CameraId);
+			}
+			else
+			{
+				this.LogDebug("No Camera found for Main Video Source ID: {sourceId}", mainSourceValue);
+				SelectedCamera = null;
+			}
 		}
 
 		private void ParseProvisioningToken(JToken provisioningToken)
@@ -6043,9 +6081,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelectCamera(string key)
 		{
-			var camera = Cameras.FirstOrDefault(c =>
-				c.Key.IndexOf(key, StringComparison.OrdinalIgnoreCase) > -1
+			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c =>
+				c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
 			);
+
 			if (camera != null)
 			{
 				this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
@@ -6054,15 +6093,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			else
 				this.LogDebug("Unable to select camera with key: '{key}'", key);
 
-			if (camera is CiscoCamera ciscoCam)
-			{
-				EnqueueCommand(
-					string.Format(
-						"xCommand Video Input SetMainVideoSource SourceId: {0}",
-						ciscoCam.SourceId
-					)
-				);
-			}
+			EnqueueCommand(
+				string.Format(
+					"xCommand Video Input SetMainVideoSource SourceId: {0}",
+					camera.SourceId
+				)
+			);
 		}
 
 		public CameraBase FarEndCamera { get; private set; }
