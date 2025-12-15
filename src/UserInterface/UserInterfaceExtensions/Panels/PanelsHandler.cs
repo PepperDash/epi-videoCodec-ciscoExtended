@@ -134,15 +134,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
         return;
       }
-
-      // if (currentScenarioRoomKey != NavigatorLockoutHandler.LOCKOUT_SCENARIO_KEY)
-      // {
-      //   UnregisterForDevicefeedback();
-
-      //   RegisterForDeviceFeedback();
-
-      //   return;
-      // }
     }
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
@@ -156,49 +147,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       extensions.Update(EnqueueCommand);
     }
 
-    [Obsolete]
-    private void UnregisterForDevicefeedback()
-    {
-      var panelsWithFeedback = panelConfigs.Where(p => p.GetAllPanelFeedbacks().Any());
-
-      if (!panelsWithFeedback.Any())
-      {
-        parent.LogDebug("No panels with feedback to unregister");
-        return;
-      }
-
-      foreach (var panel in panelsWithFeedback)
-      {
-        foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
-        {
-          var deviceKey = panelFeedback.DeviceKey;
-
-          if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-          {
-            deviceKey = currentScenarioRoomKey;
-          }
-
-          if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
-          {
-            parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, deviceKey);
-            continue;
-          }
-
-          var feedback = device.Feedbacks[panelFeedback.FeedbackKey];
-
-          if (feedback == null)
-          {
-            parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panelFeedback.FeedbackKey, panelFeedback.DeviceKey);
-            continue;
-          }
-
-          parent.LogDebug("Unregistering for feedback {feedbackKey}", feedback.Key);
-
-          feedback.OutputChange -= HandleFeedbackOutputChange;
-        }
-      }
-    }
-
     void HandleFeedbackOutputChange(object s, FeedbackEventArgs args)
     {
       if (!(s is Feedback feedback))
@@ -206,6 +154,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogError("Received feedback event but sender is not a feedback object");
         return;
       }
+
+      parent.LogDebug("Handling feedback output change for feedback {feedbackKey}", feedback.Key);
 
       // Find all panels and their specific feedbacks that correspond to this feedback AND device combination
       var matchingPanelFeedbacks = new List<(Panel panel, PanelFeedback panelFeedback)>();
@@ -216,18 +166,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         {
           if (panelFeedback.FeedbackKey != feedback.Key)
           {
+            parent.LogDebug("Panel {panelId} feedback key does not match feedback sender key",
+              panel.PanelId);
             continue;
           }
-
-          // Verify device key matches (accounting for room combiner scenarios)
-          // var effectiveDeviceKey = GetEffectiveDeviceKey(panelFeedback.DeviceKey);
 
           var feedbackDevice = DeviceManager.GetDeviceForKey(panelFeedback.DeviceKey) as IHasFeedback;
 
           if ((feedbackDevice?.Feedbacks[panelFeedback.FeedbackKey]) != feedback)
           {
+            parent.LogDebug("Panel {panelId} feedback device key does not match feedback sender device key",
+              panel.PanelId);
             continue;
           }
+
+          parent.LogDebug("Found matching panel {panelId} for feedback {feedbackKey}",
+            panel.PanelId, feedback.Key);
 
           matchingPanelFeedbacks.Add((panel, panelFeedback));
         }
@@ -279,21 +233,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       feedbackTimer.Start();
     }
 
-    /// <summary>
-    /// Gets the effective device key, handling room combiner scenario substitution.
-    /// </summary>
-    /// <param name="configuredDeviceKey">The device key from the panel configuration.</param>
-    /// <returns>The effective device key to use for device lookup.</returns>
-    [Obsolete]
-    private string GetEffectiveDeviceKey(string configuredDeviceKey)
-    {
-      if (configuredDeviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-      {
-        return currentScenarioRoomKey;
-      }
-      return configuredDeviceKey;
-    }
-
     private void RegisterForDeviceFeedback()
     {
       var panelsWithFeedback = panelConfigs.Where(p => p.GetAllPanelFeedbacks().Any());
@@ -309,11 +248,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
         {
           var deviceKey = panelFeedback.DeviceKey;
-
-          // if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-          // {
-          //   deviceKey = currentScenarioRoomKey;
-          // }
 
           if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
           {
@@ -338,6 +272,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, bool value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       switch (feedbackConfig.PropertyToChange)
       {
         case EPanelProperty.Text:
@@ -376,6 +312,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, string value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.StringFeedbackPropertyValues != null && feedbackConfig.StringFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
         parent.LogWarning("Panel {panelId} feedback string value not found: {value}", panel.PanelId, value);
@@ -410,6 +348,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, int value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.IntFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
         parent.LogWarning("Panel {panelId} feedback integer value not found: {value}", panel.PanelId, value);

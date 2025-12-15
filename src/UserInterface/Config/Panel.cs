@@ -169,9 +169,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         /// This property allows multiple feedback sources to control different aspects of the panel.
         /// Supports both numbered feedback properties (panelFeedback1, panelFeedback2, etc.) and the collection.
         /// </summary>
-        [JsonIgnore]
+        [JsonProperty("panelFeedbacks", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
-        public List<PanelFeedback> PanelFeedbacks { get; set; } = new List<PanelFeedback>();
+        public List<PanelFeedback> PanelFeedbacks { get; set; }
 
         /// <summary>
         /// Page configuration for the panel.
@@ -240,8 +240,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
             if (PanelFeedback5 != null)
                 feedbacks.Add(PanelFeedback5);
 
-            // Add any feedbacks from the collection
-            feedbacks.AddRange(PanelFeedbacks ?? new List<PanelFeedback>());
+            if (PanelFeedbacks != null)
+                feedbacks.AddRange(PanelFeedbacks);
 
             return feedbacks;
         }
