@@ -1957,6 +1957,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				UiExtensions?.PanelsHandler?.Initialize(string.Empty);
 			}
 
+			if (!string.IsNullOrEmpty(_config.DefaultProvisioningMode))
+			{
+				this.LogInformation(
+					"Setting Provisioning Mode to {provisioningMode}",
+					_config.DefaultProvisioningMode
+				);
+
+				SetCodecProvisionMode(_config.DefaultProvisioningMode);
+			}
+
 			// Fire the ready event
 			SetIsReady();
 
