@@ -82,12 +82,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
     {
       this.defaultRoomKey = defaultRoomKey;
 
+      RegisterForDeviceFeedback();
+
       var combiners = DeviceManager.AllDevices.OfType<EssentialsRoomCombiner>().ToList();
 
       if (combiners == null || combiners.Count == 0)
       {
         parent.LogWarning("{uiKey} could not find RoomCombiner", parent.Key);
-        RegisterForDeviceFeedback();
         return;
       }
 
@@ -133,15 +134,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
         return;
       }
-
-      if (currentScenarioRoomKey != NavigatorLockoutHandler.LOCKOUT_SCENARIO_KEY)
-      {
-        UnregisterForDevicefeedback();
-
-        RegisterForDeviceFeedback();
-
-        return;
-      }
     }
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
@@ -155,45 +147,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       extensions.Update(EnqueueCommand);
     }
 
-    private void UnregisterForDevicefeedback()
-    {
-      var panelsWithFeedback = panelConfigs.Where(p => p.PanelFeedback != null);
-
-      if (!panelsWithFeedback.Any())
-      {
-        parent.LogDebug("No panels with feedback to register");
-        return;
-      }
-
-      foreach (var panel in panelsWithFeedback)
-      {
-        var deviceKey = panel.PanelFeedback.DeviceKey;
-
-        if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-        {
-          deviceKey = currentScenarioRoomKey;
-        }
-
-        if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
-        {
-          parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, deviceKey);
-          continue;
-        }
-
-        var feedback = device.Feedbacks[panel.PanelFeedback.FeedbackKey];
-
-        if (feedback == null)
-        {
-          parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panel.PanelFeedback.FeedbackKey, panel.PanelFeedback.DeviceKey);
-          continue;
-        }
-
-        parent.LogDebug("Registering for feedback {feedbackKey}", feedback.Key);
-
-        feedback.OutputChange -= HandleFeedbackOutputChange;
-      }
-    }
-
     void HandleFeedbackOutputChange(object s, FeedbackEventArgs args)
     {
       if (!(s is Feedback feedback))
@@ -202,49 +155,75 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         return;
       }
 
+      parent.LogDebug("Handling feedback output change for feedback {feedbackKey}", feedback.Key);
 
-      // Find all panels that correspond to this feedback AND device combination
-      var matchingPanels = panelConfigs.Where(p =>
-        p.PanelFeedback != null &&
-        p.PanelFeedback.FeedbackKey == feedback.Key).ToList();
+      // Find all panels and their specific feedbacks that correspond to this feedback AND device combination
+      var matchingPanelFeedbacks = new List<(Panel panel, PanelFeedback panelFeedback)>();
 
-      if (!matchingPanels.Any())
+      foreach (var panel in panelConfigs)
       {
-        parent.LogWarning("Received feedback event for {feedbackKey} but could not find corresponding panel",
+        foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
+        {
+          if (panelFeedback.FeedbackKey != feedback.Key)
+          {
+            parent.LogDebug("Panel {panelId} feedback key does not match feedback sender key",
+              panel.PanelId);
+            continue;
+          }
+
+          var feedbackDevice = DeviceManager.GetDeviceForKey(panelFeedback.DeviceKey) as IHasFeedback;
+
+          if ((feedbackDevice?.Feedbacks[panelFeedback.FeedbackKey]) != feedback)
+          {
+            parent.LogDebug("Panel {panelId} feedback device key does not match feedback sender device key",
+              panel.PanelId);
+            continue;
+          }
+
+          parent.LogDebug("Found matching panel {panelId} for feedback {feedbackKey}",
+            panel.PanelId, feedback.Key);
+
+          matchingPanelFeedbacks.Add((panel, panelFeedback));
+        }
+      }
+
+      if (!matchingPanelFeedbacks.Any())
+      {
+        parent.LogWarning("Received feedback event for {feedbackKey} but could not find corresponding panel feedback",
           feedback.Key);
         return;
       }
 
-      // Process feedback for all matching panels (there could be multiple panels using the same feedback)
-      foreach (var panel in matchingPanels)
+      // Process feedback for all matching panel-feedback combinations
+      foreach (var (panel, panelFeedback) in matchingPanelFeedbacks)
       {
-        switch (panel.PanelFeedback.FeedbackEventType)
+        switch (panelFeedback.FeedbackEventType)
         {
           case eFeedbackEventType.TypeBool:
             {
               var value = args.BoolValue;
               parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                panel.PanelId, panelFeedback.FeedbackKey, value);
 
-              UpdatePanelProperty(panel, panel.PanelFeedback, value);
+              UpdatePanelProperty(panel, panelFeedback, value);
               break;
             }
           case eFeedbackEventType.TypeString:
             {
               var value = args.StringValue;
               parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                panel.PanelId, panelFeedback.FeedbackKey, value);
 
-              UpdatePanelProperty(panel, panel.PanelFeedback, value);
+              UpdatePanelProperty(panel, panelFeedback, value);
               break;
             }
           case eFeedbackEventType.TypeInt:
             {
               var value = args.IntValue;
               parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
-                panel.PanelId, panel.PanelFeedback.FeedbackKey, value);
+                panel.PanelId, panelFeedback.FeedbackKey, value);
 
-              UpdatePanelProperty(panel, panel.PanelFeedback, value);
+              UpdatePanelProperty(panel, panelFeedback, value);
               break;
             }
         }
@@ -254,22 +233,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       feedbackTimer.Start();
     }
 
-    /// <summary>
-    /// Gets the effective device key, handling room combiner scenario substitution.
-    /// </summary>
-    /// <param name="configuredDeviceKey">The device key from the panel configuration.</param>
-    /// <returns>The effective device key to use for device lookup.</returns>
-    private string GetEffectiveDeviceKey(string configuredDeviceKey)
-    {
-      if (configuredDeviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-      {
-        return currentScenarioRoomKey;
-      }
-      return configuredDeviceKey;
-    }
     private void RegisterForDeviceFeedback()
     {
-      var panelsWithFeedback = panelConfigs.Where(p => p.PanelFeedback != null);
+      var panelsWithFeedback = panelConfigs.Where(p => p.GetAllPanelFeedbacks().Any());
 
       if (!panelsWithFeedback.Any())
       {
@@ -279,34 +245,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       foreach (var panel in panelsWithFeedback)
       {
-        var deviceKey = panel.PanelFeedback.DeviceKey;
-
-        if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
+        foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
         {
-          deviceKey = currentScenarioRoomKey;
+          var deviceKey = panelFeedback.DeviceKey;
+
+          if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
+          {
+            parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, deviceKey);
+            continue;
+          }
+
+          var feedback = device.Feedbacks[panelFeedback.FeedbackKey];
+
+          if (feedback == null)
+          {
+            parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panelFeedback.FeedbackKey, panelFeedback.DeviceKey);
+            continue;
+          }
+
+          parent.LogDebug("Registering for feedback {feedbackKey} for panel {panelId}", feedback.Key, panel.PanelId);
+
+          feedback.OutputChange += HandleFeedbackOutputChange;
         }
-        if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
-        {
-          parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, deviceKey);
-          continue;
-        }
-
-        var feedback = device.Feedbacks[panel.PanelFeedback.FeedbackKey];
-
-        if (feedback == null)
-        {
-          parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}", panel.PanelId, panel.PanelFeedback.FeedbackKey, panel.PanelFeedback.DeviceKey);
-          continue;
-        }
-
-        parent.LogDebug("Registering for feedback {feedbackKey}", feedback.Key);
-
-        feedback.OutputChange += HandleFeedbackOutputChange;
       }
     }
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, bool value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       switch (feedbackConfig.PropertyToChange)
       {
         case EPanelProperty.Text:
@@ -345,6 +312,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, string value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on string feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.StringFeedbackPropertyValues != null && feedbackConfig.StringFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
         parent.LogWarning("Panel {panelId} feedback string value not found: {value}", panel.PanelId, value);
@@ -379,6 +348,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, int value)
     {
+      parent.LogDebug("Updating panel {panelId} property {property} based on integer feedback value: {value}",
+        panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.IntFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
         parent.LogWarning("Panel {panelId} feedback integer value not found: {value}", panel.PanelId, value);
@@ -446,55 +417,57 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         return false;
       }
 
-      if (panel.PanelFeedback == null)
+      var panelFeedbacks = panel.GetAllPanelFeedbacks().ToList();
+      if (!panelFeedbacks.Any())
       {
-        parent.LogWarning("Panel {panelId} has no feedback configuration", panelId);
+        parent.LogWarning("Panel {panelId} has no feedback configurations", panelId);
         return false;
       }
 
-      var deviceKey = panel.PanelFeedback.DeviceKey;
+      bool allSuccessful = true;
 
-      // Handle room combiner scenario key substitution
-      if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
+      foreach (var panelFeedback in panelFeedbacks)
       {
-        deviceKey = currentScenarioRoomKey;
-      }
+        var deviceKey = panelFeedback.DeviceKey;
 
-      if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
-      {
-        parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panelId, deviceKey);
-        return false;
-      }
-
-      var feedback = device.Feedbacks[panel.PanelFeedback.FeedbackKey];
-      if (feedback == null)
-      {
-        parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}",
-          panelId, panel.PanelFeedback.FeedbackKey, deviceKey);
-        return false;
-      }
-
-      try
-      {
-        if (subscribe)
+        if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
         {
-          parent.LogDebug("Subscribing to feedback {feedbackKey} for panel {panelId}", feedback.Key, panelId);
-          feedback.OutputChange += HandleFeedbackOutputChange;
-        }
-        else
-        {
-          parent.LogDebug("Unsubscribing from feedback {feedbackKey} for panel {panelId}", feedback.Key, panelId);
-          feedback.OutputChange -= HandleFeedbackOutputChange;
+          parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panelId, deviceKey);
+          allSuccessful = false;
+          continue;
         }
 
-        return true;
+        var feedback = device.Feedbacks[panelFeedback.FeedbackKey];
+        if (feedback == null)
+        {
+          parent.LogError("Panel {panelId} has feedback but feedback {feedbackKey} not found on device {deviceKey}",
+            panelId, panelFeedback.FeedbackKey, deviceKey);
+          allSuccessful = false;
+          continue;
+        }
+
+        try
+        {
+          if (subscribe)
+          {
+            parent.LogDebug("Subscribing to feedback {feedbackKey} for panel {panelId}", feedback.Key, panelId);
+            feedback.OutputChange += HandleFeedbackOutputChange;
+          }
+          else
+          {
+            parent.LogDebug("Unsubscribing from feedback {feedbackKey} for panel {panelId}", feedback.Key, panelId);
+            feedback.OutputChange -= HandleFeedbackOutputChange;
+          }
+        }
+        catch (Exception ex)
+        {
+          parent.LogError("Error {action} feedback {feedbackKey} for panel {panelId}: {error}",
+            subscribe ? "subscribing to" : "unsubscribing from", panelFeedback.FeedbackKey, panelId, ex.Message);
+          allSuccessful = false;
+        }
       }
-      catch (Exception ex)
-      {
-        parent.LogError("Error {action} feedback for panel {panelId}: {error}",
-          subscribe ? "subscribing to" : "unsubscribing from", panelId, ex.Message);
-        return false;
-      }
+
+      return allSuccessful;
     }
 
     /// <summary>

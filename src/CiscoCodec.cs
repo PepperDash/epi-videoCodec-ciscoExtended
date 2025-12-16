@@ -1,5 +1,4 @@
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -7,11 +6,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Crypto.Prng;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Core.Intersystem.Tokens;
@@ -33,7 +30,6 @@ using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
-using Serilog.Events;
 using Feedback = PepperDash.Essentials.Core.Feedback;
 
 
@@ -67,7 +63,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			IRoutingSinkWithSwitching,
+			IRoutingSinkWithSwitchingWithInputPort,
 			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,
@@ -88,6 +84,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IEmergencyOSD,
 			IHasWebView
 	{
+		private RoutingInputPort currentInputPort;
+
+		public RoutingInputPort CurrentInputPort
+		{
+			get
+			{
+				return currentInputPort;
+			}
+
+			protected set
+			{
+				if (currentInputPort == value) return;
+
+				currentInputPort = value;
+
+				InputChanged?.Invoke(this, currentInputPort);
+			}
+		}
+		public event InputChangedEventHandler InputChanged;
 		public event EventHandler<AvailableLayoutsChangedEventArgs> AvailableLayoutsChanged;
 		public event EventHandler<CurrentLayoutChangedEventArgs> CurrentLayoutChanged;
 		private event EventHandler<MinuteChangedEventArgs> MinuteChanged;
@@ -460,6 +475,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		public StringFeedback ProvisioningRoomTypeFeedback { get; private set; }
+
+		private string currentProvisioningRoomType;
+
+		public string CurrentProvisioningRoomType
+		{
+			get { return currentProvisioningRoomType; }
+			private set
+			{
+				if (currentProvisioningRoomType == value) return;
+
+				currentProvisioningRoomType = value;
+
+				ProvisioningRoomTypeFeedback.FireUpdate();
+			}
+		}
+
 		private Func<JObject, string, JToken> JTokenValidInObject = CheckJTokenInObject;
 
 		private Func<JToken, string, JToken> JTokenValidInToken = CheckJTokenInToken;
@@ -752,6 +784,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CallerIdNameFeedback = new StringFeedback(CallerIdNameFeedbackFunc);
 			CallerIdNumberFeedback = new StringFeedback(CallerIdNumberFeedbackFunc);
 
+			ProvisioningRoomTypeFeedback = new StringFeedback("provisioningRoomType",
+				() => CurrentProvisioningRoomType
+			);
+
 			//PresentationActiveFeedback = new BoolFeedback(PresentationActiveFeedbackFunc);
 
 
@@ -800,11 +836,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			HalfWakeModeIsOnFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.HalfWake
-            );
+						);
 
 			EnteringStandbyModeFeedback = new BoolFeedback(
 				() => _standbyState == StandbyState.EnteringStandby
-            );
+						);
 
 			PresentationViewMaximizedFeedback = new BoolFeedback(
 				() => _currentPresentationView == "Maximized"
@@ -912,55 +948,60 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			//Set Feedback Actions
 			SetFeedbackActions();
 
-			//CodecOsdIn = new RoutingInputPort(
-			//	RoutingPortNames.CodecOsd,
-			//	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-			//	eRoutingPortConnectionType.Hdmi,
-			//	new Action(StopSharing),
-			//	this
-			//);
 			HdmiIn1 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn1,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(SelectPresentationSource1),
-	this
-);
+				RoutingPortNames.HdmiIn1,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				1,
+				this
+			)
+			{ FeedbackMatchObject = 1 };
+
 			HdmiIn2 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn2,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(SelectPresentationSource2),
-	this
-);
+					RoutingPortNames.HdmiIn2,
+					eRoutingSignalType.Audio | eRoutingSignalType.Video,
+					eRoutingPortConnectionType.Hdmi,
+					2,
+					this
+				)
+			{ FeedbackMatchObject = 2 };
+
 			HdmiIn3 = new RoutingInputPort(
 				RoutingPortNames.HdmiIn3,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
 				eRoutingPortConnectionType.Hdmi,
-				new Action(() => SelectPresentationSource(3)),
+				3,
 				this
-			);
+			)
+			{ FeedbackMatchObject = 3 };
+
 			HdmiIn4 = new RoutingInputPort(
-	RoutingPortNames.HdmiIn4,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	new Action(() => SelectPresentationSource(4)),
-	this
-);
+				RoutingPortNames.HdmiIn4,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				4,
+				this
+			)
+			{ FeedbackMatchObject = 4 };
+
 			HdmiIn5 = new RoutingInputPort(
-					RoutingPortNames.HdmiIn5,
-					eRoutingSignalType.Audio | eRoutingSignalType.Video,
-					eRoutingPortConnectionType.Hdmi,
-					new Action(() => SelectPresentationSource(5)),
-					this
-			);
+				RoutingPortNames.HdmiIn5,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				5,
+				this
+			)
+			{ FeedbackMatchObject = 5 };
+
 			SdiInput = new RoutingInputPort(
 				RoutingPortNames.SdiIn,
 				eRoutingSignalType.Video,
 				eRoutingPortConnectionType.Sdi,
-				new Action(() => SelectPresentationSource(6)),
+				6,
 				this
-				);
+			)
+			{ FeedbackMatchObject = 6 };
+
 			HdmiOut1 = new RoutingOutputPort(
 				RoutingPortNames.HdmiOut1,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -968,6 +1009,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				null,
 				this
 			);
+
 			HdmiOut2 = new RoutingOutputPort(
 				RoutingPortNames.HdmiOut2,
 				eRoutingSignalType.Audio | eRoutingSignalType.Video,
@@ -975,13 +1017,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				null,
 				this
 			);
+
 			HdmiOut3 = new RoutingOutputPort(
-	RoutingPortNames.HdmiOut3,
-	eRoutingSignalType.Audio | eRoutingSignalType.Video,
-	eRoutingPortConnectionType.Hdmi,
-	null,
-	this
-);
+				RoutingPortNames.HdmiOut3,
+				eRoutingSignalType.Audio | eRoutingSignalType.Video,
+				eRoutingPortConnectionType.Hdmi,
+				null,
+				this
+			);
 
 			//InputPorts.Add(CodecOsdIn);
 			InputPorts.Add(HdmiIn1);
@@ -1719,10 +1762,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/DoNotDisturb"
-								+ Delimiter
-								+ prefix
-								+ "/Status/Cameras/Camera"
-								+ Delimiter
+				+ Delimiter
+				+ prefix
+				+ "/Status/Cameras/Camera"
+				+ Delimiter
 				+ prefix
 				+ "/Status/Cameras/SpeakerTrack"
 				+ Delimiter
@@ -1766,6 +1809,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Status/Video/Input/MainVideoMute"
 				+ Delimiter
 				+ prefix
+				+ "/Status/Video/Input/MainVideoSource"
+				+ Delimiter
+				+ prefix
 				+ "/Bookings"
 				+ Delimiter
 				+ prefix
@@ -1773,10 +1819,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Event/CameraPresetListUpdated"
-								+ Delimiter
-								+ prefix
-								+ "/Event/Peripherals"
-								+ Delimiter
+				+ Delimiter
+				+ prefix
+				+ "/Event/Peripherals"
+				+ Delimiter
 				+ prefix
 				+ "/Event/Conference/Call/AuthenticationResponse"
 				+ Delimiter
@@ -1792,7 +1838,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
 				+ Delimiter
-                + prefix
+				+ prefix
+				+ "/Status/Provisioning/RoomType"
+				+ Delimiter
+				+ prefix
 				+ "/Event/CallDisconnect"
 				+ Delimiter;
 			// Keep CallDisconnect last to detect when feedback registration completes correctly
@@ -2021,9 +2070,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						if (!SyncState.InitialStatusMessageWasReceived)
 						{
-							SendText("xStatus Cameras");
-							SendText("xStatus SIP");
-							SendText("xStatus Call");
+							// SendText("xStatus Cameras");
+							// SendText("xStatus SIP");
+							// SendText("xStatus Call");						
 							SendText("xStatus");
 						}
 					}
@@ -2407,20 +2456,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 			CodecPollLayouts();
+
+			var inputPort = InputPorts.FirstOrDefault(p => (int)p.FeedbackMatchObject == source);
+
+			if (inputPort == null)
+			{
+				this.LogWarning("Unable to find input port for {input}", source);
+
+				return;
+			}
+
+			CurrentInputPort = inputPort;
 		}
 
 		private void SetPresentationSource(string source)
 		{
-			_presentationSource = ushort.Parse(source);
-
-			PresentationSourceFeedback.FireUpdate();
-			ContentInputActiveFeedback.FireUpdate();
-			if (_presentationSource == 0)
+			if (!int.TryParse(source, out var input))
 			{
-				ClearLayouts();
+				this.LogError("Unable to parse {source} as integer", source);
 				return;
 			}
-			CodecPollLayouts();
+
+			SetPresentationSource(input);
 		}
 
 		private void SetPresentationLocalOnly(bool state)
@@ -2796,14 +2853,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-
 				if (!(callToken is JArray callArray))
 					return;
+
 				foreach (var item in callArray.Cast<JObject>().Where(item => item != null))
 				{
 					var callIdToken = CheckJTokenInObject(item, "id");
+
 					if (callIdToken == null)
 						continue;
+
 					CodecActiveCallItem callObject = null;
 
 					var callId = callIdToken.ToString();
@@ -2814,19 +2873,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					if (!callGhost)
 					{
 						callObject = ParseCallObject(item);
+
 						if (callObject == null)
+						{
+							this.LogError("callObject parsing failed: {object}", callObject);
 							continue;
+						}
 					}
 
 					var activeCall = ActiveCalls.FirstOrDefault(o => o.Id == callId);
 
+
 					if (activeCall != null)
 					{
+						this.LogDebug("Processing active call with id {id}", activeCall.Id);
+
 						if (callGhost)
+						{
 							ActiveCalls.Remove(activeCall);
+						}
+
 						if (callObject != null)
 							if (!MergeCallData(activeCall, callObject))
 								continue;
+
 						PrintCallItem(activeCall);
 
 						SetSelfViewMode();
@@ -2838,7 +2908,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						);
 
 						OnCallStatusChange(activeCall);
+
 						ListCalls();
+
 						CodecPollLayouts();
 
 						continue;
@@ -2846,6 +2918,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					if (callGhost)
 						continue;
+
 					ActiveCalls.Add(callObject);
 
 					SetSelfViewMode();
@@ -2854,8 +2927,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					this.LogDebug(
 							"On Call ID {id} Status Change - Status == {status}",
-							activeCall.Id,
-							activeCall.Status
+							activeCall?.Id,
+							activeCall?.Status
 						);
 
 					OnCallStatusChange(callObject);
@@ -2865,8 +2938,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParseCallArrayToken: {message}", ex.Message);
-				this.LogVerbose(ex, "Exception");
+				this.LogError("Exception in ParseCallArrayToken - {token}: {message}", callToken, ex.Message);
+				this.LogDebug(ex, "Stack Trace: ");
 			}
 		}
 
@@ -3468,6 +3541,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
+			var mainSourceToken = statusToken.SelectToken("Video.Input.MainVideoSource");
 			var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
 			var systemUnitToken = statusToken.SelectToken("SystemUnit");
 			var cameraToken = statusToken.SelectToken("Cameras.Camera");
@@ -3479,8 +3553,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
+			var provisioningToken = statusToken.SelectToken("Provisioning");
 
 			var serializedToken = statusToken.ToString();
+
 			if (errorToken != null)
 			{
 				UiExtensionsHandler?.ParseErrorStatus(statusToken);
@@ -3508,30 +3584,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						case "standby":
 							_standbyState = StandbyState.Standby;
 							this.LogInformation("Standby State = Standby");
-                            break;
+							break;
 						case "enteringstandby":
 							_standbyState = StandbyState.EnteringStandby;
 							this.LogInformation("Standby State = EnteringStandby");
-                            break;
+							break;
 						case "off":
 							_standbyState = StandbyState.Off;
 							this.LogInformation("Standby State = Off");
-                            break;
+							break;
 						case "halfwake":
-                            _standbyState = StandbyState.HalfWake;
+							_standbyState = StandbyState.HalfWake;
 							this.LogInformation("Standby State = HalfWake");
-                            break;
+							break;
 						default:
 							_standbyState = StandbyState.Unknown;
 							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
 							break;
-                    }
+					}
 
 					StandbyIsOnFeedback.FireUpdate();
 					EnteringStandbyModeFeedback.FireUpdate();
 					HalfWakeModeIsOnFeedback.FireUpdate();
-
-                    return;
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -3574,6 +3648,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
 						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+						listWasUpdated = true;
 					}
 					else
 					{
@@ -3586,8 +3661,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 								MissingMemberHandling = MissingMemberHandling.Ignore,
 							});
 					}
-
-					listWasUpdated = true;
 				}
 
 				if (listWasUpdated)
@@ -3654,6 +3727,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
+			if (provisioningToken != null)
+			{
+				ParseProvisioningToken(provisioningToken);
+			}
+			if (mainSourceToken != null)
+			{
+				ParseMainSourceToken(mainSourceToken);
+			}
 
 			// we don't want to do this... this will expand lists infinitely
 			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
@@ -3674,6 +3755,50 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendText(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+		}
+
+		private void ParseMainSourceToken(JToken mainSourceToken)
+		{
+			if (mainSourceToken == null)
+				return;
+
+			var mainSourceValueToken = mainSourceToken.SelectToken("Value");
+			if (mainSourceValueToken == null)
+				return;
+
+			if (!int.TryParse(mainSourceValueToken.ToString(), out int mainSourceValue))
+			{
+				this.LogDebug("Main Source Value is not an integer: {value}", mainSourceValueToken.ToString());
+				return;
+			}
+
+			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
+
+			if (camera != null)
+			{
+				SelectedCamera = camera;
+
+				this.LogDebug("Current Main Video Source Camera set to: {cameraId}", camera.CameraId);
+			}
+			else
+			{
+				this.LogDebug("No Camera found for Main Video Source ID: {sourceId}", mainSourceValue);
+			}
+		}
+
+		private void ParseProvisioningToken(JToken provisioningToken)
+		{
+			var provisioningStatusToken = provisioningToken.SelectToken("RoomType.Value");
+
+			if (provisioningStatusToken == null)
+				return;
+
+			var provisioningStatus = provisioningStatusToken.ToString();
+
+			if (string.IsNullOrEmpty(provisioningStatus))
+				return;
+
+			CurrentProvisioningRoomType = provisioningStatus;
 		}
 
 		private void ParseSelfviewToken(JToken selfviewToken)
@@ -4138,13 +4263,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
 				this.LogVerbose("Response JSON: {response}", response);
-				this.LogVerbose(ex, "Exception");
+				this.LogVerbose(ex, "Stack Trace: ");
 			}
 			catch (Exception ex)
 			{
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
 				this.LogVerbose("Response JSON: {response}", response);
-				this.LogVerbose(ex, "Exception");
+				this.LogVerbose(ex, "Stack Trace: ");
 			}
 		}
 
@@ -4281,9 +4406,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void ExecuteSwitch(object selector)
 		{
-			if (selector as Action == null)
+			if (!(selector is int input))
+			{
 				return;
-			(selector as Action)();
+			}
+
+			SelectPresentationSource(input);
+
 			_presentationSourceKey = selector.ToString();
 		}
 
@@ -4294,7 +4423,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		)
 		{
 			ExecuteSwitch(inputSelector);
-			_presentationSourceKey = inputSelector.ToString();
 		}
 
 		public string GetCallId()
@@ -5884,6 +6012,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 		}
 
+		public void SetCodecProvisionMode(string mode)
+		{
+			this.LogDebug("Setting the codec provision mode to {mode}", mode);
+
+			EnqueueCommand($"xCommand Provisioning RoomType Activate Name: {mode}");
+		}
+
 		#region ICiscoCodecCameraConfig Members
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
@@ -5938,9 +6073,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelectCamera(string key)
 		{
-			var camera = Cameras.FirstOrDefault(c =>
-				c.Key.IndexOf(key, StringComparison.OrdinalIgnoreCase) > -1
+			if (Cameras == null || Cameras.Count == 0)
+			{
+				this.LogWarning("No cameras are available to select.");
+				return;
+			}
+
+			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c =>
+				c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
 			);
+
 			if (camera != null)
 			{
 				this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
@@ -5949,15 +6091,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			else
 				this.LogDebug("Unable to select camera with key: '{key}'", key);
 
-			if (camera is CiscoCamera ciscoCam)
-			{
-				EnqueueCommand(
-					string.Format(
-						"xCommand Video Input SetMainVideoSource SourceId: {0}",
-						ciscoCam.SourceId
-					)
-				);
-			}
+			EnqueueCommand(
+				string.Format(
+					"xCommand Video Input SetMainVideoSource SourceId: {0}",
+					camera.SourceId
+				)
+			);
 		}
 
 		public CameraBase FarEndCamera { get; private set; }
@@ -6296,7 +6435,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			var navigator = DeviceManager.AllDevices.OfType<NavigatorController>().Where(n => n.Parent.Key == Key).FirstOrDefault();
+			var navigator = DeviceManager.AllDevices.OfType<NavigatorController>().FirstOrDefault(n => n.Parent.Key == Key);
 
 			if (navigator == null)
 			{
@@ -6331,7 +6470,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void HideEmergencyMessage()
 		{
-			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
+			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{Delimiter}");
 		}
+	}
+
+	public class CodecProvisionMode
+	{
+		public const string Briefing = "Briefing";
+		public const string Classroom = "Classroom";
+		public const string Standard = "Standard";
+		public const string PresenterAndAudience = "PresenterAndAudience";
 	}
 }

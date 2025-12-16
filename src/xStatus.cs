@@ -285,11 +285,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 get
                 {
-                    if (!String.IsNullOrEmpty(CameraIdModern))
+                    if (!string.IsNullOrEmpty(CameraIdModern))
                     {
                         return CameraIdModern;
                     }
-                    if (!String.IsNullOrEmpty(CameraIdLegacy))
+                    if (!string.IsNullOrEmpty(CameraIdLegacy))
                     {
                         return CameraIdLegacy;
                     }
@@ -1654,7 +1654,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 get { return _value; }
                 set
                 {
-                    if (String.IsNullOrEmpty(value)) return;
+                    if (string.IsNullOrEmpty(value)) return;
                     _value = value;
                     OnValueChanged();
                 }
@@ -1710,7 +1710,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 get
                 {
-                    if (String.IsNullOrEmpty(_value)) return false;
+                    if (string.IsNullOrEmpty(_value)) return false;
 
                     return _value.ToLower() == "true";
                 }
@@ -1721,7 +1721,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 get { return _value; }
                 set
                 {
-                    if (String.IsNullOrEmpty(value)) return;
+                    if (string.IsNullOrEmpty(value)) return;
                     _value = value;
                     OnValueChanged();
                 }
@@ -1768,7 +1768,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 Firmware = new Firmware();
                 DisplayName.ValueChangedAction += () =>
                 {
-                    if (String.IsNullOrEmpty(DisplayName.Value)) return;
+                    if (string.IsNullOrEmpty(DisplayName.Value)) return;
                     var displayName = DisplayName.Value;
                     var splitSoftware = displayName.Split(' ');
                     if (splitSoftware.Length < 2) return;
@@ -2241,7 +2241,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 get
                 {
-                    return new TimeSpan(0, 0, Int32.Parse(_value));
+                    return new TimeSpan(0, 0, int.Parse(_value));
                 }
             }
         }
@@ -2515,7 +2515,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 try
                 {
-                    var preset = new CodecRoomPreset(UInt16.Parse(RoomPresetId), Description.Value, Defined.BoolValue, true);
+                    var preset = new CodecRoomPreset(ushort.Parse(RoomPresetId), Description.Value, Defined.BoolValue, true);
 
                     Debug.LogVerbose("Preset ID {presetId} Converted from Cisco Codec Preset to Essentials Preset", RoomPresetId);
 
