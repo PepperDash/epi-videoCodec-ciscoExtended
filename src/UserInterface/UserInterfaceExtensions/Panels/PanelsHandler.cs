@@ -312,7 +312,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, string value)
     {
-      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+      parent.LogDebug("Updating panel {panelId} property {property} based on string feedback value: {value}",
         panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.StringFeedbackPropertyValues != null && feedbackConfig.StringFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
@@ -348,7 +348,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, int value)
     {
-      parent.LogDebug("Updating panel {panelId} property {property} based on boolean feedback value: {value}",
+      parent.LogDebug("Updating panel {panelId} property {property} based on integer feedback value: {value}",
         panel.PanelId, feedbackConfig.PropertyToChange, value);
       if (!(feedbackConfig.IntFeedbackPropertyValues != null && feedbackConfig.IntFeedbackPropertyValues.TryGetValue(value, out var propertyValue)))
       {
@@ -429,12 +429,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       foreach (var panelFeedback in panelFeedbacks)
       {
         var deviceKey = panelFeedback.DeviceKey;
-
-        // Handle room combiner scenario key substitution
-        if (deviceKey == defaultRoomKey && !string.IsNullOrEmpty(currentScenarioRoomKey) && currentScenarioRoomKey != defaultRoomKey)
-        {
-          deviceKey = currentScenarioRoomKey;
-        }
 
         if (!(DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback device))
         {

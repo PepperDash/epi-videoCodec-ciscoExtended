@@ -40,7 +40,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         [XmlIgnore]
         public PanelsHandler PanelsHandler { get; set; }
 
-        private static Panel classroomPanel = new Panel
+        private static readonly Panel classroomPanel = new Panel
         {
             PanelId = "Classroom",
             Origin = "local",

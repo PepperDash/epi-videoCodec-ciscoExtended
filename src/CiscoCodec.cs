@@ -1,23 +1,18 @@
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
-using Crestron.SimplSharpPro;
 using Crestron.SimplSharpPro.DeviceSupport;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Crypto.Prng;
 using PepperDash.Core;
 using PepperDash.Core.Intersystem;
 using PepperDash.Core.Intersystem.Tokens;
 using PepperDash.Core.Logging;
-using PepperDash.Essentials.AppServer.Messengers;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Bridges;
 using PepperDash.Essentials.Core.Config;
@@ -996,7 +991,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				5,
 				this
 			)
-			{ FeedbackMatchObject = 5 }; ;
+			{ FeedbackMatchObject = 5 };
 
 			SdiInput = new RoutingInputPort(
 				RoutingPortNames.SdiIn,
@@ -1005,7 +1000,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				6,
 				this
 			)
-			{ FeedbackMatchObject = 6 }; ;
+			{ FeedbackMatchObject = 6 };
 
 			HdmiOut1 = new RoutingOutputPort(
 				RoutingPortNames.HdmiOut1,
@@ -2858,7 +2853,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-
 				if (!(callToken is JArray callArray))
 					return;
 

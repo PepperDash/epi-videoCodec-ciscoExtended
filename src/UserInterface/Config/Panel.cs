@@ -222,28 +222,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         /// <returns>Collection of all non-null panel feedback configurations.</returns>
         public List<PanelFeedback> GetAllPanelFeedbacks()
         {
-            var feedbacks = new List<PanelFeedback>();
-
+            var feedbackSet = new HashSet<PanelFeedback>();
             // Add legacy single feedback for backward compatibility
             if (PanelFeedback != null)
-                feedbacks.Add(PanelFeedback);
+                feedbackSet.Add(PanelFeedback);
 
             // Add numbered feedbacks
             if (PanelFeedback1 != null)
-                feedbacks.Add(PanelFeedback1);
+                feedbackSet.Add(PanelFeedback1);
             if (PanelFeedback2 != null)
-                feedbacks.Add(PanelFeedback2);
+                feedbackSet.Add(PanelFeedback2);
             if (PanelFeedback3 != null)
-                feedbacks.Add(PanelFeedback3);
+                feedbackSet.Add(PanelFeedback3);
             if (PanelFeedback4 != null)
-                feedbacks.Add(PanelFeedback4);
+                feedbackSet.Add(PanelFeedback4);
             if (PanelFeedback5 != null)
-                feedbacks.Add(PanelFeedback5);
+                feedbackSet.Add(PanelFeedback5);
 
             if (PanelFeedbacks != null)
-                feedbacks.AddRange(PanelFeedbacks);
-
-            return feedbacks;
+                foreach (var feedback in PanelFeedbacks)
+                    if (feedback != null)
+                        feedbackSet.Add(feedback);
+            return feedbackSet.ToList();
         }
     }
 
