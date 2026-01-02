@@ -136,6 +136,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("emergency")]
         public Emergency Emergency { get; set; }
 
+        [JsonProperty("defaultProvisioningMode", NullValueHandling = NullValueHandling.Ignore)]
+        public string DefaultProvisioningMode { get; set; }
+
         public CiscoCodecConfig()
         {
             CameraInfo = new List<CameraInfo>();
