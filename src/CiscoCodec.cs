@@ -1876,7 +1876,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				);
 			}
 
-			// Check for camera config info 
+			// Check for camera config info
 			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
 			{
 				SetUpCamerasFromConfig(_config.CameraInfo);
@@ -2082,7 +2082,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						{
 							// SendText("xStatus Cameras");
 							// SendText("xStatus SIP");
-							// SendText("xStatus Call");						
+							// SendText("xStatus Call");
 							SendText("xStatus");
 						}
 					}
@@ -2120,19 +2120,34 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ProcessFeedbackList(string data)
-		{
-			if (
-				data.Split('\n').Count() >= BuildFeedbackRegistrationExpression().Split('\n').Count()
-			)
+        private DateTime _lastFeedbackFail = DateTime.MinValue;
+
+        private void ProcessFeedbackList(string data)
+        {
+			this.LogDebug("Checking feedbacks... last feedback unregistration: {lastFeedbackFail}", _lastFeedbackFail);
+            this.LogVerbose("Feedback List:\r\n{data}", data);
+
+            if (
+                data.Split('\n').Count()
+                >= BuildFeedbackRegistrationExpression().Split('\n').Count()
+            )
+                return;
+
+            var now               = DateTime.Now;
+            var timeSinceLastFail = now - _lastFeedbackFail;
+
+            if (timeSinceLastFail < TimeSpan.FromSeconds(30))
+            {
+				this.LogWarning("Skipping feedback re-registration as we recently failed to register feedbacks: {lastFailTime}", _lastFeedbackFail);
 				return;
+            }
 
-			this.LogWarning("Codec Feedback Registrations Lost - Registering Feedbacks");
+            _lastFeedbackFail = now;
+            this.LogWarning("Codec Feedback Registrations Lost - Registering Feedbacks");
+            EnqueueCommand(BuildFeedbackRegistrationExpression());
+        }
 
-			EnqueueCommand(BuildFeedbackRegistrationExpression());
-		}
-
-		public void EnqueueCommand(string command)
+        public void EnqueueCommand(string command)
 		{
 			SyncState.AddCommandToQueue(command);
 		}
