@@ -46,6 +46,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
 		}
 
+		public void AddCommandToQueue(string command)
+		{
+			EnqueueCommand(command);
+		}
+
 		public void ParseStatus(List<WebView.WebView> webViews)
 		{
 			if (webViews == null || webViews.Count > 1)
