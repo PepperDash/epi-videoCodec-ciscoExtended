@@ -313,6 +313,7 @@ Sliders
         "group": "videoCodecTouchpanel",
         "properties": {
           "defaultRoomKey": "room",
+          "macAddress": "00:01:02:03:04:05",
           "useDirectServer": true,
           "videoCodecKey": "Codec-1",
           "enableLockoutPoll": true,
@@ -333,7 +334,6 @@ Sliders
                 "location": "ControlPanel",
                 "icon": "Sliders",
                 "name": "Volume",
-                "macAddress": "00:01:02:03:04:05",
                 "mobileControlPath": "/audio",
                 "uiWebViewDisplays": [
                   {
