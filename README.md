@@ -314,6 +314,7 @@ Sliders
         "properties": {
           "defaultRoomKey": "room",
           "macAddress": "00:01:02:03:04:05",
+          "usePersistentWebAppForLockout": true,
           "useDirectServer": true,
           "videoCodecKey": "Codec-1",
           "enableLockoutPoll": true,

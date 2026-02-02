@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         //public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
 
-        private NavigatorLockoutHandler router;
+        private INavigatorLockoutHandler router;
 
         public NavigatorController(DeviceConfig config) : base(config)
         {
@@ -124,7 +124,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     SetAppUrl(this.bridge.AppUrl);
                 };
 
-                router = new NavigatorLockoutHandler(this, props);
+                // Initialize Lockout Handler
+                if(props.UsePersistentWebAppForLockout)
+                {
+                    router = new NavigatorLockoutHandlerWithPWA(this, props);
+                }
+                else
+                {
+                    router = new NavigatorLockoutHandlerWithModal(this, props);
+                }
 
                 router.Activate(this);
             }

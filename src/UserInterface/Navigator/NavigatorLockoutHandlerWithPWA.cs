@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Timers;
 using Crestron.SimplSharp.Net;
 using PepperDash.Core;
@@ -15,13 +16,19 @@ using Serilog.Events;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
+    /// <summary>
+    /// Peripheral Modes for Touch Panels
+    /// </summary>
     public enum ePeripheralMode
     {
         Controller,
         PersistentWebApp
     }
 
-    internal class NavigatorLockoutHandler : IKeyed
+    /// <summary>
+    /// Handles Lockout Functionality with Persistent Web App for Navigator Touch Panels
+    /// </summary>
+    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHandler
     {
         public const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
@@ -51,7 +58,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             Mode = "Modal"
         };
 
-        internal NavigatorLockoutHandler(
+        internal NavigatorLockoutHandlerWithPWA(
             NavigatorController ui,
             NavigatorConfig props
         )
@@ -65,7 +72,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             Key = ui.Key + "-NavigatorLockout";
         }
 
-        internal void Activate(NavigatorController parent)
+        public void Activate(NavigatorController parent)
         {
             //set private props after activation so everything is instantiated
             if (parent == null)
@@ -80,8 +87,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             combinerHandler = parent.RoomCombinerHandler;
 
-            // Ensure touch panel is in controller mode on activation
-            SetPeripheralMode(ePeripheralMode.Controller);
 
 
             if (extensionsHandler == null)
@@ -90,9 +95,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
+            if(mcTpController.Parent.IsReady)
+            {
+                SetUpCodecCommands();
+            }
+
+            SetupCustomLockouts();
+
             mcTpController.Parent.IsReadyChange += (s, a) =>
             {
                 if (!mcTpController.Parent.IsReady) return;
+
+                SetUpCodecCommands();
+
+                Thread.Sleep(1000);
 
                 //send lockout if in lockout state
                 HandleRoomCombineScenarioChanged();
@@ -108,14 +124,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 VideoCodecUiExtensionsClickedMcEventHandler;
 
             defaultRoomKey = mcTpController?.DefaultRoomKey;
+        }
 
-            SetupCustomLockouts();
+        private void SetUpCodecCommands()
+        {
+                            // Ensure touch panel is in controller mode on activation
+                SetPeripheralMode(ePeripheralMode.Controller);
 
 
-            // Possibly make this configurable later
-            SetLedControlMode(true);
+                // Possibly make this configurable later
+                SetLedControlMode(true);
 
-            SetPeripheralsProfileForTouchpanles();
+                SetPeripheralsProfileForTouchpanles();
         }
 
         private void SetLedControlMode(bool mode)
@@ -184,6 +204,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 {
                     this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
                     continue;
+                }
+                
+                // Check initial feedback value
+                if(feedback.BoolValue == true)
+                {
+                    this.LogDebug("Initial feedback value is true for device key: {DeviceKey}, feedback key: {FeedbackKey}", deviceKey, lockout.FeedbackKey);
+                    HandleLockout(lockout, new FeedbackEventArgs(true));
                 }
 
                 void HandleLockoutFeedbackChange(object s, FeedbackEventArgs a)

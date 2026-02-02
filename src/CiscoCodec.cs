@@ -1266,7 +1266,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			const int offset = maxDigitals + maxStrings;
 			const int digitalIndex = maxStrings; //15
 			const int stringIndex = 0;
-			const int meetingIndex = 0;
+			// const int meetingIndex = 0;
 			var meeting = currentMeeting;
 
 			var tokenArray = new XSigToken[offset];
