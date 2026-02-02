@@ -80,6 +80,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             combinerHandler = parent.RoomCombinerHandler;
 
+            // Ensure touch panel is in controller mode on activation
+            SetPeripheralMode(ePeripheralMode.Controller);
+
+
             if (extensionsHandler == null)
             {
                 this.LogDebug("[Warning]: VideoCodecUiExtensionsHandler is null. Skipping VideoCodecMobileControlRouter Subscriptions");
@@ -106,6 +110,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             defaultRoomKey = mcTpController?.DefaultRoomKey;
 
             SetupCustomLockouts();
+
+
+            // Possibly make this configurable later
+            SetLedControlMode(true);
+
+            SetPeripheralsProfileForTouchpanles();
+        }
+
+        private void SetLedControlMode(bool mode)
+        {
+            this.LogDebug("Setting Touch Panel LED Control Mode to: {mode}", mode);
+            mcTpController.Parent.EnqueueCommand($"xConfiguration UserInterface LedControl Mode: {(mode ? "on" : "off")}{CiscoCodec.Delimiter}");
+        }
+
+        private void SetPeripheralsProfileForTouchpanles()
+        {
+            this.LogDebug("Setting Touch Panel Peripherals Profile to: NotSet");
+            mcTpController.Parent.EnqueueCommand($"xConfiguration Peripherals Profile TouchPanels: NotSet{CiscoCodec.Delimiter}");
         }
 
         private void SetupCustomLockouts()
