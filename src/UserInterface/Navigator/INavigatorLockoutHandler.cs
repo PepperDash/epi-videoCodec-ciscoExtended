@@ -19,4 +19,3 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         void ClearWebViewOsd();
     }
 }
-    

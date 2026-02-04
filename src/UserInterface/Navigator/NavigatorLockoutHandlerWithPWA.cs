@@ -87,15 +87,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             combinerHandler = parent.RoomCombinerHandler;
 
-
-
             if (extensionsHandler == null)
             {
                 this.LogDebug("[Warning]: VideoCodecUiExtensionsHandler is null. Skipping VideoCodecMobileControlRouter Subscriptions");
                 return;
             }
 
-            if(mcTpController.Parent.IsReady)
+            if (mcTpController.Parent.IsReady)
             {
                 SetUpCodecCommands();
             }
@@ -123,19 +121,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             extensionsHandler.UiExtensionsClickedEvent +=
                 VideoCodecUiExtensionsClickedMcEventHandler;
 
-            defaultRoomKey = mcTpController?.DefaultRoomKey;
+            defaultRoomKey = mcTpController.DefaultRoomKey;
         }
 
         private void SetUpCodecCommands()
         {
-                            // Ensure touch panel is in controller mode on activation
-                SetPeripheralMode(ePeripheralMode.Controller);
+            // Ensure touch panel is in controller mode on activation
+            SetPeripheralMode(ePeripheralMode.Controller);
 
 
-                // Possibly make this configurable later
-                SetLedControlMode(true);
+            // Possibly make this configurable later
+            SetLedControlMode(true);
 
-                SetPeripheralsProfileForTouchpanles();
+            SetPeripheralsProfileForTouchpanels();
         }
 
         private void SetLedControlMode(bool mode)
@@ -144,7 +142,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             mcTpController.Parent.EnqueueCommand($"xConfiguration UserInterface LedControl Mode: {(mode ? "on" : "off")}{CiscoCodec.Delimiter}");
         }
 
-        private void SetPeripheralsProfileForTouchpanles()
+        private void SetPeripheralsProfileForTouchpanels()
         {
             this.LogDebug("Setting Touch Panel Peripherals Profile to: NotSet");
             mcTpController.Parent.EnqueueCommand($"xConfiguration Peripherals Profile TouchPanels: NotSet{CiscoCodec.Delimiter}");
@@ -205,9 +203,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
                     continue;
                 }
-                
+
                 // Check initial feedback value
-                if(feedback.BoolValue == true)
+                if (feedback.BoolValue)
                 {
                     this.LogDebug("Initial feedback value is true for device key: {DeviceKey}, feedback key: {FeedbackKey}", deviceKey, lockout.FeedbackKey);
                     HandleLockout(lockout, new FeedbackEventArgs(true));
@@ -257,8 +255,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         {
             try
             {
+
                 var combiner = combinerHandler.EssentialsRoomCombiner;
+                if (combiner == null)
+                {
+                    this.LogDebug("EssentialsRoomCombiner is null in HandleRoomCombineScenarioChanged");
+                    return;
+                }
                 var currentScenario = combiner.CurrentScenario;
+                if (currentScenario == null)
+                {
+                    this.LogDebug("CurrentScenario is null in HandleRoomCombineScenarioChanged");
+                    return;
+                }
+
                 var uiMap = currentScenario.UiMap;
 
                 if (uiMap == null)
@@ -327,7 +337,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         }
 
 
-        private void SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
+        private void SendLockout(string thisUisDefaultRoomKey, string primRoomKey)
         {
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
@@ -341,7 +351,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     ? defaultUiWebViewDisplayConfig
                     : currentLockout.UiWebViewDisplay;
 
-            if (!string.IsNullOrEmpty(primaryRoomKey))
+            if (!string.IsNullOrEmpty(primRoomKey))
             {
                 if (webViewConfig.QueryParams == null)
                 {
@@ -349,7 +359,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 }
 
                 webViewConfig.QueryParams["primaryRoomName"] =
-                            DeviceManager.GetDeviceForKey(primaryRoomKey) is IKeyName room ? room.Name : primaryRoomKey;
+                            DeviceManager.GetDeviceForKey(primRoomKey) is IKeyName room ? room.Name : primRoomKey;
             }
 
             var appUrl = mcTpController.AppUrlFeedback.StringValue;
@@ -505,8 +515,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetPeripheralMode(ePeripheralMode mode)
         {
-            this.LogDebug("Setting Touch Panel with MAC Address: {macAddress} to Mode: {mode}", props?.MacAddress, mode);
-            mcTpController.Parent.EnqueueCommand($"xCommand Peripherals TouchPanel Configure ID: \"{props?.MacAddress}\" Mode: {mode}{CiscoCodec.Delimiter}");
+            var macAddress = props?.MacAddress;
+            if (string.IsNullOrWhiteSpace(macAddress))
+            {
+                this.LogError("Cannot set peripheral mode {mode} because MacAddress is not configured or is empty.", mode);
+                return;
+            }
+            this.LogDebug("Setting Touch Panel with MAC Address: {macAddress} to Mode: {mode}", macAddress, mode);
+            mcTpController.Parent.EnqueueCommand($"xCommand Peripherals TouchPanel Configure ID: \"{macAddress}\" Mode: {mode}{CiscoCodec.Delimiter}");
         }
 
         private (string, string) GetMobileControlUrl(string mcPath, WebViewDisplayConfig webViewConfig)

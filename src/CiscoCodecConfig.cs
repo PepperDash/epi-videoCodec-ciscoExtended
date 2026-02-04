@@ -127,7 +127,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// Indicates whether to use the Persistent Web App for lockout scenarios on the navigator panels
         /// </summary>
         [JsonProperty("usePersistentWebAppForLockout")]
-		public bool UsePersistentWebAppForLockout { get; set; }
+        public bool UsePersistentWebAppForLockout { get; set; }
 
 
         /// <summary>
