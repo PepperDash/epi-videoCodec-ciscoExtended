@@ -279,6 +279,20 @@ This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
 which contains the Base64-encoded "customIconContent" for each icon.
 
+### Navigator Lockout Functionality **NEW**
+
+There are two differnet methods supported to show a lockout screen on a Navigator panel for use in combined room systems where there is a desire to lockout navigator panels that are attached to a codec not being used as the primary codec in a room combination scenario.
+
+* Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
+  * Preffered as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, ususally a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
+  * If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
+  * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populates as the commands to put
+  each panel in PWQ or controller mode require the MAC address.
+  * Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration.  The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
+* WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
+  * This mode will display a modal webview on the navigator with any URL supplied.  Howver, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
+  * Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
+
 ### Available default icons
 
 Briefing

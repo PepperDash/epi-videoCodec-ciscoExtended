@@ -127,6 +127,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       }
 
       var currentScenario = combiner.CurrentScenario;
+      if (currentScenario == null)
+      {
+        parent.LogError("CurrentScenario is null in scenario changed event");
+        return;
+      }
       var uiMap = currentScenario.UiMap;
 
       if (!uiMap.TryGetValue(defaultRoomKey, out currentScenarioRoomKey))

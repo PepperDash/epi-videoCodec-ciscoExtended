@@ -354,6 +354,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             var appUrl = mcTpController.AppUrlFeedback.StringValue;
 
+            if (appUrl == null)
+            {
+                this.LogDebug("AppUrl is null, cannot send to WebView", this);
+                return;
+            }
+
             var uriBuilder = new UriBuilder(appUrl);
 
             //check for qparams
