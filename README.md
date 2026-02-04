@@ -258,6 +258,7 @@ Provided under MIT license
     "phonebookResultsLimit": 50,
     "defaultTrackingMode": "SpeakerTrack",
     "overrideMeetingsLimit": true,
+    "usePersistentWebAppForLockout": true,
     "cameraInfo": [
       {
         "CameraNumber": 1,
@@ -314,7 +315,6 @@ Sliders
         "properties": {
           "defaultRoomKey": "room",
           "macAddress": "00:01:02:03:04:05",
-          "usePersistentWebAppForLockout": true,
           "useDirectServer": true,
           "videoCodecKey": "Codec-1",
           "enableLockoutPoll": true,

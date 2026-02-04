@@ -33,8 +33,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 		[JsonProperty("customLockouts")]
 		public List<Lockout> CustomLockouts { get; set; }
 
-		[JsonProperty("usePersistentWebAppForLockout")]
-		public bool UsePersistentWebAppForLockout { get; set; }
+		// [JsonProperty("usePersistentWebAppForLockout")]
+		// public bool UsePersistentWebAppForLockout { get; set; }
 
 	}
 }

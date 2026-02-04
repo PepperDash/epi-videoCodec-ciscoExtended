@@ -125,7 +125,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 };
 
                 // Initialize Lockout Handler
-                if(props.UsePersistentWebAppForLockout)
+                if(Parent.Config.UsePersistentWebAppForLockout)
                 {
                     router = new NavigatorLockoutHandlerWithPWA(this, props);
                 }

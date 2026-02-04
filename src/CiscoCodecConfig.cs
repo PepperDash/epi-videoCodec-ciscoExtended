@@ -124,6 +124,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public bool EndAllCallsOnMeetingJoin { get; set; }
 
         /// <summary>
+        /// Indicates whether to use the Persistent Web App for lockout scenarios on the navigator panels
+        /// </summary>
+        [JsonProperty("usePersistentWebAppForLockout")]
+		public bool UsePersistentWebAppForLockout { get; set; }
+
+
+        /// <summary>
         /// These are key-value pairs, uint id, string type
         /// They are used to pass back UI Extension Widget events
         /// </summary>

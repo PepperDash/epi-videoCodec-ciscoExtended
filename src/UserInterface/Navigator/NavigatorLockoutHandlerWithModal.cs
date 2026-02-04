@@ -107,6 +107,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
+            SetupCustomLockouts();
+
             mcTpController.Parent.IsReadyChange += (s, a) =>
             {
                 if (!mcTpController.Parent.IsReady) return;
@@ -126,7 +128,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             defaultRoomKey = mcTpController?.DefaultRoomKey;
 
-            SetupCustomLockouts();
         }
 
         private void SetupCustomLockouts()
