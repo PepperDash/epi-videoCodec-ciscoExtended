@@ -172,7 +172,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private bool _phonebookInitialSearch;
 
 		private string _lastSearched;
-		private CiscoCodecConfig _config;
+		public readonly CiscoCodecConfig Config;
 		private readonly int _joinableCooldownSeconds;
 
 		public string ZoomMeetingId { get; private set; }
@@ -729,17 +729,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
 
-			_config = props;
+			Config = props;
 
-			MeetingsToDisplay = _config.OverrideMeetingsLimit ? 50 : 0;
-			_timeFormatSpecifier = _config.TimeFormatSpecifier ?? "t";
-			_dateFormatSpecifier = _config.DateFormatSpecifier ?? "d";
-			_joinableCooldownSeconds = _config.JoinableCooldownSeconds;
-			EndAllCallsOnMeetingJoin = _config.EndAllCallsOnMeetingJoin;
+			MeetingsToDisplay = Config.OverrideMeetingsLimit ? 50 : 0;
+			_timeFormatSpecifier = Config.TimeFormatSpecifier ?? "t";
+			_dateFormatSpecifier = Config.DateFormatSpecifier ?? "d";
+			_joinableCooldownSeconds = Config.JoinableCooldownSeconds;
+			EndAllCallsOnMeetingJoin = Config.EndAllCallsOnMeetingJoin;
 
-			if (_config.Sharing != null)
+			if (Config.Sharing != null)
 			{
-				PresentationStates = _config.Sharing.DefaultShareLocalOnly
+				PresentationStates = Config.Sharing.DefaultShareLocalOnly
 					? eCodecPresentationStates.LocalOnly
 					: eCodecPresentationStates.LocalRemote;
 			}
@@ -750,7 +750,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			PreferredTrackingMode = eCameraTrackingCapabilities.SpeakerTrack;
 
-			var trackingMode = _config.DefaultCameraTrackingMode ?? string.Empty;
+			var trackingMode = Config.DefaultCameraTrackingMode ?? string.Empty;
 
 			if (!string.IsNullOrEmpty(trackingMode))
 			{
@@ -1266,7 +1266,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			const int offset = maxDigitals + maxStrings;
 			const int digitalIndex = maxStrings; //15
 			const int stringIndex = 0;
-			const int meetingIndex = 0;
+			// const int meetingIndex = 0;
 			var meeting = currentMeeting;
 
 			var tokenArray = new XSigToken[offset];
@@ -1722,7 +1722,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
 
-				CommDebuggingIsOn = _config.EnableCommDebugOnStartup;
+				CommDebuggingIsOn = Config.EnableCommDebugOnStartup;
 
 				Communication.Connect();
 
@@ -1855,7 +1855,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ActiveCalls.Count
 			);
 
-			if (_config.GetPhonebookOnStartup)
+			if (Config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
 				SearchDirectory("");
@@ -1876,10 +1876,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				);
 			}
 
-			// Check for camera config info
-			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
+			// Check for camera config info 
+			if (Config.CameraInfo != null && Config.CameraInfo.Count > 0)
 			{
-				SetUpCamerasFromConfig(_config.CameraInfo);
+				SetUpCamerasFromConfig(Config.CameraInfo);
 			}
 			else
 			{
@@ -1930,14 +1930,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			GetCallHistory();
 
-			if (_config.GetPhonebookOnStartup)
+			if (Config.GetPhonebookOnStartup)
 			{
 				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
 				// check each hour to see if the phonebook should be downloaded
 				GetPhonebook(null);
 			}
 
-			if (_config.GetBookingsOnStartup)
+			if (Config.GetBookingsOnStartup)
 			{
 				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
 				// 15 minute timer to check for new booking info
@@ -5504,8 +5504,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelfViewModeOff()
 		{
-			var monitorRole = _config.SelfViewDefaultMonitorRole != null ?
-				$" MonitorRole: {_config.SelfViewDefaultMonitorRole}" : string.Empty;
+			var monitorRole = Config.SelfViewDefaultMonitorRole != null ?
+				$" MonitorRole: {Config.SelfViewDefaultMonitorRole}" : string.Empty;
 			EnqueueCommand($"xCommand Video Selfview Set Mode: Off{monitorRole}");
 		}
 
@@ -6485,10 +6485,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		}
 		public void ShowEmergencyMessage(string url)
 		{
-			string mode = _config.Emergency.UiWebViewDisplay.Mode;
-			string title = _config.Emergency.UiWebViewDisplay.Title;
-			string target = _config.Emergency.UiWebViewDisplay.Target;
-			string urlPath = url + _config.Emergency.MobileControlPath;
+			string mode = Config.Emergency.UiWebViewDisplay.Mode;
+			string title = Config.Emergency.UiWebViewDisplay.Title;
+			string target = Config.Emergency.UiWebViewDisplay.Target;
+			string urlPath = url + Config.Emergency.MobileControlPath;
 			WebViewDisplay uwvd = new WebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
 			EnqueueCommand(uwvd.xCommand());
 		}

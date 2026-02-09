@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 using System.Linq;
@@ -15,7 +15,10 @@ using Serilog.Events;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
-    internal class NavigatorLockoutHandler : IKeyed
+    /// <summary>
+    /// Handles Lockout for Navigator with Modal WebView.  Uses timer to poll for lockout state if enabled.
+    /// </summary>
+    internal class NavigatorLockoutHandlerWithModal : IKeyed, INavigatorLockoutHandler
     {
         public const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
@@ -47,7 +50,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             Mode = "Modal"
         };
 
-        internal NavigatorLockoutHandler(
+        internal NavigatorLockoutHandlerWithModal(
             NavigatorController ui,
             NavigatorConfig props
         )
@@ -83,7 +86,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             };
         }
 
-        internal void Activate(NavigatorController parent)
+        public void Activate(NavigatorController parent)
         {
             //set private props after activation so everything is instantiated
             if (parent == null)
@@ -104,6 +107,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
+            SetupCustomLockouts();
+
             mcTpController.Parent.IsReadyChange += (s, a) =>
             {
                 if (!mcTpController.Parent.IsReady) return;
@@ -123,7 +128,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             defaultRoomKey = mcTpController?.DefaultRoomKey;
 
-            SetupCustomLockouts();
         }
 
         private void SetupCustomLockouts()
