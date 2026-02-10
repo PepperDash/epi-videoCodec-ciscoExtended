@@ -288,6 +288,7 @@ There are two different methods supported to show a lockout screen on a Navigato
   * If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
   * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
   each panel in PWA or controller mode require the MAC address.
+  * To get the mac addresses of the Navigator panels, the command `xcommand Peripherals list Type: touchpanel` can be sent to the codec or you can use the codec's web interface and view the paired peripherals.
   * Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration.  The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
 * WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
   * This mode will display a modal webview on the navigator with any URL supplied.  However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
