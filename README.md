@@ -286,7 +286,7 @@ There are two different methods supported to show a lockout screen on a Navigato
 * Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
   * Preffered as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, usually a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
   * If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
-  * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated as the commands to put
+  * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
   each panel in PWA or controller mode require the MAC address.
   * Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration.  The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
 * WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
@@ -328,7 +328,7 @@ Sliders
         "group": "videoCodecTouchpanel",
         "properties": {
           "defaultRoomKey": "room",
-          "macAddress": "00:01:02:03:04:05",
+          "macAddress": "a0:b1:c2:d3:e4:f5", // CASE SENSITIVE VALUE!!!!
           "useDirectServer": true,
           "videoCodecKey": "Codec-1",
           "enableLockoutPoll": true,
