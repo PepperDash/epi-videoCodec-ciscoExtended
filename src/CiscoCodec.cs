@@ -82,7 +82,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ISpeakerTrack,
 			IPresenterTrack,
 			IEmergencyOSD,
-			IHasWebView
+			IHasWebView,
+			ICiscoCodecBase
 	{
 		private RoutingInputPort currentInputPort;
 

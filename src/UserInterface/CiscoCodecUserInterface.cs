@@ -5,6 +5,7 @@ using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.Config;
 using PepperDash.Essentials.Core.Devices;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Interfaces;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
@@ -15,7 +16,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
 {
     public class CiscoCodecUserInterface : ReconfigurableDevice
     {
-        public CiscoCodec Parent { get; private set; }
+        public ICiscoCodecBase Parent { get; private set; }
         public UserInterfaceConfig ConfigProps { get; }
         public ExtensionsHandler UiExtensionsHandler { get; set; }
         public UiExtensions UiExtensions { get; private set; }
@@ -66,11 +67,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
             IconHandler.DumpAllPngsToBase64();
 
             this.LogDebug("Activating Video Codec UI Extensions");
-            Parent = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey) as CiscoCodec;
+            
+            // Try to find full codec first, then lite codec
+            var codecDevice = DeviceManager.GetDeviceForKey(ConfigProps.VideoCodecKey);
+            if (codecDevice is ICiscoCodecBase codecBase)
+            {
+                Parent = codecBase;
+                this.LogDebug("Found codec parent of type: {codecType}", Parent.GetType().Name);
+            }
 
             if (Parent == null)
             {
-                this.LogError("Video codec UserInterface could not find codec with key '{videoCodecKey}'.", ConfigProps.VideoCodecKey);
+                this.LogError("Video codec UserInterface could not find codec with key '{videoCodecKey}'. Ensure the codec device (full or lite) is configured.", ConfigProps.VideoCodecKey);
                 return;
             }
 
