@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Timers;
 using PepperDash.Core;
 using PepperDash.Core.Logging;
@@ -102,13 +103,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       RegisterForCombinerFeedback(combiners[0]);
 
-      SetInitialPanelStates();
+      SetPanelStatesToCurrentFeedbackStates();
     }
 
     /// <summary>
     /// Sets the initial states of panels based on their feedback configurations and the current state of the devices they are linked to.
     /// </summary>
-    private void SetInitialPanelStates()
+    private void SetPanelStatesToCurrentFeedbackStates()
     {
 
       foreach (var panel in panelConfigs)
@@ -202,6 +203,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
         return;
       }
+
+      Task.Run(() =>
+      {
+        // Delay added to allow feedback states to update before setting panels to current states.  Feedback events are not guaranteed to fire on room combine scenario change, so this ensures panels will be in correct state for new scenario.
+        System.Threading.Thread.Sleep(100);
+        SetPanelStatesToCurrentFeedbackStates();
+      });
     }
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
