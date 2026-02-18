@@ -140,15 +140,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
             case eFeedbackEventType.TypeString:
               {
                 var value = feedback.StringValue;
-                parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
-                  panel.PanelId, panelFeedback.FeedbackKey, value);
                 break;
               }
             case eFeedbackEventType.TypeInt:
               {
                 var value = feedback.IntValue;
-                parent.LogDebug("Panel {panelId} feedback changed: {feedbackKey} = {value}",
-                  panel.PanelId, panelFeedback.FeedbackKey, value);
                 break;
               }
           }
@@ -208,6 +204,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       {
         // Delay added to allow feedback states to update before setting panels to current states.  Feedback events are not guaranteed to fire on room combine scenario change, so this ensures panels will be in correct state for new scenario.
         System.Threading.Thread.Sleep(100);
+        RegisterForDeviceFeedback();
         SetPanelStatesToCurrentFeedbackStates();
       });
     }
@@ -348,11 +345,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
           parent.LogDebug("Registering for feedback {feedbackKey} for panel {panelId}", feedback.Key, panel.PanelId);
 
+          feedback.OutputChange -= HandleFeedbackOutputChange;
           feedback.OutputChange += HandleFeedbackOutputChange;
         }
       }
-
-
     }
 
     private void UpdatePanelProperty(Panel panel, PanelFeedback feedbackConfig, bool value)
