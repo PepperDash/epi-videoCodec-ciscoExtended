@@ -202,10 +202,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       Task.Run(() =>
       {
-        // Delay added to allow feedback states to update before setting panels to current states.  Feedback events are not guaranteed to fire on room combine scenario change, so this ensures panels will be in correct state for new scenario.
-        System.Threading.Thread.Sleep(100);
-        RegisterForDeviceFeedback();
-        SetPanelStatesToCurrentFeedbackStates();
+        try
+        {
+          // Delay added to allow feedback states to update before setting panels to current states.  Feedback events are not guaranteed to fire on room combine scenario change, so this ensures panels will be in correct state for new scenario.
+          System.Threading.Thread.Sleep(100);
+          RegisterForDeviceFeedback();
+          SetPanelStatesToCurrentFeedbackStates();
+        }
+        catch (Exception ex)
+        {
+          parent.LogError("Error handling room combine scenario change: {error}", ex);
+        }
       });
     }
 
