@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Timers;
 using PepperDash.Core;
 using PepperDash.Core.Logging;
@@ -75,6 +76,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       feedbackTimer.Elapsed += UpdateExtension;
 
+
+
       RegisterFeedback();
     }
 
@@ -99,6 +102,63 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
       }
 
       RegisterForCombinerFeedback(combiners[0]);
+
+      SetPanelStatesToCurrentFeedbackStates();
+    }
+
+    /// <summary>
+    /// Sets the initial states of panels based on their feedback configurations and the current state of the devices they are linked to.
+    /// </summary>
+    private void SetPanelStatesToCurrentFeedbackStates()
+    {
+
+      foreach (var panel in panelConfigs)
+      {
+        foreach (var panelFeedback in panel.GetAllPanelFeedbacks())
+        {
+          var feedbackDevice = DeviceManager.GetDeviceForKey(panelFeedback.DeviceKey) as IHasFeedback;
+
+          if (feedbackDevice == null)
+          {
+            parent.LogError("Panel {panelId} has feedback but device {deviceKey} not found", panel.PanelId, panelFeedback.DeviceKey);
+            continue;
+          }
+
+          var feedback = feedbackDevice.Feedbacks[panelFeedback.FeedbackKey];
+
+          parent.LogDebug("Found matching panel {panelId} for feedback {feedbackKey}",
+            panel.PanelId, feedback.Key);
+
+          switch (panelFeedback.FeedbackEventType)
+          {
+            case eFeedbackEventType.TypeBool:
+              {
+                var value = feedback.BoolValue;
+                UpdatePanelProperty(panel, panelFeedback, value);
+                break;
+              }
+            case eFeedbackEventType.TypeString:
+              {
+                var value = feedback.StringValue;
+                break;
+              }
+            case eFeedbackEventType.TypeInt:
+              {
+                var value = feedback.IntValue;
+                break;
+              }
+          }
+
+        }
+      }
+
+      if (!(extensionsHandler is UiExtensions extensions))
+      {
+        parent.LogError("Parent is not UiExtensions, cannot update panels");
+        return;
+      }
+
+      extensions.Update(EnqueueCommand);
     }
 
     private void RegisterForCombinerFeedback(EssentialsRoomCombiner combiner)
@@ -139,6 +199,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
         parent.LogError("UiMap default room key: {DefaultRoomKey}. UiMap must have an entry keyed to default room key with value of room connection for room state {ScenarioKey}", defaultRoomKey, currentScenario.Key);
         return;
       }
+
+      Task.Run(() =>
+      {
+        try
+        {
+          // Delay added to allow feedback states to update before setting panels to current states.  Feedback events are not guaranteed to fire on room combine scenario change, so this ensures panels will be in correct state for new scenario.
+          System.Threading.Thread.Sleep(100);
+          RegisterForDeviceFeedback();
+          SetPanelStatesToCurrentFeedbackStates();
+        }
+        catch (Exception ex)
+        {
+          parent.LogError("Error handling room combine scenario change: {error}", ex);
+        }
+      });
     }
 
     private void UpdateExtension(object sender, ElapsedEventArgs args)
@@ -188,6 +263,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           parent.LogDebug("Found matching panel {panelId} for feedback {feedbackKey}",
             panel.PanelId, feedback.Key);
 
+
           matchingPanelFeedbacks.Add((panel, panelFeedback));
         }
       }
@@ -198,6 +274,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
           feedback.Key);
         return;
       }
+
+      SetPanelFeedbackState(matchingPanelFeedbacks, args);
+    }
+
+    private void SetPanelFeedbackState(List<(Panel panel, PanelFeedback panelFeedback)> matchingPanelFeedbacks, FeedbackEventArgs args)
+    {
 
       // Process feedback for all matching panel-feedback combinations
       foreach (var (panel, panelFeedback) in matchingPanelFeedbacks)
@@ -270,6 +352,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
           parent.LogDebug("Registering for feedback {feedbackKey} for panel {panelId}", feedback.Key, panel.PanelId);
 
+          feedback.OutputChange -= HandleFeedbackOutputChange;
           feedback.OutputChange += HandleFeedbackOutputChange;
         }
       }
