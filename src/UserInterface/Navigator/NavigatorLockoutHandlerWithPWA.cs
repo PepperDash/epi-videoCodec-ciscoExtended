@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
     /// <summary>
     /// Handles Lockout Functionality with Persistent Web App for Navigator Touch Panels
     /// </summary>
-    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHandler
+    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHanderWithPwa
     {
         public const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
@@ -505,6 +505,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         webViewConfig.Mode ?? defaultUiWebViewDisplayConfig.Mode
                 }
             );
+        }
+
+        ///<inheritdoc />
+        public void EnterPwaMode(string url, bool prependmcUrl = true)
+        {
+            this.LogDebug("Entering PWA mode with URL: {url}", url);
+            var (finalUrl, printableUrl) = prependmcUrl ? GetMobileControlUrl(url, defaultUiWebViewDisplayConfig) : (url, url);
+            this.LogDebug("Final URL for PWA mode: {finalUrl}", printableUrl);
+            SetPersistentWebAppUrl(finalUrl);
+
+            SetPeripheralMode(ePeripheralMode.PersistentWebApp);
+  
+            this.LogDebug("Entering PWA mode with URL: {url}", url);
+            SetPersistentWebAppUrl(url);
+
+            SetPeripheralMode(ePeripheralMode.PersistentWebApp);
+        }
+
+        ///<inheritdoc />
+        public void ExitPwaMode()
+        {
+            this.LogDebug("Exiting PWA mode and returning to default UI");
+            SetPeripheralMode(ePeripheralMode.Controller);
         }
 
         private void SetPersistentWebAppUrl(string url)

@@ -82,7 +82,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ISpeakerTrack,
 			IPresenterTrack,
 			IEmergencyOSD,
-			IHasWebView
+			IHasWebViewWithPwaMode
 	{
 		private RoutingInputPort currentInputPort;
 
@@ -235,7 +235,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public bool SpeakerTrackStatus { get; private set; }
 		public bool PresenterTrackAvailability { get; private set; }
 		public bool PresenterTrackStatus { get; private set; }
+
 		public bool WebviewIsVisible { get; private set; }
+
+		private bool _isInPwaMode;
+
+		public bool IsInPwaMode
+		{
+			get { return _isInPwaMode; }
+			private set { if (_isInPwaMode == value) return; _isInPwaMode = value; IsInPwaModeFeedback.FireUpdate(); }
+		}
+
+		public BoolFeedback IsInPwaModeFeedback { get; private set; }
 		public string PresenterTrackStatusName { get; private set; }
 
 		private string _currentLayoutBacker;
@@ -875,6 +886,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
+
+			IsInPwaModeFeedback = new BoolFeedback(() => IsInPwaMode);
 
 			PresentationActiveFeedback.OutputChange += (o, a) => SharingContentIsOnFeedback.FireUpdate();
 
@@ -1836,6 +1849,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "Status/UserInterface/WebView/Status"
 				+ Delimiter
 				+ prefix
+				+ "/Event/UserInterface/WebView/Display"
+				+ Delimiter
+				+ prefix
 				+ "Status/Network/Ethernet/MacAddress"
 				+ Delimiter
 				+ prefix
@@ -2721,6 +2737,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose(e, "Exception");
 			}
 		}
+
+
 		private void ParseSpeakerTrackToken(JToken speakerTrackToken)
 		{
 			try
@@ -3536,6 +3554,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this.LogVerbose(e, "Exception");
 				}
 			}
+
+			if (userInterfaceObject.WebView != null)
+			{
+				if (userInterfaceObject.WebView.Display != null)
+				{
+					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewDisplay>(
+						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
+					);
+
+					IsInPwaMode = display.Target == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+				}
+			}
 		}
 
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
@@ -3755,6 +3785,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
+			// if (webViewDisplayToken != null)
+			// {
+			// 	ParseWebviewDisplayToken(webViewDisplayToken[0]);
+			// }
 			if (provisioningToken != null)
 			{
 				ParseProvisioningToken(provisioningToken);
@@ -6486,6 +6520,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			EnqueueCommand($"xCommand UserInterface WebView Clear Target:OSD{CiscoCodec.Delimiter}");
 		}
+
+		public void SendNavigatorsToPwaUrl(string url)
+		{
+			var navigators = DeviceManager.AllDevices.OfType<NavigatorController>().Where(n => n.Parent.Key == Key);
+
+			foreach (var navigator in navigators)
+			{
+				navigator.EnterPwaMode(url);
+			}
+		}
+
+		public void ExitNavigatorsPwaMode()
+		{
+			var navigators = DeviceManager.AllDevices.OfType<NavigatorController>().Where(n => n.Parent.Key == Key);
+
+			foreach (var navigator in navigators)
+			{
+				navigator.ExitPwaMode();
+			}
+		}
+
 		public void ShowEmergencyMessage(string url)
 		{
 			string mode = config.Emergency.UiWebViewDisplay.Mode;
