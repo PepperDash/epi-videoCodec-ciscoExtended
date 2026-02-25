@@ -514,12 +514,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             var (finalUrl, printableUrl) = prependmcUrl ? GetMobileControlUrl(url, defaultUiWebViewDisplayConfig) : (url, url);
             this.LogDebug("Final URL for PWA mode: {finalUrl}", printableUrl);
             SetPersistentWebAppUrl(finalUrl);
-
-            SetPeripheralMode(ePeripheralMode.PersistentWebApp);
-  
-            this.LogDebug("Entering PWA mode with URL: {url}", url);
-            SetPersistentWebAppUrl(url);
-
+            this.LogDebug("Entering PWA mode with URL: {url}", finalUrl);
             SetPeripheralMode(ePeripheralMode.PersistentWebApp);
         }
 
