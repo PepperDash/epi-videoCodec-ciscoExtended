@@ -30,6 +30,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
     /// the most recently triggered lockout will be displayed.
     /// </summary>
     [JsonProperty("priority")]
-    public int? Priority { get; set; } = 0;
+    public int Priority { get; set; } = 0;
   }
 }
