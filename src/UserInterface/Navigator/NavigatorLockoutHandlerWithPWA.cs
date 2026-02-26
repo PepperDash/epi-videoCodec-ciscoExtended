@@ -249,7 +249,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             if (currentLockout != null  && (currentLockout.Priority > lockout.Priority))
             {
-                this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentDeviceKey}, Current Lockout FeedbackKey: {CurrentFeedbackKey}, Current Lockout Priority: {CurrentPriority}, New Lockout DeviceKey: {NewDeviceKey}, New Lockout FeedbackKey: {NewFeedbackKey}, New Lockout Priority: {NewPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority.Value, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority.Value);
+                this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentLockoutDeviceKey}, FeedbackKey: {CurrentLockoutFeedbackKey}, Priority: {CurrentLockoutPriority}. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
                 return;
             }
             if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
