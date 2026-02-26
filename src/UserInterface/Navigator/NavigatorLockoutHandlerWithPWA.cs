@@ -75,14 +75,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             Key = ui.Key + "-NavigatorLockout";
 
-            exitPwaModeTimer = new System.Timers.Timer(500);
+            exitPwaModeTimer = new System.Timers.Timer(500)
+            {
+                AutoReset = false
+            };
             exitPwaModeTimer.Elapsed += (s, e) =>
             {
+                inManualPwaMode = false;
                 this.LogDebug("Exiting PWA mode and returning to default UI");
                 SetPeripheralMode(ePeripheralMode.Controller);
                 exitPwaModeTimer.Stop();
             };
-            exitPwaModeTimer.AutoReset = false;
         }
 
         public void Activate(NavigatorController parent)
@@ -244,7 +247,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
-            if (currentLockout.Priority.HasValue && lockout.Priority.HasValue && currentLockout.Priority.Value > lockout.Priority.Value)
+            if (currentLockout != null && currentLockout.Priority.HasValue && lockout.Priority.HasValue && currentLockout.Priority.Value > lockout.Priority.Value)
             {
                 this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentDeviceKey}, Current Lockout FeedbackKey: {CurrentFeedbackKey}, Current Lockout Priority: {CurrentPriority}, New Lockout DeviceKey: {NewDeviceKey}, New Lockout FeedbackKey: {NewFeedbackKey}, New Lockout Priority: {NewPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority.Value, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority.Value);
                 return;
@@ -341,6 +344,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void CancelLockout()
         {
+            if(currentLockout != null)
+            {
+                currentLockout = null;
+            }
+
             if (!mcTpController.LockedOut)
             {
                 return;
@@ -351,8 +359,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             mcTpController.LockedOut = false;
 
             combinationLockout = false;
-            
-            if(inManualPwaMode)
+
+            if (inManualPwaMode)
             {
                 this.LogDebug("Currently in manual PWA mode, not exiting to controller mode");
                 return;
@@ -364,6 +372,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SendLockout(string thisUisDefaultRoomKey, string primRoomKey)
         {
+            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
+            exitPwaModeTimer.Stop();
+
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
             var path = currentLockout?.MobileControlPath;
@@ -414,8 +425,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             SetPersistentWebAppUrl(uriBuilder.ToString());
 
-            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
-            exitPwaModeTimer.Stop();
             SetPeripheralMode(ePeripheralMode.PersistentWebApp);
         }
 
@@ -552,6 +561,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         ///<inheritdoc />
         public void ExitPwaMode()
         {
+            this.LogDebug("********* ExitPwaMode called. Currently in manual PWA mode: {InManualPwaMode}", inManualPwaMode);
+
+            if (!inManualPwaMode)
+            {
+                this.LogDebug("Not in manual PWA mode, ignoring ExitPwaMode call");
+                return;
+            }
+
+            exitPwaModeTimer.Stop();
             exitPwaModeTimer.Start();
         }
 
@@ -563,13 +581,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetPeripheralMode(ePeripheralMode mode)
         {
+            inManualPwaMode = false;
+
             if (mode == ePeripheralMode.Controller)
             {
-                inManualPwaMode = false;
                 this.LogDebug("Setting peripheral mode to Controller");
             }
             else if (mode == ePeripheralMode.PersistentWebApp)
             {
+
                 this.LogDebug("Setting peripheral mode to Persistent Web App");
             }
 
