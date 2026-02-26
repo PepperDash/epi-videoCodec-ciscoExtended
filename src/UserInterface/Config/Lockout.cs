@@ -23,5 +23,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 
     [JsonProperty("lockOnFalse")]
     public bool LockOnFalse { get; set; }
+
+    /// <summary>
+    /// Priority determines which lockout will be displayed when a new lockout is triggered while another lockout is active. 
+    /// The lockout with the highest priority will be displayed. If two lockouts have the same priority, 
+    /// the most recently triggered lockout will be displayed.
+    /// </summary>
+    [JsonProperty("priority")]
+    public int? Priority { get; set; } = 0;
   }
 }

@@ -51,6 +51,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private bool combinationLockout;
 
+        private System.Timers.Timer exitPwaModeTimer;
+
+        private bool inManualPwaMode;
+
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
             Title = "Mobile Control",
@@ -70,6 +74,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             currentScenarioRoomKey = defaultRoomKey;
 
             Key = ui.Key + "-NavigatorLockout";
+
+            exitPwaModeTimer = new System.Timers.Timer(500);
+            exitPwaModeTimer.Elapsed += (s, e) =>
+            {
+                this.LogDebug("Exiting PWA mode and returning to default UI");
+                SetPeripheralMode(ePeripheralMode.Controller);
+                exitPwaModeTimer.Stop();
+            };
+            exitPwaModeTimer.AutoReset = false;
         }
 
         public void Activate(NavigatorController parent)
@@ -231,6 +244,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
+            if (currentLockout.Priority.HasValue && lockout.Priority.HasValue && currentLockout.Priority.Value > lockout.Priority.Value)
+            {
+                this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentDeviceKey}, Current Lockout FeedbackKey: {CurrentFeedbackKey}, Current Lockout Priority: {CurrentPriority}, New Lockout DeviceKey: {NewDeviceKey}, New Lockout FeedbackKey: {NewFeedbackKey}, New Lockout Priority: {NewPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority.Value, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority.Value);
+                return;
+            }
+
             if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
             {
                 this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
@@ -332,6 +351,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             mcTpController.LockedOut = false;
 
             combinationLockout = false;
+            
+            if(inManualPwaMode)
+            {
+                this.LogDebug("Currently in manual PWA mode, not exiting to controller mode");
+                return;
+            }
 
             SetPeripheralMode(ePeripheralMode.Controller);
         }
@@ -389,6 +414,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             SetPersistentWebAppUrl(uriBuilder.ToString());
 
+            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
+            exitPwaModeTimer.Stop();
             SetPeripheralMode(ePeripheralMode.PersistentWebApp);
         }
 
@@ -510,10 +537,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         ///<inheritdoc />
         public void EnterPwaMode(string url, bool prependmcUrl = true)
         {
+            inManualPwaMode = true;
+
             this.LogDebug("Entering PWA mode with URL: {url}", url);
             var (finalUrl, printableUrl) = prependmcUrl ? GetMobileControlUrl(url, defaultUiWebViewDisplayConfig) : (url, url);
+
             this.LogDebug("Final URL for PWA mode: {finalUrl}", printableUrl);
             SetPersistentWebAppUrl(finalUrl);
+
             this.LogDebug("Entering PWA mode with URL: {url}", finalUrl);
             SetPeripheralMode(ePeripheralMode.PersistentWebApp);
         }
@@ -521,8 +552,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         ///<inheritdoc />
         public void ExitPwaMode()
         {
-            this.LogDebug("Exiting PWA mode and returning to default UI");
-            SetPeripheralMode(ePeripheralMode.Controller);
+            exitPwaModeTimer.Start();
         }
 
         private void SetPersistentWebAppUrl(string url)
@@ -533,6 +563,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetPeripheralMode(ePeripheralMode mode)
         {
+            if (mode == ePeripheralMode.Controller)
+            {
+                inManualPwaMode = false;
+                this.LogDebug("Setting peripheral mode to Controller");
+            }
+            else if (mode == ePeripheralMode.PersistentWebApp)
+            {
+                this.LogDebug("Setting peripheral mode to Persistent Web App");
+            }
+
             var macAddress = props?.MacAddress;
             if (string.IsNullOrWhiteSpace(macAddress))
             {
