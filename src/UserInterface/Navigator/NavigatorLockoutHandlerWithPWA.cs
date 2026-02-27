@@ -250,7 +250,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
-            if (currentLockout != null  && (currentLockout.Priority > lockout.Priority))
+            if (currentLockout != null && (currentLockout.Priority > lockout.Priority))
             {
                 this.LogInformation("********** Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentLockoutDeviceKey}, FeedbackKey: {CurrentLockoutFeedbackKey}, Priority: {CurrentLockoutPriority}. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
                 return;
@@ -340,6 +340,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void StartLockout(bool isCombinationLockout = true)
         {
+            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
+            exitPwaModeTimer.Stop();
+
             mcTpController.LockedOut = true;
 
             combinationLockout = isCombinationLockout;
@@ -351,7 +354,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void CancelLockout()
         {
-            if(currentLockout != null)
+            if (currentLockout != null)
             {
                 currentLockout = null;
             }
@@ -379,9 +382,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SendLockout(string thisUisDefaultRoomKey, string primRoomKey)
         {
-            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
-            exitPwaModeTimer.Stop();
-
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
             var path = currentLockout?.MobileControlPath;
