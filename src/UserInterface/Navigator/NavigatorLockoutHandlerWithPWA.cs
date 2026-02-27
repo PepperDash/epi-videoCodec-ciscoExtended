@@ -239,11 +239,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void HandleLockout(Lockout lockout, FeedbackEventArgs a)
         {
+
+            this.LogInformation("Handling lockout feedback change. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+
             this.LogDebug("Custom lockout feedback changed. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
             // skip this lockout update if the current lockout is a combination lockout
             if (combinationLockout)
             {
-                this.LogDebug("Skipping custom lockout update because currently in combination lockout or in other lockout mode");
+                this.LogDebug("Skipping custom lockout update because currently in combination lockout mode");
                 return;
             }
 
@@ -585,8 +588,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetPeripheralMode(ePeripheralMode mode)
         {
-            inManualPwaMode = false;
-
             if (mode == ePeripheralMode.Controller)
             {
                 this.LogDebug("Setting peripheral mode to Controller");
