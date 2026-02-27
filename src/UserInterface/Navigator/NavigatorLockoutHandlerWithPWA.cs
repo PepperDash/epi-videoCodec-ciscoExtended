@@ -253,12 +253,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             if (currentLockout != null && (currentLockout.Priority > lockout.Priority))
             {
-                this.LogInformation("********** Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentLockoutDeviceKey}, FeedbackKey: {CurrentLockoutFeedbackKey}, Priority: {CurrentLockoutPriority}. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
+                this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentLockoutDeviceKey}, FeedbackKey: {CurrentLockoutFeedbackKey}, Priority: {CurrentLockoutPriority}. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
                 return;
             }
             else
             {
-                this.LogInformation("********** Updating current lockout to new lockout. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
+                this.LogDebug("Updating current lockout to new lockout. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
             }
 
             // if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
@@ -341,6 +341,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void StartLockout(bool isCombinationLockout = true)
         {
+            // clear manual mode
+            inManualPwaMode = false;
             // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
             exitPwaModeTimer.Stop();
 
