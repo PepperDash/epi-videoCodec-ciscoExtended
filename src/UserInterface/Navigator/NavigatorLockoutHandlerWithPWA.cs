@@ -233,6 +233,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 }
 
                 // Setup lockout for feedback
+                feedback.OutputChange -= HandleLockoutFeedbackChange;
                 feedback.OutputChange += HandleLockoutFeedbackChange;
             }
         }
