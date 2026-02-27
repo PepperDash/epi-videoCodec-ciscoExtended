@@ -443,3 +443,460 @@ Sliders
   - {1 | 0} - 1 turns debuggging on, 0 turns it off
 
 
+<!-- START Minimum Essentials Framework Versions -->
+### Minimum Essentials Framework Versions
+
+- 1.15.2
+- 2.0.0
+- 2.0.0
+<!-- END Minimum Essentials Framework Versions -->
+<!-- START Config Example -->
+### Config Example
+
+```json
+{
+    "key": "GeneratedKey",
+    "uid": 1,
+    "name": "GeneratedName",
+    "type": "ciscoCodecEq",
+    "group": "Group",
+    "properties": {
+        "communicationMonitorProperties": "SampleValue",
+        "favorites": [
+            "SampleValue"
+        ],
+        "phonebookMode": "SampleString",
+        "showSelfViewByDefault": true,
+        "SelfViewDefaultMonitorRole": "SampleValue",
+        "sharing": {
+            "autoShareContentWhileInCall": true,
+            "defaultShareLocalOnly": true
+        },
+        "externalSourceListEnabled": true,
+        "externalSourceInputPort": "SampleString",
+        "phonebookResultsLimit": "SampleValue",
+        "overrideMeetingsLimit": true,
+        "EnableCommDebugOnStartup": true,
+        "getPhonebookOnStartup": true,
+        "getBookingsOnStartup": true,
+        "phonebookDisableAutoPopulate": true,
+        "phonebookDisableAutoDial": true,
+        "UiBranding": {
+            "enable": true,
+            "brandingUrl": "SampleString"
+        },
+        "enableCameraConfigFromRoomCameraList": true,
+        "cameraInfo": [
+            {
+                "CameraNumber": 0,
+                "Name": "SampleString",
+                "SourceId": 0
+            }
+        ],
+        "defaultTrackingMode": "SampleString",
+        "timeFormatSpecifier": "SampleString",
+        "dateFormatSpecifier": "SampleString",
+        "joinableCooldownSeconds": 0,
+        "endAllCallsOnMeetingJoin": true,
+        "usePersistentWebAppForLockout": true,
+        "Widgets": {
+            "SampleString": {
+                "enabled": true,
+                "label": "SampleString",
+                "value": "SampleString",
+                "type": "SampleString",
+                "bridgeIndex": "SampleValue"
+            }
+        },
+        "extensions": {
+            "Version": "SampleString",
+            "ConfigId": "SampleValue",
+            "panels": [
+                {
+                    "id": "SampleString",
+                    "Clicked": {
+                        "id": "SampleString",
+                        "PanelId": {
+                            "id": "SampleString",
+                            "Value": "SampleString"
+                        }
+                    }
+                }
+            ],
+            "doNotSendXml": true,
+            "PanelsHandler": {}
+        },
+        "emergency": {
+            "mobileControlPath": "SampleString",
+            "uiWebViewDisplay": {
+                "Header": "SampleString",
+                "Mode": "SampleString",
+                "Options": "SampleString",
+                "Target": "SampleString",
+                "Title": "SampleString",
+                "Url": "SampleString"
+            }
+        },
+        "DefaultProvisioningMode": "SampleString"
+    }
+}
+```
+<!-- END Config Example -->
+<!-- START Supported Types -->
+### Supported Types
+
+- ciscoCodecEq
+- ciscoRoomOS
+- ciscoRoomBarPro
+- ciscoCodecPro
+- ciscoRoomBar
+- ciscocamera
+- ciscoRoomOsMobileControl
+<!-- END Supported Types -->
+<!-- START Join Maps -->
+
+<!-- END Join Maps -->
+<!-- START Interfaces Implemented -->
+### Interfaces Implemented
+
+- IKeyed
+- IHasDoNotDisturbMode
+- IQueueMessage
+- IHasCallHistory
+- IHasCallFavorites
+- IHasDirectory
+- IHasScheduleAwareness
+- IOccupancyStatusProvider
+- IHasCodecLayoutsAvailable
+- IHasCodecSelfView
+- ICommunicationMonitor
+- IRoutingSinkWithSwitchingWithInputPort
+- IRoutingSource
+- IHasCodecCameras
+- IHasCameraAutoMode
+- IHasCodecRoomPresets
+- IHasExternalSourceSwitching
+- IHasBranding
+- IHasCameraOff
+- IHasCameraMute
+- IHasHalfWakeMode
+- IHasCallHold
+- IJoinCalls
+- IDeviceInfoProvider
+- IHasPhoneDialing
+- ICiscoCodecCameraConfig
+- ISpeakerTrack
+- IPresenterTrack
+- IEmergencyOSD
+- IHasWebViewWithPwaMode
+- IHasCameraPtzControl
+- IAmFarEndCamera
+- IBridgeAdvanced
+- INavigatorLockoutHandler
+- IMobileControlTouchpanelController
+- INavigatorLockoutHanderWithPwa
+<!-- END Interfaces Implemented -->
+<!-- START Base Classes -->
+### Base Classes
+
+- EventArgs
+- ValueProperty
+- VideoCodecControllerJoinMap
+- VideoCodecBase
+- VideoCodecInfo
+- MessengerBase
+- CameraBase
+- ReconfigurableDevice
+- UserInterfaceConfig
+- CiscoCodecUserInterface
+<!-- END Base Classes -->
+<!-- START Public Methods -->
+### Public Methods
+
+- public void Insert(ushort pos, string val)
+- public void Clear()
+- public int WebsocketConnected(WebSocketClient.WEBSOCKET_RESULT_CODES error)
+- public int WebsocketDisconnected(WebSocketClient.WEBSOCKET_RESULT_CODES error, object item)
+- public int WebsocketReceiveCallback(byte[] data, uint dataLen,
+            WebSocketClient.WEBSOCKET_PACKET_TYPES opcode, WebSocketClient.WEBSOCKET_RESULT_CODES error)
+- public void Push(T message)
+- public T Pop()
+- public void ParseStatus(CiscoCodecEvents.Widget val)
+- public void ParseStatus(CiscoCodecEvents.UiEvent val)
+- public void RegisterFeedback()
+- public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void UpdateWidget(string val)
+- public void FireUpdate()
+- public void ParseStatus(JToken token)
+- public void ActivateDoNotDisturbMode()
+- public void DeactivateDoNotDisturbMode()
+- public void ToggleDoNotDisturbMode()
+- public void SetId(int id)
+- public void PostMessage(Action message)
+- public void Dispatch()
+- public void ParseAuthenticationRequest(JToken token)
+- public void ParseAuthenticationResponse(JToken token)
+- public void JoinAsGuest()
+- public void JoinAsHost()
+- public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void DialZoom()
+- public string DialZoomEnhanced()
+- public void DialWebex()
+- public void InitializeBranding(string roomKey)
+- public void PollSpeakerTrack()
+- public void PollPresenterTrack()
+- public void SetCommDebug(string s)
+- public void EnqueueCommand(string command)
+- public void SendText(string command)
+- public void ParseSipToken(JToken sipToken)
+- public void PrintCallItem(CodecActiveCallItem callData)
+- public eCodecCallType ConvertToTypeEnum(string s)
+- public eCodecCallDirection ConvertToDirectionEnum(string s)
+- public eCodecCallStatus ConvertToStatusEnum(string s)
+- public bool MergeCallData(
+			CodecActiveCallItem existingCallData,
+			CodecActiveCallItem newCallData
+		)
+- public void CodecPollLayouts()
+- public void ExecuteSwitch(
+			object inputSelector,
+			object outputSelector,
+			eRoutingSignalType signalType
+		)
+- public string GetCallId()
+- public void GetCallHistory()
+- public void GetSchedule()
+- public void GetBookings(object command)
+- public void CheckCurrentHour(object o)
+- public void GetPhonebook(string command)
+- public void SearchDirectory(string searchString)
+- public void GetDirectoryFolderContents(string folderId)
+- public void GetDirectoryParentFolderContents()
+- public void SetCurrentDirectoryToRoot()
+- public void Dial(
+			string number,
+			string protocol,
+			string callRate,
+			string callType,
+			string meetingId
+		)
+- public void HoldCall(CodecActiveCallItem activeCall)
+- public void ResumeCall(CodecActiveCallItem activeCall)
+- public void ResumeAllCalls()
+- public void JoinCall(CodecActiveCallItem activeCall)
+- public void JoinAllCalls()
+- public void SelectPresentationSource(int source)
+- public void SetRingtoneVolume(int volume)
+- public void SelectPresentationSource1()
+- public void SelectPresentationSource2()
+- public void VolumeSetToDefault()
+- public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void SetPresentationLocalOnly()
+- public void SetPresentationLocalRemote()
+- public void SetPresentationLocalRemoteToggle()
+- public void Reboot()
+- public void SelfViewModeOn()
+- public void SelfViewModeOnForMonitor(string monitorRole, bool fullScreen)
+- public void SelfViewModeOff()
+- public void SelfViewModeToggle()
+- public void SelfviewPipPositionSet(CodecCommandWithLabel position)
+- public void SelfviewPipPositionToggle()
+- public void LayoutSet(CodecCommandWithLabel layout)
+- public void LayoutSet(string layout)
+- public void LocalLayoutToggle()
+- public void LocalLayoutToggleSingleProminent()
+- public void MinMaxLayoutToggle()
+- public void PresentationViewDefaultSet()
+- public void PresentationViewMinimizedzedSet()
+- public void PresentationViewMaximizedSet()
+- public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
+- public void CameraAutoModeToggle()
+- public void CameraAutoModeOn()
+- public void CameraAutoModeOff()
+- public void SpeakerTrackOn()
+- public void SpeakerTrackOff()
+- public void PresenterTrackOff()
+- public void PresenterTrackFollow()
+- public void PresenterTrackBackground()
+- public void PresenterTrackPersistent()
+- public void SetCodecProvisionMode(string mode)
+- public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
+- public void SetCameraName(uint videoConnectorId, string name)
+- public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
+- public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
+- public void SelectCamera(string key)
+- public void CodecRoomPresetSelect(int preset)
+- public void CiscoRoomPresetRecall()
+- public void CodecRoomPresetStore(int preset, string description)
+- public void SelectFarEndPreset(int preset)
+- public void AddExternalSource(
+			string connectorId,
+			string key,
+			string name,
+			Devices.Common.VideoCodec.Cisco.eExternalSourceType type
+		)
+- public void SetExternalSourceState(
+			string key,
+			Devices.Common.VideoCodec.Cisco.eExternalSourceMode mode
+		)
+- public void ClearExternalSources()
+- public void SetSelectedSource(string key)
+- public void CameraOff()
+- public void CameraMuteOn()
+- public void CameraMuteOff()
+- public void CameraMuteToggle()
+- public void HalfwakeActivate()
+- public void UpdateDeviceInfo()
+- public void OnCodecInfoChanged(CodecInfoChangedEventArgs args)
+- public void ActivateDoNotDisturbMode()
+- public void DeactivateDoNotDisturbMode()
+- public void ToggleDoNotDisturbMode()
+- public void DialPhoneCall(string number)
+- public void EndPhoneCall()
+- public void SendDtmfToPhone(string digit)
+- public void ShowWebView(string url, string mode, string title, string target)
+- public void HideWebView()
+- public void SendNavigatorsToPwaUrl(string url)
+- public void ExitNavigatorsPwaMode()
+- public void ShowEmergencyMessage(string url)
+- public void HideEmergencyMessage()
+- public void AddCommandToQueue(string query)
+- public void LoginMessageReceived()
+- public void JsonResponseModeMessageReceived()
+- public void InitialStatusMessageReceived()
+- public void InitialConfigurationMessageReceived()
+- public void InitialSoftwareVersionMessageReceived()
+- public void FeedbackRegistered()
+- public void CodecDisconnected()
+- public void Start(int port)
+- public void PositionHome()
+- public void PanLeft()
+- public void PanRight()
+- public void PanStop()
+- public void TiltDown()
+- public void TiltUp()
+- public void TiltStop()
+- public void ZoomIn()
+- public void ZoomOut()
+- public void ZoomStop()
+- public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
+- public void SetCameraId(uint id)
+- public void SetParentCodec(CiscoCodec codec)
+- public void SetCapabilites(string capabilites)
+- public void PositionHome()
+- public void PanLeft()
+- public void PanRight()
+- public void PanStop()
+- public void TiltDown()
+- public void TiltUp()
+- public void TiltStop()
+- public void ZoomIn()
+- public void ZoomOut()
+- public void ZoomStop()
+- public void FocusNear()
+- public void FocusFar()
+- public void FocusStop()
+- public void TriggerAutoFocus()
+- public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
+- public void AddCustomActivationAction(Action a)
+- public void PreActivateAction()
+- public string xCommand()
+- public void Initialize(CiscoCodec parent, Action<string> enqueueCommand)
+- public void Update(Action<string> enqueueCommand)
+- public string XCommand()
+- public void AddCommandToQueue(string command)
+- public void ParseStatus(List<WebView.WebView> webViews)
+- public void ParseErrorStatus(JToken statusToken)
+- public void ParseStatus(Panels.CiscoCodecEvents.Panel panel)
+- public void Initialize(string defaultRoomKey)
+- public void ParseStatus(CiscoCodecEvents.Panel panel)
+- public bool SubscribeToPanelFeedback(string panelId, bool subscribe)
+- public bool SubscribeToPanelFeedback(string panelId)
+- public bool UnsubscribeFromPanelFeedback(string panelId)
+- public void RegisterFeedback()
+- public void DeregisterFeedback()
+- public void Activate(NavigatorController parent)
+- public void LockoutWebViewChanged(object sender, WebViewChangedEventArgs args)
+- public void SendWebViewMcUrl(
+            string mcPath,
+            WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
+        )
+- public void SendWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
+- public void ClearWebView()
+- public void ClearWebViewOsd()
+- public void SetAppUrl(string url)
+- public void CloseWebViewController()
+- public void CloseWebViewOsd()
+- public void ShowWebViewOsd(string url, WebViewDisplayConfig webviewConfig)
+- public void EnterPwaMode(string url)
+- public void ExitPwaMode()
+- public void Activate(NavigatorController parent)
+- public void SendWebViewMcUrl(
+            string mcPath,
+            WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
+        )
+- public void EnterPwaMode(string url, bool prependmcUrl = true)
+- public void ExitPwaMode()
+- public void SendWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
+- public void ClearWebView()
+- public void ClearWebViewOsd()
+<!-- END Public Methods -->
+<!-- START Bool Feedbacks -->
+### Bool Feedbacks
+
+- DoNotDisturbModeIsOnFeedback
+- PresentationViewMaximizedFeedback
+- PresentationViewMinimizedFeedback
+- PresentationViewDefaultFeedback
+- RoomIsOccupiedFeedback
+- SelfviewIsOnFeedback
+- PresentationActiveFeedback
+- IsInPwaModeFeedback
+- LocalLayoutIsProminentFeedback
+- FarEndIsSharingContentFeedback
+- CameraAutoModeIsOnFeedback
+- SpeakerTrackStatusOnFeedback
+- PresenterTrackStatusOnFeedback
+- PresenterTrackStatusOffFeedback
+- PresenterTrackStatusFollowFeedback
+- PresenterTrackStatusBackgroundFeedback
+- PresenterTrackStatusPersistentFeedback
+- CameraAutoModeAvailableFeedback
+- SpeakerTrackAvailableFeedback
+- PresenterTrackAvailableFeedback
+- DirectorySearchInProgress
+- CurrentDirectoryResultIsNotDirectoryRoot
+- PresentationSendingLocalOnlyFeedback
+- PresentationSendingLocalRemoteFeedback
+- ContentInputActiveFeedback
+- ControllingFarEndCameraFeedback
+- CameraIsOffFeedback
+- CameraIsMutedFeedback
+- HalfWakeModeIsOnFeedback
+- EnteringStandbyModeFeedback
+- DoNotDisturbModeIsOnFeedback
+- PhoneOffHookFeedback
+<!-- END Bool Feedbacks -->
+<!-- START Int Feedbacks -->
+### Int Feedbacks
+
+- PeopleCountFeedback
+- RingtoneVolumeFeedback
+- PresentationSourceFeedback
+<!-- END Int Feedbacks -->
+<!-- START String Feedbacks -->
+### String Feedbacks
+
+- WidgetEventFeedback
+- SelfviewPipPositionFeedback
+- LocalLayoutFeedback
+- AvailableLayoutsFeedback
+- PresenterTrackStatusNameFeedback
+- ProvisioningRoomTypeFeedback
+- SelectedCameraFeedback
+- WidgetEventFeedback
+- CallerIdNameFeedback
+- CallerIdNumberFeedback
+- AppUrlFeedback
+<!-- END String Feedbacks -->
