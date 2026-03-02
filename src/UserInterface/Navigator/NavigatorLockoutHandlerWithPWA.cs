@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
     /// <summary>
     /// Handles Lockout Functionality with Persistent Web App for Navigator Touch Panels
     /// </summary>
-    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHandler
+    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHanderWithPwa
     {
         public const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;
@@ -51,6 +51,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private bool combinationLockout;
 
+        private System.Timers.Timer exitPwaModeTimer;
+
+        private bool inManualPwaMode;
+
+        private readonly Dictionary<string, (BoolFeedback Feedback, EventHandler<FeedbackEventArgs> Handler)> _lockoutFeedbackHandlers =
+            new Dictionary<string, (BoolFeedback, EventHandler<FeedbackEventArgs>)>();
+
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
             Title = "Mobile Control",
@@ -70,6 +77,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             currentScenarioRoomKey = defaultRoomKey;
 
             Key = ui.Key + "-NavigatorLockout";
+
+            exitPwaModeTimer = new System.Timers.Timer(500)
+            {
+                AutoReset = false
+            };
+            exitPwaModeTimer.Elapsed += (s, e) =>
+            {
+                inManualPwaMode = false;
+                this.LogDebug("Exiting PWA mode and returning to default UI");
+                SetPeripheralMode(ePeripheralMode.Controller);
+                exitPwaModeTimer.Stop();
+            };
         }
 
         public void Activate(NavigatorController parent)
@@ -160,27 +179,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 this.LogDebug("Setting up custom lockout for device key: {DeviceKey}, default room key: {defaultRoomKey} current scenario room key: {currentScenarioRoomKey}", lockout.DeviceKey, defaultRoomKey, currentScenarioRoomKey);
 
                 var deviceKey = lockout.DeviceKey;
+                var handlerKey = $"{lockout.DeviceKey}:{lockout.FeedbackKey}";
+
+                // Reliably unsubscribe any previously registered handler for this lockout using the tracked delegate
+                if (_lockoutFeedbackHandlers.TryGetValue(handlerKey, out var existingSubscription))
+                {
+                    this.LogDebug("Unsubscribing from old feedback {feedbackKey} for lockout: {handlerKey}", lockout.FeedbackKey, handlerKey);
+                    existingSubscription.Feedback.OutputChange -= existingSubscription.Handler;
+                    _lockoutFeedbackHandlers.Remove(handlerKey);
+                }
 
                 if (deviceKey == defaultRoomKey && currentScenarioRoomKey != defaultRoomKey)
                 {
-                    if (DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback oldFeedbackProvider)
-                    {
-                        if (oldFeedbackProvider.Feedbacks[lockout.FeedbackKey] is BoolFeedback oldFeedback)
-                        {
-                            this.LogDebug("Unsubscribing from old feedback {feedbackKey} for roomKey: {roomKey}", lockout.FeedbackKey, deviceKey);
-
-                            oldFeedback.OutputChange -= HandleLockoutFeedbackChange;
-                        }
-                        else
-                        {
-                            this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
-                        }
-                    }
-                    else
-                    {
-                        this.LogDebug("No feedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
-                    }
-
                     if (currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY)
                     {
                         continue;
@@ -211,31 +221,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     HandleLockout(lockout, new FeedbackEventArgs(true));
                 }
 
-                void HandleLockoutFeedbackChange(object s, FeedbackEventArgs a)
-                {
-                    HandleLockout(lockout, a);
-                }
-
-                // Setup lockout for feedback
-                feedback.OutputChange += HandleLockoutFeedbackChange;
+                // Create a named handler delegate so it can be tracked and reliably unsubscribed later
+                EventHandler<FeedbackEventArgs> handler = (s, a) => HandleLockout(lockout, a);
+                feedback.OutputChange += handler;
+                _lockoutFeedbackHandlers[handlerKey] = (feedback, handler);
             }
         }
 
         private void HandleLockout(Lockout lockout, FeedbackEventArgs a)
         {
+
+            this.LogInformation("Handling lockout feedback change. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
+
             this.LogDebug("Custom lockout feedback changed. DeviceKey: {DeviceKey}, FeedbackKey: {FeedbackKey}, Value: {Value}", lockout.DeviceKey, lockout.FeedbackKey, a.BoolValue);
             // skip this lockout update if the current lockout is a combination lockout
             if (combinationLockout)
             {
-                this.LogDebug("Skipping custom lockout update because currently in combination lockout or in other lockout mode");
+                this.LogDebug("Skipping custom lockout update because currently in combination lockout mode");
                 return;
             }
 
-            if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
+            if (currentLockout != null && (currentLockout.Priority > lockout.Priority))
             {
-                this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
+                this.LogDebug("Skipping custom lockout update because current lockout has higher priority. Current Lockout DeviceKey: {CurrentLockoutDeviceKey}, FeedbackKey: {CurrentLockoutFeedbackKey}, Priority: {CurrentLockoutPriority}. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", currentLockout.DeviceKey, currentLockout.FeedbackKey, currentLockout.Priority, lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
                 return;
             }
+            else
+            {
+                this.LogDebug("Updating current lockout to new lockout. New Lockout DeviceKey: {NewLockoutDeviceKey}, FeedbackKey: {NewLockoutFeedbackKey}, Priority: {NewLockoutPriority}", lockout.DeviceKey, lockout.FeedbackKey, lockout.Priority);
+            }
+
+            // if (currentLockout?.MobileControlPath != lockout.MobileControlPath && mcTpController.LockedOut)
+            // {
+            //     this.LogDebug("Skipping custom lockout update because currently in other lockout mode. Path: {path}", currentLockout?.MobileControlPath);
+            //     return;
+            // }
 
             if ((a.BoolValue && !lockout.LockOnFalse) || (!a.BoolValue && lockout.LockOnFalse))
             {
@@ -311,6 +331,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void StartLockout(bool isCombinationLockout = true)
         {
+            // clear manual mode
+            inManualPwaMode = false;
+            // Stop the timer if it's already running to prevent multiple rapid calls to ExitPwaMode
+            exitPwaModeTimer.Stop();
+
             mcTpController.LockedOut = true;
 
             combinationLockout = isCombinationLockout;
@@ -322,6 +347,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void CancelLockout()
         {
+            if (currentLockout != null)
+            {
+                currentLockout = null;
+            }
+
             if (!mcTpController.LockedOut)
             {
                 return;
@@ -332,6 +362,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             mcTpController.LockedOut = false;
 
             combinationLockout = false;
+
+            if (inManualPwaMode)
+            {
+                this.LogDebug("Currently in manual PWA mode, not exiting to controller mode");
+                return;
+            }
 
             SetPeripheralMode(ePeripheralMode.Controller);
         }
@@ -507,6 +543,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             );
         }
 
+        ///<inheritdoc />
+        public void EnterPwaMode(string url, bool prependmcUrl = true)
+        {
+            inManualPwaMode = true;
+
+            this.LogDebug("Entering PWA mode with URL: {url}", url);
+            var (finalUrl, printableUrl) = prependmcUrl ? GetMobileControlUrl(url, defaultUiWebViewDisplayConfig) : (url, url);
+
+            this.LogDebug("Final URL for PWA mode: {finalUrl}", printableUrl);
+            SetPersistentWebAppUrl(finalUrl);
+
+            this.LogDebug("Entering PWA mode with URL: {url}", finalUrl);
+            SetPeripheralMode(ePeripheralMode.PersistentWebApp);
+        }
+
+        ///<inheritdoc />
+        public void ExitPwaMode()
+        {
+            this.LogDebug("********* ExitPwaMode called. Currently in manual PWA mode: {InManualPwaMode}", inManualPwaMode);
+
+            if (!inManualPwaMode)
+            {
+                this.LogDebug("Not in manual PWA mode, ignoring ExitPwaMode call");
+                return;
+            }
+
+            exitPwaModeTimer.Stop();
+            exitPwaModeTimer.Start();
+        }
+
         private void SetPersistentWebAppUrl(string url)
         {
             this.LogDebug("Setting Persistent Web App URL to: {url}", url);
@@ -515,6 +581,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private void SetPeripheralMode(ePeripheralMode mode)
         {
+            if (mode == ePeripheralMode.Controller)
+            {
+                this.LogDebug("Setting peripheral mode to Controller");
+            }
+            else if (mode == ePeripheralMode.PersistentWebApp)
+            {
+
+                this.LogDebug("Setting peripheral mode to Persistent Web App");
+            }
+
             var macAddress = props?.MacAddress;
             if (string.IsNullOrWhiteSpace(macAddress))
             {
