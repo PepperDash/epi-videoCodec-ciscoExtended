@@ -55,6 +55,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private bool inManualPwaMode;
 
+        private readonly Dictionary<string, (BoolFeedback Feedback, EventHandler<FeedbackEventArgs> Handler)> _lockoutFeedbackHandlers =
+            new Dictionary<string, (BoolFeedback, EventHandler<FeedbackEventArgs>)>();
+
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
             Title = "Mobile Control",
@@ -176,27 +179,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 this.LogDebug("Setting up custom lockout for device key: {DeviceKey}, default room key: {defaultRoomKey} current scenario room key: {currentScenarioRoomKey}", lockout.DeviceKey, defaultRoomKey, currentScenarioRoomKey);
 
                 var deviceKey = lockout.DeviceKey;
+                var handlerKey = $"{lockout.DeviceKey}:{lockout.FeedbackKey}";
+
+                // Reliably unsubscribe any previously registered handler for this lockout using the tracked delegate
+                if (_lockoutFeedbackHandlers.TryGetValue(handlerKey, out var existingSubscription))
+                {
+                    this.LogDebug("Unsubscribing from old feedback {feedbackKey} for lockout: {handlerKey}", lockout.FeedbackKey, handlerKey);
+                    existingSubscription.Feedback.OutputChange -= existingSubscription.Handler;
+                    _lockoutFeedbackHandlers.Remove(handlerKey);
+                }
 
                 if (deviceKey == defaultRoomKey && currentScenarioRoomKey != defaultRoomKey)
                 {
-                    if (DeviceManager.GetDeviceForKey(deviceKey) is IHasFeedback oldFeedbackProvider)
-                    {
-                        if (oldFeedbackProvider.Feedbacks[lockout.FeedbackKey] is BoolFeedback oldFeedback)
-                        {
-                            this.LogDebug("Unsubscribing from old feedback {feedbackKey} for roomKey: {roomKey}", lockout.FeedbackKey, deviceKey);
-
-                            oldFeedback.OutputChange -= HandleLockoutFeedbackChange;
-                        }
-                        else
-                        {
-                            this.LogDebug("No BoolFeedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
-                        }
-                    }
-                    else
-                    {
-                        this.LogDebug("No feedback found for key: {FeedbackKey} on device: {DeviceKey}", lockout.FeedbackKey, deviceKey);
-                    }
-
                     if (currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY)
                     {
                         continue;
@@ -227,14 +221,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     HandleLockout(lockout, new FeedbackEventArgs(true));
                 }
 
-                void HandleLockoutFeedbackChange(object s, FeedbackEventArgs a)
-                {
-                    HandleLockout(lockout, a);
-                }
-
-                // Setup lockout for feedback
-                feedback.OutputChange -= HandleLockoutFeedbackChange;
-                feedback.OutputChange += HandleLockoutFeedbackChange;
+                // Create a named handler delegate so it can be tracked and reliably unsubscribed later
+                EventHandler<FeedbackEventArgs> handler = (s, a) => HandleLockout(lockout, a);
+                feedback.OutputChange += handler;
+                _lockoutFeedbackHandlers[handlerKey] = (feedback, handler);
             }
         }
 
