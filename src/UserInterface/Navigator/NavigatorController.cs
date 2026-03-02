@@ -223,7 +223,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         this.LogError("Invalid absolute URL: {url}", url);
                         return;
                     }
-                    pwaRouter.EnterPwaMode(uri.ToString());
+                    pwaRouter.EnterPwaMode(uri.ToString(), false);
                     return;
                 }
 
