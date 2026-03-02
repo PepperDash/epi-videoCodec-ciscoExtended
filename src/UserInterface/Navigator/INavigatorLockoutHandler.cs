@@ -19,7 +19,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         void ClearWebViewOsd();
     }
 
-    internal interface INavigatorLockoutHanderWithPwa : INavigatorLockoutHandler
+    internal interface INavigatorLockoutHandlerWithPwa : INavigatorLockoutHandler
     {
         /// <summary>
         /// Enters PWA mode on the navigator with the specified URL
