@@ -6101,6 +6101,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
 		}
 
+		public void SetInputCameraMode(uint videoConnectorId, bool cameraControlMode)
+		{
+			this.LogDebug("Setting the camera control mode of video connector {id} to {cameraControlMode}", videoConnectorId, cameraControlMode ? "On" : "Off");
+			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl Mode: {(cameraControlMode ? "On" : "Off")}");
+		}
+
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
 			this.LogDebug("Setting the source type of video connector {id} to {sourceType}", videoConnectorId, sourceType);
