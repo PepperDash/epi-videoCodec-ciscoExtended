@@ -2088,7 +2088,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						//SendText("echo off");
+						SendText("Echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
