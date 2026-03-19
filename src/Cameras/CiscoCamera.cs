@@ -7,117 +7,24 @@ using PepperDash.Essentials.Devices.Common.Cameras;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
-    public class CiscoFarEndCamera : CameraBase, IHasCameraPtzControl, IAmFarEndCamera, IBridgeAdvanced
-    {
-        [JsonIgnore]
-        protected CiscoCodec ParentCodec { get; private set; }
-
-        protected string CallId
-        {
-            get
-            {
-                return ParentCodec.GetCallId();
-            }
-        }
-
-        public CiscoFarEndCamera(string key, string name, CiscoCodec codec)
-            : base(key, name)
-        {
-            Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom;
-
-            ParentCodec = codec;
-        }
-
-        #region IHasCameraPtzControl Members
-
-        public void PositionHome()
-        {
-            // Not supported on far end camera
-        }
-
-        #endregion
-
-        #region IHasCameraPanControl Members
-
-        public void PanLeft()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Left CallId: {0}", CallId));
-        }
-
-        public void PanRight()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Right CallId: {0}", CallId));
-        }
-
-        public void PanStop()
-        {
-            Stop();
-        }
-
-        #endregion
-
-        #region IHasCameraTiltControl Members
-
-        public void TiltDown()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Down CallId: {0}", CallId));
-        }
-
-        public void TiltUp()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: Up CallId: {0}", CallId));
-        }
-
-        public void TiltStop()
-        {
-            Stop();
-        }
-
-        #endregion
-
-        #region IHasCameraZoomControl Members
-
-        public void ZoomIn()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomIn CallId: {0}", CallId));
-        }
-
-        public void ZoomOut()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Move Value: ZoomOut CallId: {0}", CallId));
-        }
-
-        public void ZoomStop()
-        {
-            Stop();
-        }
-
-        #endregion
-
-
-        void Stop()
-        {
-            ParentCodec.EnqueueCommand(string.Format("xCommand Call FarEndControl Camera Stop CallId: {0}", CallId));
-        }
-
-        public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
-        {
-            LinkCameraToApi(this, trilist, joinStart, joinMapKey, bridge);
-        }
-    }
-
     public class CiscoCamera : CameraBase, IHasCameraPtzControl, IHasCameraFocusControl, IBridgeAdvanced
     {
         /// <summary>
         /// The codec this camera belongs to
         /// </summary>
         [JsonIgnore]
-        protected CiscoCodec ParentCodec { get; private set; }
+        public CiscoCodec ParentCodec { get; private set; }
 
         /// <summary>
         /// The ID of the camera on the codec
         /// </summary>
         public uint CameraId { get; private set; }
+
+        /// <summary>
+        /// Optional property to specify the network switch port the camera is connected to.
+        /// This is used by the CameraManager to change port settings when the camera is switched to a different codec.
+        /// </summary>
+        public string NetworkSwitchPort { get; private set; }
 
         /// <summary>
         /// Valid range 1-15
@@ -194,6 +101,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         {
             SerialNumber = props.SerialNumber;
             MacAddress = props.MacAddress;
+            NetworkSwitchPort = props.NetworkSwitchPort;
 
             // Default to all capabilties
             Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom | eCameraCapabilities.Focus;
@@ -385,27 +293,4 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         }
     }
 
-    public class CiscoCodecCameraPropertiesConfig
-    {
-        [JsonProperty("defaultParentCodecKey")]
-        public string DefaultParentCodecKey { get; set; }
-
-        [JsonProperty("defaultCameraId")]
-        public uint DefaultCameraId { get; set; }
-
-        [JsonProperty("serialNumber")]
-        public string SerialNumber { get; set; }
-
-        [JsonProperty("hardwareId")]
-        public string HardwareID { get; set; }
-
-        [JsonProperty("macAddress")]
-        public string MacAddress { get; set; }
-
-        [JsonProperty("flipImage")]
-        public bool? FlipImage { get; set; }
-
-        [JsonProperty("sourceId")]
-        public uint SourceId { get; set; }
-    }
 }

@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
+using Crestron.SimplSharpPro.DM.Cards;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -83,6 +84,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IPresenterTrack,
 			IEmergencyOSD,
 			IHasWebViewWithPwaMode
+
 	{
 		private RoutingInputPort currentInputPort;
 
@@ -698,6 +700,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private readonly IBasicCommunication _comms;
 
+		public uint VLanId { get; private set; }
+
 		// Constructor for IBasicCommunication
 		public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
 			: base(config)
@@ -731,6 +735,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var props = JsonConvert.DeserializeObject<CiscoCodecConfig>(
 				config.Properties.ToString()
 			);
+
+			VLanId = props.VLanId;
 
 			UiExtensions = props.Extensions;
 			if (props?.Extensions?.ConfigId > 0)
@@ -3692,6 +3698,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var modernId = cam.SelectToken("CameraId")?.ToString();
 					var legacyId = cam.SelectToken("id")?.ToString();
 					var camId = string.IsNullOrEmpty(modernId) ? legacyId : modernId;
+					var serialNumber = cam.SelectToken("SerialNumber.Value")?.ToString() ?? "Unknown";
 
 					if (string.IsNullOrEmpty(camId))
 					{
@@ -3699,13 +3706,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						continue;
 					}
 
+					UInt16.TryParse(camId, out UInt16 camIdInt);
+
 					var existingCam =
 						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+
+
+					var lenses = cam.SelectToken("Lenses");
+					if (lenses != null)
+					{
+						foreach (var lens in lenses.Children<JObject>())
+						{
+							// TODO: Need to test this out with actual JSON formatted response!					
+							var ghost = lens.SelectToken("ghost")?.ToString();
+							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
+							{
+								this.LogDebug("Camera {camId} is ghosted.  Removing from Codec.", camId);
+								CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == camId);
+								listWasUpdated = true;
+
+
+
+								CameraDisconnected.Invoke(this, new CameraEventArgs(camIdInt, existingCam?.SerialNumber?.Value));
+								continue;
+							}
+						}
+					}
+
 
 					if (existingCam == null)
 					{
 						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
 						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+
+						CameraConnected.Invoke(this, new CameraEventArgs(camIdInt, newCam.SerialNumber?.Value));
 						listWasUpdated = true;
 					}
 					else
@@ -6083,11 +6117,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region ICiscoCodecCameraConfig Members
 
-		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
-		{
-			this.LogDebug("Setting the serial number of camera {id} to {serialNumber}", cameraId, serialNumber);
-			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
-		}
+
 
 		public void SetCameraName(uint videoConnectorId, string name)
 		{
@@ -6095,11 +6125,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
 		}
 
-		public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
-		{
-			this.LogDebug("Setting the camera id of video connector {id} to {inputCameraId}", videoConnectorId, inputCameraId);
-			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
-		}
+
 
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
