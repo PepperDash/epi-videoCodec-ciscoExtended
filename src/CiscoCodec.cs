@@ -3725,10 +3725,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 								CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == camId);
 								listWasUpdated = true;
 
-
-
 								CameraDisconnected.Invoke(this, new CameraEventArgs(camIdInt, existingCam?.SerialNumber?.Value));
 								continue;
+							}
+
+							var connected = lens.SelectToken("Connected.Value")?.ToString();
+							if (connected != null)
+							{
+								if (connected.Equals("true", StringComparison.OrdinalIgnoreCase))
+								{
+									this.LogDebug("Camera {camId} is connected.", camId);
+									CameraConnected.Invoke(this, new CameraEventArgs(camIdInt, serialNumber));
+									listWasUpdated = true;
+								}								else
+								{
+									this.LogDebug("Camera {camId} is disconnected.", camId);
+									CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == camId);
+									listWasUpdated = true;
+
+									CameraDisconnected.Invoke(this, new CameraEventArgs(camIdInt, existingCam?.SerialNumber?.Value));
+								}
 							}
 						}
 					}
