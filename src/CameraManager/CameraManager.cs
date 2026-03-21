@@ -32,7 +32,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         }
 
-
         /// <summary>
         /// Custom activation to link the Camera Manager to the room combiner, network switch, codecs, and cameras based on the keys provided in the configuration.
         /// </summary>
@@ -58,6 +57,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             networkSwitch = networkSwitchDevice;
+
+            networkSwitch.PortStateChanged += NetworkSwitch_PortStateChanged;
 
             HashSet<string> codecKeysInScenarios = new HashSet<string>();
             HashSet<string> cameraKeysInScenarios = new HashSet<string>();
@@ -103,6 +104,56 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             return base.CustomActivate();
+        }
+
+        private void NetworkSwitch_PortStateChanged(object sender, NetworkSwitchPortEventArgs e)
+        {
+            this.LogDebug($"Camera Manager {Key} detected network switch port state change on port '{e.Port}' to state '{e.EventType}'");
+
+            // If a port reports it's POE state as disabled, we want to find the camera with that port in our managed cameras and switch the VLAN ID of that port to the VLAN ID of the codec that camera is assigned to in the current scenario. This will help ensure that when the camera reconnects it comes back on the correct codec and not as a ghost on the old one
+            if (e.EventType == NetworkSwitchPortEventType.PoEDisabled)
+            {
+                var camera = managedCameras.Values.FirstOrDefault(c => c.NetworkSwitchPort == e.Port);
+                if (camera != null)
+                {
+                    var currentScenario = roomCombiner.CurrentScenario;
+                    if (config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
+                    {
+                        var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CameraKeys.Contains(camera.Key));
+                        if (codecConfig != null)
+                        {
+                            var targetCodecKey = codecConfig.CodecKey;
+                            if (managedCodecs.TryGetValue(targetCodecKey, out var targetCodec))
+                            {
+                                var targetVlanId = targetCodec.VLanId;
+                                this.LogDebug($"Camera Manager {Key} changing VLAN for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}' to VLAN ID {targetVlanId} for target codec '{targetCodecKey}' due to PoE disabled event");
+                                networkSwitch.SetPortVlan(camera.NetworkSwitchPort, targetVlanId);
+                            }
+                            else
+                            {
+                                this.LogError($"Camera Manager {Key} error: target codec with key '{targetCodecKey}' from scenario config not found in managed codecs when handling network switch port state change");
+                            }
+                        }
+                        else
+                        {
+                            this.LogError($"Camera Manager {Key} error: no codec config found in current scenario for camera '{camera.Key}' when handling network switch port state change");
+                        }
+                    }
+                    else
+                    {
+                        this.LogError($"Camera Manager {Key} error: current room combination scenario '{currentScenario.Key}' not found in scenario config when handling network switch port state change");
+                    }
+                }
+                else
+                {
+                    this.LogDebug($"Camera Manager {Key} detected PoE disabled event on port '{e.Port}' but no managed camera is assigned to that port");
+                }
+            } else if (e.EventType == NetworkSwitchPortEventType.VlanChanged)
+            {
+                // Once a port's VLAN is changed, we want to enable PoE on that port again to help ensure that the camera reconnects and pairs with the correct codec based on the new VLAN
+                networkSwitch.SetPortPoeState(e.Port, true);
+                this.LogDebug($"Camera Manager {Key} re-enabled PoE on network switch port '{e.Port}' after VLAN change to help ensure camera reconnects and pairs with correct codec based on new VLAN");
+            }
         }
 
         private void RoomCombiner_RoomCombinationScenarioChanged(object sender, EventArgs e)
@@ -156,52 +207,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}'");
             networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, false);
 
-            Timer timer = new Timer();
-            timer.Interval = config.CameraPoeOnDelayMs;
-            timer.AutoReset = false;
-            timer.Elapsed += (s, args) =>
-            {
-                this.LogDebug($"Camera Manager {Key} turning PoE back on for camera '{camera.Key}' after disconnect");
-                networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, true);
-            };
-            timer.Start();
-
             this.LogDebug($"Camera Manager {Key} clearing assigned serial number for camera '{camera.Key}' on codec");
             (sender as CiscoCodec)?.ClearCameraAssignedSerialNumber(e.CameraId);
-
-            // Set the VLanID of the port to that of the new codec from the scenario config - this will help ensure that when the camera reconnects it comes back on the correct codec and not as a ghost on the old one
-            // Note that this relies on the camera reconnecting within a certain time frame after disconnecting
-            var currentScenario = roomCombiner.CurrentScenario;
-            if (config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
-            {
-                var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CameraKeys.Contains(camera.Key));
-                if (codecConfig != null)
-                {
-                    var targetCodecKey = codecConfig.CodecKey;
-                    if (managedCodecs.TryGetValue(targetCodecKey, out var targetCodec))
-                    {
-                        var targetVlanId = targetCodec.VLanId;
-                        this.LogDebug($"Camera Manager {Key} changing VLAN for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}' to VLAN ID {targetVlanId} for target codec '{targetCodecKey}'");
-                        networkSwitch.ChangeVlan(camera.NetworkSwitchPort, targetVlanId);
-
-                        this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on target codec '{targetCodecKey}' to ensure correct pairing when camera reconnects");
-                        // TODO: check that we can use the same camera ID.... might not be correct on the new codec?
-                        targetCodec.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
-                    }
-                    else
-                    {
-                        this.LogError($"Camera Manager {Key} error: target codec with key '{targetCodecKey}' from scenario config not found in managed codecs when handling camera disconnect");
-                    }
-                }
-                else
-                {
-                    this.LogError($"Camera Manager {Key} error: no codec config found in current scenario for camera '{camera.Key}' when handling camera disconnect");
-                }
-            }
-            else
-            {
-                this.LogError($"Camera Manager {Key} error: current room combination scenario '{currentScenario.Key}' not found in scenario config when handling camera disconnect");
-            }
         }
 
         private void Codec_CameraConnected(object sender, CameraEventArgs e)
