@@ -420,7 +420,7 @@ The typename `ciscocamera` will create a device that represents a Cisco camera a
 
 ## CameraManager
 
-the typename `cameramanager` will create a device that manages cameras that can switch between different codecs based on room combination scenarios.
+the typename `ciscocameramanager` will create a device that manages cameras that can switch between different codecs based on room combination scenarios.
 
 The `CameraManager` device interacts with a managed network switch that must implement `INetworkSwitchPoeVlanManager` as well as instances of `CiscoCodec` that implement `ICiscoCodecCameraFactoryReset` and `CiscoCamera`.
 
