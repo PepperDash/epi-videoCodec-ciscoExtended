@@ -8,6 +8,44 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     /// Configuration properties for the Camera Manager. 
     /// These are used to configure the Camera Manager's behavior and link it to other devices like the network switch and room combiner.
     /// </summary>
+    /// <example>
+    ///   {
+    ///   "key": "cameraManager1",
+    ///   "name": "Camera Manager",
+    ///   "type": "cameramanager",
+    ///   "properties": {
+    ///       "networkSwitchKey": "networkSwitch1",
+    ///       "roomCombinerConfig": {
+    ///         "roomCombinerKey": "roomCombiner1",
+    ///         "combineScenarios": {
+    ///           "divided": {
+    ///             "codecConfigs": [
+    ///               { "codecKey": "codecA", "cameraKeys": ["cameraA"},
+    ///               { "codecKey": "codecB", "cameraKeys": ["cameraB"]},
+    ///               { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
+    ///             ]
+    ///           },
+    ///           "combined": {
+    ///             "codecConfigs": [
+    ///             { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"]},
+    ///             ]
+    ///           },
+    ///           "abCombined": {
+    ///           "codecConfigs": [
+    ///             { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"]},
+    ///             { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
+    ///             ]
+    ///           },
+    ///           "bcCombined": {
+    ///           "codecConfigs": [
+    ///             { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"]},
+    ///             { "codecKey": "codecA", "cameraKeys": ["cameraA"]},
+    ///             ]
+    ///           }
+    ///       }
+    ///     }
+    ///   }
+    /// </example>
     public class CameraManagerPropertiesConfig
     {
 
@@ -19,25 +57,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         [JsonProperty("networkSwitchKey")]
         public string NetworkSwitchKey { get; set; }
 
-        /// <summary>
-        /// Maximum milliseconds to wait for the camera-ghost (unpaired) event after
-        /// issuing a factory-reset command. Defaults to 30 000 ms.
-        /// </summary>
-        [JsonProperty("cameraGhostTimeoutMs")]
-        public int CameraGhostTimeoutMs { get; set; }
+        // /// <summary>
+        // /// Maximum milliseconds to wait for the camera-ghost (unpaired) event after
+        // /// issuing a factory-reset command. Defaults to 30 000 ms.
+        // /// </summary>
+        // [JsonProperty("cameraGhostTimeoutMs")]
+        // public int CameraGhostTimeoutMs { get; set; }
 
-        /// <summary>
-        /// Maximum milliseconds to wait for the camera to appear on the target codec
-        /// after PoE power is restored. Defaults to 60 000 ms.
-        /// </summary>
-        [JsonProperty("cameraConnectTimeoutMs")]
-        public int CameraConnectTimeoutMs { get; set; }
+        // /// <summary>
+        // /// Maximum milliseconds to wait for the camera to appear on the target codec
+        // /// after PoE power is restored. Defaults to 60 000 ms.
+        // /// </summary>
+        // [JsonProperty("cameraConnectTimeoutMs")]
+        // public int CameraConnectTimeoutMs { get; set; }
 
-        /// <summary>
-        /// Delay in milliseconds before turning on PoE power for a camera after a factory reset. Defaults to 5000 ms.
-        /// </summary>
-        [JsonProperty("cameraPoeOnDelayMs")]
-        public int CameraPoeOnDelayMs { get; set; } = 5000;
+        // /// <summary>
+        // /// Delay in milliseconds before turning on PoE power for a camera after a factory reset. Defaults to 5000 ms.
+        // /// </summary>
+        // [JsonProperty("cameraPoeOnDelayMs")]
+        // public int CameraPoeOnDelayMs { get; set; } = 5000;
 
         /// <summary>
         /// Configuration for the room combiner device that the Camera Manager will use.

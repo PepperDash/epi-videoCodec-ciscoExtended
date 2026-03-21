@@ -3717,7 +3717,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						foreach (var lens in lenses.Children<JObject>())
 						{
-							// TODO: Need to test this out with actual JSON formatted response!					
+							// TODO: *************** Need to test this out with actual JSON formatted response!		**************************** 			
 							var ghost = lens.SelectToken("ghost")?.ToString();
 							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
 							{
