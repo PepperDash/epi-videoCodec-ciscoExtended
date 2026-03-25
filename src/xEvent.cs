@@ -367,13 +367,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
         public class EventObject // renamed from Event, too easy to confuse it with System.Event
         {
+            [JsonProperty("CallDisconnect")]
             public CallDisconnect CallDisconnect { get; set; }
+
+            [JsonProperty("UserInterface")]
             public UserInterface UserInterface { get; set; }
+
+            [JsonProperty("WebView")]
+            public WebViewDisplay WebView { get; set; }
 
             public EventObject()
             {
                 CallDisconnect = new CallDisconnect();
                 UserInterface = new UserInterface();
+                WebView = new WebViewDisplay();
             }
         }
 
