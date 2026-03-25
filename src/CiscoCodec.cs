@@ -2181,7 +2181,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SendText(string command)
 		{
-			Communication.SendText(command + Delimiter);
+			EnqueueCommand(command);
 		}
 
 		private void UpdateLayoutList()
