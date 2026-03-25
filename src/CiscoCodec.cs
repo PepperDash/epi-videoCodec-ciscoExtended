@@ -2179,7 +2179,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SyncState.AddCommandToQueue(cmd);
 		}
 
-		private void SendTextWithoutQueue(string command)
+		internal void SendTextWithoutQueue(string command)
 		{
 			if (Communication == null)
 				return;

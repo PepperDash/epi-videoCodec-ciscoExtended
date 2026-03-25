@@ -101,7 +101,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public long Id { get; set; }
         }
 
-        private readonly IKeyed _parent;
+        private readonly CiscoCodec _parent;
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
@@ -114,7 +114,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public readonly BoolFeedbackPulse PinIncorrect;
         public readonly IntFeedback AuthRequestedCallInstance;
 
-        public WebexPinRequestHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
+        public WebexPinRequestHandler(CiscoCodec parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
@@ -198,16 +198,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void JoinAsGuest()
         {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}\x0D\x0A";
+            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}";
             var command = string.Format(commandFormat, _authRequestedCallInstance, string.IsNullOrEmpty(_hostPin) ? string.Empty : string.Format(" Pin: {0}#", _hostPin));
-            _coms.SendText(command);
+            _parent.SendText(command);
         }
 
         public void JoinAsHost()
         {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#\x0D\x0A";
+            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#";
             var command = string.Format(commandFormat, _authRequestedCallInstance, _hostPin);
-            _coms.SendText(command);
+            _parent.SendText(command);
         }
 
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)

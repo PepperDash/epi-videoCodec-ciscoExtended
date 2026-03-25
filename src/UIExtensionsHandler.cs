@@ -26,14 +26,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
     public class UIExtensionsHandler
     {
-        private readonly IKeyed _parent;
+        private readonly CiscoCodec _parent;
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
         private string _widgetEventData = string.Empty;
         public StringFeedback WidgetEventFeedback { get; private set; }
 
-        public UIExtensionsHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
+        public UIExtensionsHandler(CiscoCodec parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
@@ -102,13 +102,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public void RegisterFeedback()
         {
             // get standard events
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Event\r\n");
+            _parent.SendText("xfeedback register /Event/UserInterface/Extensions/Event");
             // detect pages opened, this is unreliable
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/PageOpened\r\n");
+            _parent.SendText("xfeedback register /Event/UserInterface/Extensions/PageOpened");
             // detect pages closed, this doesn't work
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/PageClosed\r\n");
+            _parent.SendText("xfeedback register /Event/UserInterface/Extensions/PageClosed");
             // detect changes to the UI Layout file
-            _coms.SendText("xfeedback register /Event/UserInterface/Extensions/Widget/LayoutUpdated\r\n");
+            _parent.SendText("xfeedback register /Event/UserInterface/Extensions/Widget/LayoutUpdated");
         }
 
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
@@ -130,8 +130,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void UpdateWidget<T>(string WidgetId, T Value)
         {
-            var command = string.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"\r\n", WidgetId, Value);
-            _coms.SendText(command);
+            var command = string.Format("xCommand UserInterface Extensions Widget SetValue WidgetId: \"{0}\" Value: \"{1}\"", WidgetId, Value);
+            _parent.SendText(command);
         }
     }
 }

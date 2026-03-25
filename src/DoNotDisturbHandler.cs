@@ -10,13 +10,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class DoNotDisturbHandler : IHasDoNotDisturbMode
     {
-        private readonly IKeyed _parent;
+        private readonly CiscoCodec _parent;
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
         private bool _doNotDisturbEnabled;
 
-        public DoNotDisturbHandler(IKeyed parent, IBasicCommunication coms, GenericQueue handler)
+        public DoNotDisturbHandler(CiscoCodec parent, IBasicCommunication coms, GenericQueue handler)
         {
             _parent = parent;
             _coms = coms;
@@ -42,12 +42,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void ActivateDoNotDisturbMode()
         {
-            _coms.SendText("xCommand Conference DoNotDisturb Activate\r");
+            _parent.SendText("xCommand Conference DoNotDisturb Activate");
         }
 
         public void DeactivateDoNotDisturbMode()
         {
-            _coms.SendText("xCommand Conference DoNotDisturb Deactivate\r");
+            _parent.SendText("xCommand Conference DoNotDisturb Deactivate");
         }
 
         public void ToggleDoNotDisturbMode()
