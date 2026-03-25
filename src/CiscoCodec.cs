@@ -4335,7 +4335,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception ex)
 			{
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
-				this.LogVerbose("Response JSON: {response}", response);
+				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 			}
 		}
