@@ -22,8 +22,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(50);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(50);
+        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(100);
+        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(100);
 
         private Thread _worker;
         private readonly CEvent _waitHandle = new CEvent();
@@ -63,13 +63,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _parent = parent;
 
             CrestronEnvironment.ProgramStatusEventHandler += type =>
-                                                             {
-                                                                 if (type != eProgramStatusEventType.Stopping)
-                                                                     return;
+                {
+                    if (type != eProgramStatusEventType.Stopping)
+                        return;
 
-                                                                 Interlocked.Exchange(ref _isProcessing, Idle);
-                                                                 _waitHandle.Set();
-                                                             };
+                    Interlocked.Exchange(ref _isProcessing, Idle);
+                    _waitHandle.Set();
+                };
         }
 
         public void AddCommandToQueue(string query)
@@ -79,7 +79,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             _commandActions.Enqueue(() =>
              {
-                  _parent.SendText(query);
+                 _parent.SendTextWithoutQueue(query);
              });
 
             // if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
@@ -103,7 +103,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 if (!JsonResponseModeSet)
                 {
-                    _parent.SendText("xPreferences outputmode json");
+                    _parent.SendTextWithoutQueue("xPreferences outputmode json");
                 }
 
                 CheckSyncStatus();
@@ -207,7 +207,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     return;
                 }
-                
+
                 InitialSyncComplete = true;
                 _parent.PollSpeakerTrack();
                 _parent.PollPresenterTrack();
