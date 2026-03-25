@@ -147,7 +147,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             [JsonProperty("id")]
             public string Id { get; set; }
+
+            [JsonProperty("Presentation")]
             public Presentation Presentation { get; set; }
+
+            [JsonProperty("Extensions")]
             public UiExtensions Extensions { get; set; } // /Event/UserInterface/Extensions/
 
             [JsonProperty("webview")]
