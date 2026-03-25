@@ -2102,7 +2102,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							// SendText("xStatus Cameras");
 							// SendText("xStatus SIP");
 							// SendText("xStatus Call");
-							SendText("xStatus");
+							SendTextWithoutQueue("xStatus");
 						}
 					}
 					else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -2177,6 +2177,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (string.IsNullOrEmpty(cmd))
 				return;
 			SyncState.AddCommandToQueue(cmd);
+		}
+
+		private void SendTextWithoutQueue(string command)
+		{
+			if (Communication == null)
+				return;
+			Communication.SendText(command + Delimiter);
 		}
 
 		public void SendText(string command)
@@ -3809,13 +3816,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (!SyncState.InitialConfigurationMessageWasReceived)
 			{
 				this.LogDebug("Sending Configuration");
-				SendText("xConfiguration");
+				SendTextWithoutQueue("xConfiguration");
 			}
 			if (SyncState.FeedbackWasRegistered)
 				return;
 			this.LogDebug("Sending Feedback");
 
-			SendText(BuildFeedbackRegistrationExpression());
+			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
 		}
 
