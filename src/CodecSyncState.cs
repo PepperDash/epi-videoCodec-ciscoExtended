@@ -75,10 +75,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(query))
                 return;
 
-            if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
-            {
-                this.LogDebug("Unable to enqueue command:{query}", query);
-            }
+            _commandActions.Enqueue(() =>
+             {
+                  _parent.SendText(query);
+             });
+
+            // if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
+            // {
+            //     this.LogError("Unable to enqueue command:{query}", query);
+            //     this.LogError("commandActions queue is full. Consider increasing the queue size if this is a common occurrence. Count = {CommandQueueCount}", _commandActions.Count);
+            // }
 
             Schedule();
         }
@@ -205,8 +211,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
-                this.LogInformation("Codec Sync Complete");
-
+                if (InitialSyncComplete)
+                {
+                    return;
+                }
+                
                 InitialSyncComplete = true;
                 _parent.PollSpeakerTrack();
                 _parent.PollPresenterTrack();

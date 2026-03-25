@@ -1,0 +1,77 @@
+xcommand Peripherals list Type: touchpanel
+
+{
+  "CommandResponse": {
+    "PeripheralsListResult": {
+      "Device": [
+        {
+          "ConnectionMethod": {
+            "Value": "IP"
+          },
+          "HardwareInfo": {
+            "Value": "73-101864-1"
+          },
+          "ID": {
+            "Value": "34:88:18:07:47:10"
+          },
+          "LastSeen": {
+            "Value": "2026-01-22T16:08:03Z"
+          },
+          "Name": {
+            "Value": "Cisco Room Navigator"
+          },
+          "NetworkAddress": {
+            "Value": "169.254.1.41"
+          },
+          "SerialNumber": {
+            "Value": "FOC2718H70F"
+          },
+          "SoftwareInfo": {
+            "Value": "ce26.2.1.5.a6bc000714f"
+          },
+          "Type": {
+            "Value": "TouchPanel"
+          },
+          "id": "1001"
+        },
+        {
+          "ConnectionMethod": {
+            "Value": "IP"
+          },
+          "HardwareInfo": {
+            "Value": "73-101864-1"
+          },
+          "ID": {
+            "Value": "24:2a:04:7b:1c:3c"
+          },
+          "LastSeen": {
+            "Value": "2026-01-22T16:08:05Z"
+          },
+          "Name": {
+            "Value": "Cisco Room Navigator"
+          },
+          "NetworkAddress": {
+            "Value": "169.254.1.42"
+          },
+          "SerialNumber": {
+            "Value": "FOC2701P636"
+          },
+          "SoftwareInfo": {
+            "Value": "ce26.2.1.5.a6bc000714f"
+          },
+          "Type": {
+            "Value": "TouchPanel"
+          },
+          "id": "1002"
+        }
+      ],
+      "status": "OK"
+    }
+  }
+}
+
+xConfiguration UserInterface HomeScreen Peripherals WebApp URL: http://pepperdash.com
+
+xCommand Peripherals TouchPanel Configure ID: "8c:44:a5:45:a1:ab" Mode: PersistentWebApp
+
+xCommand Peripherals TouchPanel Configure ID: "8c:44:a5:45:a1:ab" Mode: Controller

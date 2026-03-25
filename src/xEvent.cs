@@ -1,4 +1,6 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -148,12 +150,56 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public Presentation Presentation { get; set; }
             public UiExtensions Extensions { get; set; } // /Event/UserInterface/Extensions/
 
+            [JsonProperty("webview")]
+            public WebViewEvent WebView { get; set; } // /Event/UserInterface/WebView/Display --- not sure if this is the correct path, but we need to capture this event for PWA mode
+
             public UserInterface()
             {
                 //Presentation = new Presentation();
                 //Extensions = new UiExtensions();
             }
         }
+
+        public enum eWebViewEventMode
+        {
+            True,
+            False,
+        }
+
+        public enum eWebViewTarget
+        {
+            OSD,
+            Controller,
+            PersistentWebApp,
+            RoomScheduler
+        }
+
+        public class WebViewEvent
+        {
+            [JsonProperty("id")]
+            public string Id { get; set; }
+
+            [JsonProperty("status")]
+            public Status Status { get; set; } // /Event/UserInterface/WebView/Status
+    
+            [JsonProperty("display")]
+            public WebViewDisplay Display { get; set; } // /Event/UserInterface/WebView/Display
+        }
+
+        public class WebViewDisplay
+        {
+            [JsonProperty("mode")]
+            [JsonConverter(typeof(StringEnumConverter))]
+            public eWebViewEventMode Mode { get; set; }
+
+            [JsonProperty("url")]
+            public string Url { get; set; }
+
+            [JsonProperty("target")]
+            [JsonConverter(typeof(StringEnumConverter))]
+            public eWebViewTarget Target { get; set; }
+        }
+
         public class UiExtensions : ValueProperty // /Event/UserInterface/Extensions/
         {
             //public PageOpened PageOpened { get; set; }

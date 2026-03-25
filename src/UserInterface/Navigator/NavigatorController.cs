@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         //public BoolFeedback WebViewOpenFeedback => throw new NotImplementedException();
 
-        private NavigatorLockoutHandler router;
+        private INavigatorLockoutHandler router;
 
         public NavigatorController(DeviceConfig config) : base(config)
         {
@@ -124,7 +124,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     SetAppUrl(this.bridge.AppUrl);
                 };
 
-                router = new NavigatorLockoutHandler(this, props);
+                // Initialize Lockout Handler
+                router = Parent.UsePersistentWebAppForLockout
+                    ? new NavigatorLockoutHandlerWithPWA(this, props) as INavigatorLockoutHandler
+                    : new NavigatorLockoutHandlerWithModal(this, props) as INavigatorLockoutHandler;
 
                 router.Activate(this);
             }
@@ -194,6 +197,57 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             // Treat everything else as a relative URL (including paths starting with '/')
             this.LogDebug("Sending relative URL to WebViewOsd: {url}", url);
             router.SendWebViewMcUrl(url, webviewConfig, true);
+        }
+
+        /// <summary>
+        /// Enters PWA mode on the navigator with the specified URL
+        /// </summary>
+        /// <param name="url"></param>
+        public void EnterPwaMode(string url)
+        {
+            // Check if the URL starts with a protocol scheme (http:// or https://)
+            // This handles the case where paths starting with '/' on Linux would be 
+            // incorrectly treated as absolute file:// URLs by Uri.TryCreate
+            bool isAbsoluteUrl = url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                               url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+
+
+            if (router is INavigatorLockoutHanderWithPwa pwaRouter)
+            {
+                if(isAbsoluteUrl)
+                {
+                    var uriSuccess = Uri.TryCreate(url, UriKind.Absolute, out var uri);
+                    if (!uriSuccess)
+                    {
+                        this.LogError("Invalid absolute URL: {url}", url);
+                        return;
+                    }
+                    pwaRouter.EnterPwaMode(uri.ToString());
+                    return;
+                }
+
+                pwaRouter.EnterPwaMode(url, true);
+            }
+            else
+            {
+                this.LogWarning("Current lockout handler does not support PWA mode.");
+            }
+        }
+
+        /// <summary>
+        /// Exits PWA mode on the navigator and returns to the default UI
+        /// </summary>
+        public void ExitPwaMode()
+        {
+            if (router is INavigatorLockoutHanderWithPwa pwaRouter)
+            {
+                pwaRouter.ExitPwaMode();
+            }
+            else
+            {
+                this.LogWarning("Current lockout handler does not support PWA mode.");
+            }
         }
     }
 }

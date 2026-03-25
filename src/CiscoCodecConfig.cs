@@ -124,6 +124,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public bool EndAllCallsOnMeetingJoin { get; set; }
 
         /// <summary>
+        /// Indicates whether to use the Persistent Web App for lockout scenarios on the navigator panels
+        /// </summary>
+        [JsonProperty("usePersistentWebAppForLockout")]
+        public bool UsePersistentWebAppForLockout { get; set; }
+
+
+        /// <summary>
         /// These are key-value pairs, uint id, string type
         /// They are used to pass back UI Extension Widget events
         /// </summary>
@@ -135,6 +142,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         [JsonProperty("emergency")]
         public Emergency Emergency { get; set; }
+
+        [JsonProperty("defaultProvisioningMode", NullValueHandling = NullValueHandling.Ignore)]
+        public string DefaultProvisioningMode { get; set; }
 
         public CiscoCodecConfig()
         {

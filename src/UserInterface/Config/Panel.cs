@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -34,13 +35,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         [JsonProperty("panelId")]
         public string PanelId { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Origin of the panel (e.g., "local" or "cloud").
+        /// </summary>
+        [XmlElement("Origin")]
+        [JsonProperty("origin", NullValueHandling = NullValueHandling.Ignore)]
+        public string Origin { get; set; }
+
+        /// <summary>
+        /// Activity type for the panel (e.g., "Custom" or "Standard").
+        /// </summary>
+        [XmlElement("ActivityType")]
+        [JsonProperty("activityType", NullValueHandling = NullValueHandling.Ignore)]
+        public string ActivityType { get; set; }
+
+        /// <summary>
+        /// Location of the panel on the UI.
+        /// </summary>
         [XmlElement("Location")]
         [JsonProperty("location")]
         [JsonConverter(typeof(StringEnumConverter))]
         public ECiscoPanelLocation Location { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Type of panel (e.g., "Statusbar", "Pane").
+        /// </summary>
+        [XmlElement("Type")]
+        [JsonProperty("type", NullValueHandling = NullValueHandling.Ignore)]
+        public string Type { get; set; }
+
         [XmlElement("Color")]
         [JsonProperty("color")]
         public string Color { get; set; }
@@ -140,6 +163,88 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         [JsonProperty("panelFeedback", NullValueHandling = NullValueHandling.Ignore)]
         [XmlIgnore]
         public PanelFeedback PanelFeedback { get; set; }
+
+        /// <summary>
+        /// Collection of feedback configurations for the panel.
+        /// This property allows multiple feedback sources to control different aspects of the panel.
+        /// Supports both numbered feedback properties (panelFeedback1, panelFeedback2, etc.) and the collection.
+        /// </summary>
+        [JsonProperty("panelFeedbacks", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public List<PanelFeedback> PanelFeedbacks { get; set; }
+
+        /// <summary>
+        /// Page configuration for the panel.
+        /// Contains the page structure with rows and widgets.
+        /// </summary>
+        [XmlElement("Page")]
+        [JsonProperty("page", NullValueHandling = NullValueHandling.Ignore)]
+        public Page Page { get; set; }
+
+        /// <summary>
+        /// First additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback1", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback1 { get; set; }
+
+        /// <summary>
+        /// Second additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback2", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback2 { get; set; }
+
+        /// <summary>
+        /// Third additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback3", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback3 { get; set; }
+
+        /// <summary>
+        /// Fourth additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback4", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback4 { get; set; }
+
+        /// <summary>
+        /// Fifth additional feedback configuration.
+        /// </summary>
+        [JsonProperty("panelFeedback5", NullValueHandling = NullValueHandling.Ignore)]
+        [XmlIgnore]
+        public PanelFeedback PanelFeedback5 { get; set; }
+
+        /// <summary>
+        /// Gets all configured panel feedbacks (including the legacy single feedback and numbered feedbacks).
+        /// </summary>
+        /// <returns>Collection of all non-null panel feedback configurations.</returns>
+        public List<PanelFeedback> GetAllPanelFeedbacks()
+        {
+            var feedbackSet = new HashSet<PanelFeedback>();
+            // Add legacy single feedback for backward compatibility
+            if (PanelFeedback != null)
+                feedbackSet.Add(PanelFeedback);
+
+            // Add numbered feedbacks
+            if (PanelFeedback1 != null)
+                feedbackSet.Add(PanelFeedback1);
+            if (PanelFeedback2 != null)
+                feedbackSet.Add(PanelFeedback2);
+            if (PanelFeedback3 != null)
+                feedbackSet.Add(PanelFeedback3);
+            if (PanelFeedback4 != null)
+                feedbackSet.Add(PanelFeedback4);
+            if (PanelFeedback5 != null)
+                feedbackSet.Add(PanelFeedback5);
+
+            if (PanelFeedbacks != null)
+                foreach (var feedback in PanelFeedbacks)
+                    if (feedback != null)
+                        feedbackSet.Add(feedback);
+            return feedbackSet.ToList();
+        }
     }
 
     /// <summary>
@@ -235,6 +340,118 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
     }
 
     /// <summary>
+    /// Represents a page configuration within a panel.
+    /// Contains rows of widgets and page-level settings.
+    /// </summary>
+    public class Page
+    {
+        /// <summary>
+        /// Name of the page.
+        /// </summary>
+        [XmlElement("Name")]
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Unique identifier for the page.
+        /// </summary>
+        [XmlElement("PageId")]
+        [JsonProperty("pageId")]
+        public string PageId { get; set; }
+
+        /// <summary>
+        /// Page options (e.g., "hideRowNames=1").
+        /// </summary>
+        [XmlElement("Options")]
+        [JsonProperty("options", NullValueHandling = NullValueHandling.Ignore)]
+        public string Options { get; set; }
+
+        /// <summary>
+        /// Collection of rows containing widgets.
+        /// </summary>
+        [XmlElement("Row")]
+        [JsonProperty("rows")]
+        public List<Row> Rows { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a row of widgets within a page.
+    /// </summary>
+    public class Row
+    {
+        /// <summary>
+        /// Name of the row (optional).
+        /// </summary>
+        [XmlElement("Name")]
+        [JsonProperty("name", NullValueHandling = NullValueHandling.Ignore)]
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Collection of widgets in this row.
+        /// </summary>
+        [XmlElement("Widget")]
+        [JsonProperty("widgets")]
+        public List<Widget> Widgets { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a widget within a row.
+    /// Widgets are interactive UI elements like buttons, sliders, etc.
+    /// </summary>
+    public class Widget
+    {
+        /// <summary>
+        /// Unique identifier for the widget.
+        /// </summary>
+        [XmlElement("WidgetId")]
+        [JsonProperty("widgetId")]
+        public string WidgetId { get; set; }
+
+        /// <summary>
+        /// Display name of the widget.
+        /// </summary>
+        [XmlElement("Name")]
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Type of widget (Button, ToggleButton, Slider, etc.).
+        /// </summary>
+        [XmlElement("Type")]
+        [JsonProperty("type")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public WidgetType Type { get; set; }
+
+        /// <summary>
+        /// Widget options (e.g., "size=3").
+        /// </summary>
+        [XmlElement("Options")]
+        [JsonProperty("options", NullValueHandling = NullValueHandling.Ignore)]
+        public string Options { get; set; }
+    }
+
+    /// <summary>
+    /// Defines the available widget types.
+    /// </summary>
+    public enum WidgetType
+    {
+        /// <summary>Standard button widget.</summary>
+        Button,
+        /// <summary>Toggle button widget.</summary>
+        ToggleButton,
+        /// <summary>Slider widget.</summary>
+        Slider,
+        /// <summary>Text widget.</summary>
+        Text,
+        /// <summary>Spinner widget.</summary>
+        Spinner,
+        /// <summary>Directional pad widget.</summary>
+        DirectionalPad,
+        /// <summary>Group button widget.</summary>
+        GroupButton
+    }
+
+    /// <summary>
     /// Wrapper class for custom icon XML serialization.
     /// </summary>
     public class CustomIconWrapper
@@ -305,6 +522,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         General,
         /// <summary>Sliders icon.</summary>
         Sliders,
+        /// <summary>Video layout presenter icon.</summary>
+        VideoLayoutPresenter,
         /// <summary>Custom icon (requires custom icon configuration).</summary>
         Custom
     }
