@@ -2123,8 +2123,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var success = DeserializeResponse(_jsonMessage.ToString());
 
-					if(success) _jsonMessage = null;
-					
+					if (success) _jsonMessage = null;
+
 					return;
 				}
 
@@ -4336,11 +4336,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
-				var responseWithLastBraceRemoved = response.LastIndexOf('}') > 0
-					? response.Remove(response.LastIndexOf('}'))
-					: response;
+				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
+				{
+					var responseWithLastBraceRemoved = response.LastIndexOf('}') > 0
+						? response.Remove(response.LastIndexOf('}'))
+						: response;
 
-				DeserializeResponse(responseWithLastBraceRemoved);
+					DeserializeResponse(responseWithLastBraceRemoved);
+				}
 				return false;
 			}
 			catch (Exception ex)
@@ -4348,6 +4351,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
 				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
+
+
 				return false;
 			}
 		}
