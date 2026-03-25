@@ -1716,6 +1716,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
 				RegisterDisconnectEvents();
+				
+				InitializeCodec();
 
 				if (Communication is ISocketStatus socket)
 				{
@@ -1917,6 +1919,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				BookingsRefreshTimer = null;
 				_registrationCheckTimer?.Stop();
 				_registrationCheckTimer = null;
+
 			}
 		}
 
@@ -1956,7 +1959,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Send all commands immediately
 			foreach (var command in initCommands)
 			{
-				SendText(command);
+				EnqueueCommand(command);
 			}
 
 			// Register UI Extensions feedback if needed
@@ -1971,7 +1974,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogInformation("Completing codec initialization...");
 
 			// Get phonebook if configured
-			if (_config.GetPhonebookOnStartup)
+			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
 				SearchDirectory("");
@@ -1992,9 +1995,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			// Set up cameras from config or auto-detect
-			if (_config.CameraInfo != null && _config.CameraInfo.Count > 0)
+			if (config.CameraInfo != null && config.CameraInfo.Count > 0)
 			{
-				SetUpCamerasFromConfig(_config.CameraInfo);
+				SetUpCamerasFromConfig(config.CameraInfo);
 			}
 			else
 			{
@@ -2005,14 +2008,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			GetCallHistory();
 
 			// Set up phonebook refresh timer if needed
-			if (_config.GetPhonebookOnStartup)
+			if (config.GetPhonebookOnStartup)
 			{
 				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
 				GetPhonebook(null);
 			}
 
 			// Set up bookings refresh timer if needed  
-			if (_config.GetBookingsOnStartup)
+			if (config.GetBookingsOnStartup)
 			{
 				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
 				GetBookings(null);
@@ -2112,37 +2115,37 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 				}
 
-				if (!SyncState.InitialSyncComplete)
-				{
-					var data = response.Trim().ToLower();
-					if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
-					{
-						SyncState.LoginMessageReceived();
+				// if (!SyncState.InitialSyncComplete)
+				// {
+				// 	var data = response.Trim().ToLower();
+				// 	if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
+				// 	{
+				// 		SyncState.LoginMessageReceived();
 
-						_loginMessageReceivedTimer?.Stop();
+				// 		_loginMessageReceivedTimer?.Stop();
 
-						//SendText("echo off");
-					}
-					else if (data.Contains("xpreferences outputmode json"))
-					{
-						if (SyncState.JsonResponseModeSet)
-							return;
+				// 		//SendText("echo off");
+				// 	}
+				// 	else if (data.Contains("xpreferences outputmode json"))
+				// 	{
+				// 		if (SyncState.JsonResponseModeSet)
+				// 			return;
 
-						SyncState.JsonResponseModeMessageReceived();
+				// 		SyncState.JsonResponseModeMessageReceived();
 
-						if (!SyncState.InitialStatusMessageWasReceived)
-						{
-							// SendText("xStatus Cameras");
-							// SendText("xStatus SIP");
-							// SendText("xStatus Call");
-							SendText("xStatus");
-						}
-					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
-					}
-				}
+				// 		if (!SyncState.InitialStatusMessageWasReceived)
+				// 		{
+				// 			// SendText("xStatus Cameras");
+				// 			// SendText("xStatus SIP");
+				// 			// SendText("xStatus Call");
+				// 			SendText("xStatus");
+				// 		}
+				// 	}
+				// 	else if (data.Contains("xfeedback register /event/calldisconnect"))
+				// 	{
+				// 		SyncState.FeedbackRegistered();
+				// 	}
+				// }
 
 				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
 				{
