@@ -3569,7 +3569,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
 					);
 
-					IsInPwaMode = display.Target == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
 				}
 			}
 		}

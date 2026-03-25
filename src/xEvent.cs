@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Independentsoft.Exchange;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
@@ -190,18 +191,53 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public WebViewDisplay Display { get; set; } // /Event/UserInterface/WebView/Display
         }
 
+
+        public class DisplayMode : ValueProperty
+        {
+            private string _value;
+            [JsonProperty("id")]
+            public string Id { get; set; }
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
+
+            public eWebViewEventMode WebViewEventMode
+            {
+                get
+                {
+                    eWebViewEventMode mode;
+                    System.Enum.TryParse(Value, true, out mode);
+                    return mode;
+                }
+            }
+        }
+
+        public class Target : ValueProperty
+        {
+            private string _value;
+            [JsonProperty("id")]
+            public string Id { get; set; }
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
+
+            public eWebViewTarget WebViewTarget
+            {
+                get
+                {
+                    eWebViewTarget target;
+                    System.Enum.TryParse(Value, true, out target);
+                    return target;
+                }
+            }
+        }
+
         public class WebViewDisplay
         {
             [JsonProperty("mode")]
-            [JsonConverter(typeof(StringEnumConverter))]
-            public eWebViewEventMode Mode { get; set; }
+            public DisplayMode Mode { get; set; }
 
             [JsonProperty("url")]
             public string Url { get; set; }
 
             [JsonProperty("target")]
-            [JsonConverter(typeof(StringEnumConverter))]
-            public eWebViewTarget Target { get; set; }
+            public Target Target { get; set; }
         }
 
         public class UiExtensions : ValueProperty // /Event/UserInterface/Extensions/
