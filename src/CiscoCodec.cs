@@ -696,8 +696,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public ExtensionsHandler UiExtensionsHandler { get; set; }
 
-		private readonly IBasicCommunication _comms;
-
 		// Constructor for IBasicCommunication
 		public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
 			: base(config)
@@ -712,7 +710,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
 			DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 			UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
-			_comms = comm;
 
 			CrestronEnvironment.ProgramStatusEventHandler += a =>
 			{
@@ -3580,7 +3577,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var tokenString = string.Empty;
 			try
 			{
-				//Debug.Console(2, this, "PopulateObjectWithToken: {0}", tokenSelector);
+				// this.LogDebug("PopulateObjectWithToken: {0}", tokenSelector);
 				var token = JTokenValidInToken(jToken, tokenSelector); // JObject
 				if (token == null)
 					return;
@@ -3591,6 +3588,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception e)
 			{
 				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
+				this.LogError("Token String: {tokenString}", tokenString);
 				this.LogVerbose(e, "Exception");
 			}
 		}
@@ -4331,7 +4329,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (JsonReaderException ex)
 			{
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
-				this.LogVerbose("Response JSON: {response}", response);
+				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 			}
 			catch (Exception ex)
