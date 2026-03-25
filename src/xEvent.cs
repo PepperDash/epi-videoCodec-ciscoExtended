@@ -166,8 +166,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public enum eWebViewEventMode
         {
-            True,
-            False,
+            Fullscreen,
+            Modal,
         }
 
         public enum eWebViewTarget
