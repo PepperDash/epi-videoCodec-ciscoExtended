@@ -1843,13 +1843,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
-				+ "Status/UserInterface/WebView/Status"
+				+ "/Status/UserInterface/WebView/Status"
 				+ Delimiter
 				+ prefix
 				+ "/Event/UserInterface/WebView/Display"
 				+ Delimiter
 				+ prefix
-				+ "Status/Network/Ethernet/MacAddress"
+				+ "/Status/Network/Ethernet/MacAddress"
 				+ Delimiter
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
