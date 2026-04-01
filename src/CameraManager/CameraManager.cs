@@ -195,15 +195,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         private void Codec_CameraDisconnected(object sender, CameraEventArgs e)
         {
-            var camera = managedCameras.FirstOrDefault((c) => c.Value.CameraId == e.CameraId).Value;
+            var camera = managedCameras.FirstOrDefault((c) => c.Value.SerialNumber == e.SerialNumber).Value;
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraDisconnected event for camera ID {e.CameraId} but no managed camera has that ID");
+                this.LogWarning($"Camera Manager {Key} received CameraDisconnected event for camera serial number {e.SerialNumber} but no managed camera has that serial number");
                 return;
             }
 
             // When a camera disconnects, we want to ensure PoE power is turned off for that camera's network switch port and clear the assigned serial number on the codec so it doesn't get confused if that camera (or another one) reconnects later
-            this.LogDebug($"Camera Manager {Key} handling CameraDisconnected event for camera '{camera.Key}' (ID {e.CameraId})");
+            this.LogDebug($"Camera Manager {Key} handling CameraDisconnected event for camera '{camera.Key}' (Serial Number {e.SerialNumber})");
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}'");
             networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, false);
 
@@ -213,10 +213,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         private void Codec_CameraConnected(object sender, CameraEventArgs e)
         {
-            var camera = managedCameras.FirstOrDefault((c) => c.Value.CameraId == e.CameraId).Value;
+            var camera = managedCameras.FirstOrDefault((c) => c.Value.SerialNumber == e.SerialNumber).Value;
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera ID {e.CameraId} but no managed camera has that ID");
+                this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no managed camera has that serial number");
                 return;
             }
 
@@ -224,7 +224,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (codec != null)
             {
                 this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec to ensure correct pairing");
-                codec.SetCameraAssignedSerialNumber(e.CameraId, camera.SerialNumber);
+                codec.SetCameraAssignedSerialNumber(e.CameraId, e.SerialNumber);
             }
             else
             {
