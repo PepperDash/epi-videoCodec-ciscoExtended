@@ -9,6 +9,7 @@ using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
 using PepperDash.Essentials.Core.Web.RequestHandlers;
+using PepperDash.Essentials.Devices.Common.Cameras;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
@@ -148,7 +149,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     this.LogDebug($"Camera Manager {Key} detected PoE disabled event on port '{e.Port}' but no managed camera is assigned to that port");
                 }
-            } else if (e.EventType == NetworkSwitchPortEventType.VlanChanged)
+            }
+            else if (e.EventType == NetworkSwitchPortEventType.VlanChanged)
             {
                 // Once a port's VLAN is changed, we want to enable PoE on that port again to help ensure that the camera reconnects and pairs with the correct codec based on the new VLAN
                 networkSwitch.SetPortPoeState(e.Port, true);
@@ -187,7 +189,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{camera.ParentCodec.Key}' to trigger re-pairing with correct codec based on new scenario");
                             camera.ParentCodec.CameraFactoryReset(camera.CameraId);
                         }
-                        else {
+                        else
+                        {
                             this.LogDebug($"Camera Manager {Key} camera '{cameraKey}' is already assigned to the correct codec '{codecConfig.CodecKey}' for scenario '{currentScenario.Key}', no factory reset needed");
                         }
                     }
@@ -226,9 +229,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
-            var codec = sender as ICiscoCodecCameraFactoryReset;
-            if (codec != null)
+            var codec = sender as CiscoCodec;
+
+            var codecCameras = codec?.Cameras;
+            if (codecCameras != null)
             {
+                if(codecCameras is IEnumerable<CiscoCamera> ciscoCodecCameras)
+                {
+                    var matchingCameras = ciscoCodecCameras.Where(c => c.SerialNumber == e.SerialNumber);
+                    if (matchingCameras.Any())
+                    {
+                        codec.ClearCameraAssignedSerialNumber(e.CameraId);
+                        this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
+                    }
+                    else
+                    {
+                        this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no cameras on codec '{codec.Key}' have a matching serial number");
+                    }
+                }
+                else
+                {
+                    this.LogError($"Camera Manager {Key} error: Codec cameras collection is not of expected type IEnumerable<CiscoCamera> when handling CameraConnected event");
+                }
+            }
+
+            var codecCameraReset = sender as ICiscoCodecCameraFactoryReset;
+            if (codecCameraReset != null)
+            {
+
+
                 this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec to ensure correct pairing");
                 codec.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
             }
