@@ -20,6 +20,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         public uint CameraId { get; private set; }
 
+        private bool maintainConfiguredCameraId = false;
+
         /// <summary>
         /// Optional property to specify the network switch port the camera is connected to.
         /// This is used by the CameraManager to change port settings when the camera is switched to a different codec.
@@ -102,6 +104,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             SerialNumber = props.SerialNumber;
             MacAddress = props.MacAddress;
             NetworkSwitchPort = props.NetworkSwitchPort;
+            maintainConfiguredCameraId = props.MaintainConfiguredCameraId ?? false;
 
             // Default to all capabilties
             Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom | eCameraCapabilities.Focus;
@@ -131,7 +134,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         public void SetCameraId(uint id)
         {
-            CameraId = id;
+            if (!maintainConfiguredCameraId)
+            {
+                CameraId = id;
+            }
+            else
+            {
+                this.LogDebug("Maintaining configured camera ID {CameraId} for camera {Key} as maintainConfiguredCameraId is set to true", CameraId, Key);
+            }
         }
 
         public void SetParentCodec(CiscoCodec codec)

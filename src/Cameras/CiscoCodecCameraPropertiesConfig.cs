@@ -57,6 +57,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         [JsonProperty("networkSwitchPort")]
         public string NetworkSwitchPort { get; set; }
+
+        /// <summary>
+        /// Optional property to specify whether to maintain the configured camera ID when the camera is switched to a different codec. 
+        /// This is used by the CameraManager to determine whether to change the camera ID when switching codecs.
+        /// </summary>
+        [JsonProperty("maintainConfiguredCameraId")]
+        public bool? MaintainConfiguredCameraId { get; set; }
     }
 }
 
