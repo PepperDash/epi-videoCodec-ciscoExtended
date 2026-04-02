@@ -183,7 +183,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         // Here we would implement the logic to assign the camera to the codec, e.g. by calling a method on the codec interface
                         this.LogInformation($"Camera Manager {Key} would assign camera '{cameraKey}' to codec '{codecConfig.CodecKey}' based on scenario '{currentScenario.Key}'");
                         this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{codecConfig.CodecKey}' to trigger re-pairing with correct codec based on new scenario");
-                        codec.CameraFactoryReset(camera.CameraId);
+                        camera.ParentCodec.CameraFactoryReset(camera.CameraId);
                     }
                 }
             }
