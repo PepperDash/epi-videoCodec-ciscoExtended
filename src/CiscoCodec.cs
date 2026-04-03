@@ -3600,20 +3600,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
 			CodecStatus.Status.Cameras.CameraList.Add(newCam);
 
+			CameraConnected.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
+
 			// if we have a cameras with a matching serial number, set it's parent codec and add it.
 			if (existingCameraDevice != null)
 			{
-				Cameras.Add(existingCameraDevice);
 				existingCameraDevice.SetParentCodec(this);
+				Cameras.Add(existingCameraDevice);
+				return true;
 			}
-
-			CameraConnected.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
-
-			return true;
+			return false;
 		}
 
 
-		private bool RemoveCamera(uint cameraId, CiscoCamera existingCameraDevice, string serialNumber)
+		private bool RemoveCamera(uint cameraId, CiscoCamera existingCameraDevice)
 		{
 			this.LogDebug("Camera {camId} is disconnected.", cameraId);
 
@@ -3762,34 +3762,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
 							{
 								this.LogDebug("Camera {camId} is ghosted.  Removing from Codec.", camId);
-								CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == camId);
-								listWasUpdated = true;
 
-								CameraDisconnected.Invoke(this, new CameraEventArgs(camIdInt, existingCamStatus?.SerialNumber?.Value));
-								continue;
-							}
-
-							if (connected != null)
-							{
-								if (connected.Equals("true", StringComparison.OrdinalIgnoreCase))
-								{
-									this.LogDebug("Camera {camId} is connected.", camId);
-									CameraConnected.Invoke(this, new CameraEventArgs(camIdInt, serialNumber));
-									listWasUpdated = true;
-								}
-								else
-								{
-									listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice, serialNumber);
-								}
+								RemoveCamera(camIdInt, existingCameraDevice);
 							}
 						}
 					}
 
-
-
 					if (connected != null && connected.Equals("false", StringComparison.OrdinalIgnoreCase))
 					{
-						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice, serialNumber);
+						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
 					}
 					else if (connected != null && connected.Equals("true", StringComparison.OrdinalIgnoreCase) && existingCamStatus == null)
 					{
