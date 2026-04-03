@@ -430,6 +430,8 @@ The `CameraManager` device interacts with a managed network switch that must imp
 
 Based on the configuration specified, this device will monitor the current room combination scenario and automatically execute the necessary actions on the codec and the network switch to be able to assign a Cisco Vision camera to a different codec at runtime.
 
+The CameraManager config should ONLY list the cameras that need to be moved between codecs.  Any cameras that will be statically assigned to a single codec and not change at runtime should not be included in the `cameraKeys` arrays for any of the `codecConfig` arrays.
+
 In order for this functionality to work, each codec config must specify a `vlanId` property, and each camera config must specify a `networkSwitchPort` property as well as `defaultParentCodecKey`, `defaultCameraId`, `serialNumber` and `sourceId`.
 
 ```json
