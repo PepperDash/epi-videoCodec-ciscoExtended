@@ -1953,6 +1953,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 			}
 
+			// Poll for full camera status including serial numbers to ensure cameras are properly matched
+			// to CiscoCamera devices. The initial xStatus response may not include serial numbers.
+			EnqueueCommand("xStatus Cameras Camera");
+
 			GetCallHistory();
 
 			if (config.GetPhonebookOnStartup)
@@ -3615,19 +3619,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private bool RemoveCamera(uint cameraId, CiscoCamera existingCameraDevice)
 		{
-			this.LogDebug("Camera {camId} is disconnected.", cameraId);
+			try
+			{
+				this.LogDebug("Camera {camId} is disconnected. existingCameraDevice={device} serial={serial}",
+					cameraId,
+					existingCameraDevice != null ? existingCameraDevice.Key : "null",
+					existingCameraDevice?.SerialNumber ?? "null");
 
-			CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == cameraId.ToString());
+				this.LogDebug("Camera {camId}: RemoveCamera step 1 - removing from CameraList", cameraId);
+				CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == cameraId.ToString());
 
-			// if we have a cameras with a matching ID, clear it's parent codec and remove it.
-			var camerasList = Cameras.OfType<CiscoCamera>().ToList();
-			var cameraToRemove = camerasList.FirstOrDefault(c => c.CameraId == cameraId);
-			cameraToRemove?.SetParentCodec(null);
-			Cameras.Remove(cameraToRemove);
+				this.LogDebug("Camera {camId}: RemoveCamera step 2 - Cameras collection is {state}", cameraId, Cameras != null ? $"initialized ({Cameras.Count} items)" : "NULL");
+				if (Cameras != null)
+				{
+					var camerasList = Cameras.OfType<CiscoCamera>().ToList();
+					var cameraToRemove = camerasList.FirstOrDefault(c => c.CameraId == cameraId);
+					cameraToRemove?.SetParentCodec(null);
+					Cameras.Remove(cameraToRemove);
+				}
 
-			CameraDisconnected.Invoke(this, new CameraEventArgs(cameraId, existingCameraDevice?.SerialNumber));
+				this.LogDebug("Camera {camId}: firing CameraDisconnected event with serial={serial}", cameraId, existingCameraDevice?.SerialNumber ?? "null");
+				CameraDisconnected?.Invoke(this, new CameraEventArgs(cameraId, existingCameraDevice?.SerialNumber));
 
-			return true;
+				return true;
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Camera {camId}: RemoveCamera failed: {error}", cameraId, ex.Message);
+				this.LogDebug("Camera {camId}: RemoveCamera stack trace: {stack}", cameraId, ex.StackTrace);
+				return false;
+			}
 		}
 
 		private void ParseStatusObject(JToken statusToken)
@@ -3728,18 +3749,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				var listWasUpdated = false;
 				var cameraInfo = cameraToken.ToObject<List<JObject>>();
+				var removedCameraIds = new HashSet<uint>();
 
 				foreach (var cam in cameraInfo)
 				{
 					var modernId = cam.SelectToken("CameraId")?.ToString();
 					var legacyId = cam.SelectToken("id")?.ToString();
 					var camId = string.IsNullOrEmpty(modernId) ? legacyId : modernId;
-					var serialNumber = cam.SelectToken("SerialNumber.Value")?.ToString() ?? "Unknown";
-					var connected = cam.SelectToken("Connected.Value")?.ToString() ?? "false";
+					var serialNumber = cam.SelectToken("SerialNumber.Value")?.ToString();
+					var connected = cam.SelectToken("Connected.Value")?.ToString();
 
 					if (string.IsNullOrEmpty(camId))
 					{
-						this.LogDebug("CameraId and id are null or empty. Skipping camera.");
 						continue;
 					}
 
@@ -3748,33 +3769,72 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var existingCamStatus =
 						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
 
+					if (string.IsNullOrEmpty(serialNumber))
+						serialNumber = existingCamStatus?.SerialNumber?.Value ?? "Unknown";
+
 					var existingCameraDevice = DeviceManager.GetDevices()
 						.OfType<CiscoCamera>()
 						.FirstOrDefault(c => c.SerialNumber == serialNumber);
+
+					if (existingCameraDevice == null)
+					{
+						existingCameraDevice = DeviceManager.GetDevices()
+							.OfType<CiscoCamera>()
+							.FirstOrDefault(c => c.CameraId == camIdInt && c.ParentCodec?.Key == Key);
+
+						if (existingCameraDevice != null)
+						{
+							serialNumber = existingCameraDevice.SerialNumber ?? serialNumber;
+							this.LogDebug("Camera {camId}: resolved device by camera ID: {device} serial={serial}", camId, existingCameraDevice.Key, serialNumber);
+						}
+					}
 
 					var lenses = cam.SelectToken("Lenses");
 					if (lenses != null)
 					{
 						foreach (var lens in lenses.Children<JObject>())
 						{
-							// TODO: *************** Need to test this out with actual JSON formatted response!		**************************** 			
 							var ghost = lens.SelectToken("ghost")?.ToString();
 							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
 							{
 								this.LogDebug("Camera {camId} is ghosted.  Removing from Codec.", camId);
-
 								RemoveCamera(camIdInt, existingCameraDevice);
+								removedCameraIds.Add(camIdInt);
 							}
 						}
 					}
 
-					if (connected != null && connected.Equals("false", StringComparison.OrdinalIgnoreCase))
+					if (!removedCameraIds.Contains(camIdInt) && connected != null && connected.Equals("false", StringComparison.OrdinalIgnoreCase))
 					{
+						this.LogDebug("Camera {camId}: connected=false, calling RemoveCamera with serial={serial} device={device}",
+							camId, serialNumber, existingCameraDevice != null ? existingCameraDevice.Key : "null");
 						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
+						removedCameraIds.Add(camIdInt);
 					}
-					else if (connected != null && connected.Equals("true", StringComparison.OrdinalIgnoreCase) && existingCamStatus == null)
+					else if (connected != null && connected.Equals("true", StringComparison.OrdinalIgnoreCase))
 					{
-						listWasUpdated = AddCamera(camIdInt, cam, existingCameraDevice, serialNumber);
+						if (existingCamStatus == null)
+						{
+							this.LogDebug("Camera {camId}: connected=true and new, calling AddCamera with serial={serial}", camId, serialNumber);
+							listWasUpdated = AddCamera(camIdInt, cam, existingCameraDevice, serialNumber);
+						}
+						else
+						{
+							this.LogDebug("Camera {camId}: connected=true (reconnected), serial={serial} device={device}",
+								camId, serialNumber, existingCameraDevice != null ? existingCameraDevice.Key : "null");
+
+							CameraConnected?.Invoke(this, new CameraEventArgs(camIdInt, serialNumber));
+
+							if (existingCameraDevice != null)
+							{
+								existingCameraDevice.SetParentCodec(this);
+
+								if (Cameras != null && !Cameras.Contains(existingCameraDevice))
+									Cameras.Add(existingCameraDevice);
+							}
+
+							listWasUpdated = true;
+						}
 					}
 
 
@@ -5991,7 +6051,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				foreach (var item in CodecStatus.Status.Cameras.CameraList)
 				{
 					var cam = item;
-					if (cam.Connected.Value.ToLower() == "false")
+					var connectedValue = cam.Connected?.Value;
+					if (connectedValue != null && connectedValue.Equals("false", StringComparison.OrdinalIgnoreCase))
 					{
 						this.LogDebug("Camera {id} is Disconnected", cam.CameraId);
 						continue;
@@ -6010,7 +6071,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var existingCameras = DeviceManager.AllDevices.OfType<CiscoCamera>();
 
-					var existingCamera = existingCameras.FirstOrDefault(c => c.SerialNumber == item.SerialNumber.Value);
+					var itemSerial = item.SerialNumber?.Value;
+					var existingCamera = !string.IsNullOrEmpty(itemSerial)
+						? existingCameras.FirstOrDefault(c => c.SerialNumber == itemSerial)
+						: null;
+
+					// Fallback: match by camera ID if serial not available
+					if (existingCamera == null)
+					{
+						existingCamera = existingCameras.FirstOrDefault(c => c.CameraId == camId && c.ParentCodec?.Key == Key);
+					}
 
 					if (existingCamera != null)
 					{
@@ -6035,7 +6105,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					// if there's a serial number in this response, but no existing camera with a matching serial number
 					// create a new camera and add it to the Cameras collection
-					if (!string.IsNullOrEmpty(item.SerialNumber.Value))
+					if (!string.IsNullOrEmpty(itemSerial))
 					{
 						this.LogInformation(
 							"Camera with Serial Number {serial} is connected but not found in existing devices. Adding new camera.",
@@ -6202,7 +6272,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
 
-		public List<CameraBase> Cameras { get; private set; }
+		public List<CameraBase> Cameras { get; private set; } = new List<CameraBase>();
 
 		public StringFeedback SelectedCameraFeedback { get; private set; }
 

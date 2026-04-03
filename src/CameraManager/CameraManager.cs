@@ -183,24 +183,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         }
 
                         // Here we would implement the logic to assign the camera to the codec, e.g. by calling a method on the codec interface
-                        this.LogInformation($"Camera Manager {Key} would assign camera '{cameraKey}' to codec '{codecConfig.CodecKey}' based on scenario '{currentScenario.Key}'");
-                        if (camera.ParentCodec.Key != codecConfig.CodecKey)
-                        {
-                            this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{camera.ParentCodec.Key}' to trigger re-pairing with correct codec based on new scenario");
-                            camera.ParentCodec.CameraFactoryReset(camera.CameraId);
-                        }
-                        else
-                        {
-                            this.LogDebug($"Camera Manager {Key} camera '{cameraKey}' is already assigned to the correct codec '{codecConfig.CodecKey}' for scenario '{currentScenario.Key}', no factory reset needed");
-                        }
+                        this.LogDebug($"Camera Manager {Key} would assign camera '{cameraKey}' to codec '{codecConfig.CodecKey}' based on scenario '{currentScenario.Key}'");
+                        this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{camera.ParentCodec.Key}' to trigger re-pairing with correct codec based on new scenario");
+                        camera.ParentCodec.CameraFactoryReset(camera.CameraId);
                     }
                 }
             }
             else
-            {
-                this.LogInformation($"Camera Manager {Key} has no configuration for room combination scenario '{currentScenario}'");
+                {
+                    this.LogInformation($"Camera Manager {Key} has no configuration for room combination scenario '{currentScenario}'");
+                }
             }
-        }
 
         private void Codec_CameraDisconnected(object sender, CameraEventArgs e)
         {
@@ -213,7 +206,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
-            // When a camera disconnects, we want to ensure PoE power is turned off for that camera's network switch port and clear the assigned serial number on the codec so it doesn't get confused if that camera (or another one) reconnects later
+            // Check if this camera is supposed to be on the codec that sent the disconnect event.
+            // If so, this is a transient disconnect during camera initialization — ignore it to avoid a PoE/VLAN loop.
+            var currentScenario = roomCombiner.CurrentScenario;
+            if (currentScenario != null && config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
+            {
+                var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CameraKeys.Contains(camera.Key));
+                if (codecConfig != null && codecConfig.CodecKey == codec?.Key)
+                {
+                    this.LogDebug($"Camera Manager {Key} ignoring CameraDisconnected for camera '{camera.Key}' on codec '{codec?.Key}' — this is the target codec for scenario '{currentScenario.Key}'");
+                    return;
+                }
+            }
+
+            // When a camera disconnects from a non-target codec, turn off PoE and clear the assigned serial number to trigger the VLAN change cascade
             this.LogDebug($"Camera Manager {Key} handling CameraDisconnected event for camera '{camera.Key}' (Serial Number {e.SerialNumber})");
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}'");
             networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, false);
@@ -233,40 +239,49 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            // Check if this camera is on the correct codec per the current scenario
+            var currentScenario = roomCombiner.CurrentScenario;
+            if (currentScenario != null && config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
+            {
+                var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CameraKeys.Contains(camera.Key));
+                if (codecConfig != null && codecConfig.CodecKey != codec?.Key)
+                {
+                    // Camera is on the wrong codec — factory reset it to trigger the PoE/VLAN cascade
+                    this.LogDebug($"Camera Manager {Key} detected camera '{camera.Key}' connected on codec '{codec?.Key}' but should be on codec '{codecConfig.CodecKey}' per scenario '{currentScenario.Key}'. Sending factory reset.");
+                    codec?.CameraFactoryReset(e.CameraId);
+                    return;
+                }
+            }
+
+            // Camera is on the correct codec — proceed with normal setup
             var codecCameras = codec?.Cameras;
             if (codecCameras != null)
             {
-                if (codecCameras is IEnumerable<CiscoCamera> ciscoCodecCameras)
+                var ciscoCodecCameras = codecCameras.OfType<CiscoCamera>().ToList();
+                var matchingCameras = ciscoCodecCameras.Where(c => c.SerialNumber == e.SerialNumber);
+                if (matchingCameras.Any())
                 {
-                    var matchingCameras = ciscoCodecCameras.Where(c => c.SerialNumber == e.SerialNumber);
-                    if (matchingCameras.Any())
+                    foreach (var matchingCamera in matchingCameras)
                     {
-                        foreach (var matchingCamera in matchingCameras)
+                        // check if the camera ID of each matching camera matches the camera.SerialNumber.
+                        // If not, clear the assigned serial number on the codec for the camera ID of matchingCamera
+                        if (matchingCamera.CameraId != camera.CameraId)
                         {
-                            // check if the camera ID of each matching camera matches the camera.SerialNumber.
-                            // If not, clear the assigned serial number on the codec for the camera ID of matchingCamera
-                            if (matchingCamera.CameraId != camera.CameraId)
-                            {
-                                codec.ClearCameraAssignedSerialNumber(matchingCamera.CameraId);
-                                this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
-                            }
+                            codec.ClearCameraAssignedSerialNumber(matchingCamera.CameraId);
+                            this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
                         }
-                    }
-                    else
-                    {
-                        this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no cameras on codec '{codec.Key}' have a matching serial number");
                     }
                 }
                 else
                 {
-                    this.LogError($"Camera Manager {Key} error: Codec cameras collection is not of expected type IEnumerable<CiscoCamera> when handling CameraConnected event");
+                    this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no cameras on codec '{codec.Key}' have a matching serial number");
                 }
             }
 
             var codecCameraReset = sender as ICiscoCodecCameraFactoryReset;
             if (codecCameraReset != null)
             {
-                this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec to ensure correct pairing");
+                this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec '{codec?.Key}' to ensure correct pairing");
                 codec.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
             }
             else
