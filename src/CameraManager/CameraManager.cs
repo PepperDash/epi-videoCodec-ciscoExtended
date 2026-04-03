@@ -233,7 +233,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
-
             var codecCameras = codec?.Cameras;
             if (codecCameras != null)
             {
@@ -247,9 +246,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             // check if the camera ID of each matching camera matches the camera.SerialNumber.
                             // If not, clear the assigned serial number on the codec for the camera ID of matchingCamera
                             if (matchingCamera.CameraId != camera.CameraId)
+                            {
                                 codec.ClearCameraAssignedSerialNumber(matchingCamera.CameraId);
+                                this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
+                            }
                         }
-                        this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
                     }
                     else
                     {
