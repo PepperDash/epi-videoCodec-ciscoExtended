@@ -204,10 +204,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         private void Codec_CameraDisconnected(object sender, CameraEventArgs e)
         {
+            var codec = sender as CiscoCodec;
+
             var camera = managedCameras.FirstOrDefault((c) => c.Value.SerialNumber == e.SerialNumber).Value;
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraDisconnected event for camera serial number {e.SerialNumber} but no managed camera has that serial number");
+                this.LogWarning($"Camera Manager {Key} received CameraDisconnected event from codec {codec?.Key} for camera serial number {e.SerialNumber} but no managed camera has that serial number");
                 return;
             }
 
@@ -222,24 +224,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         private void Codec_CameraConnected(object sender, CameraEventArgs e)
         {
+            var codec = sender as CiscoCodec;
+
             var camera = managedCameras.FirstOrDefault((c) => c.Value.SerialNumber == e.SerialNumber).Value;
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no managed camera has that serial number");
+                this.LogWarning($"Camera Manager {Key} received CameraConnected event from codec {codec?.Key} for camera serial number {e.SerialNumber} but no managed camera has that serial number");
                 return;
             }
 
-            var codec = sender as CiscoCodec;
 
             var codecCameras = codec?.Cameras;
             if (codecCameras != null)
             {
-                if(codecCameras is IEnumerable<CiscoCamera> ciscoCodecCameras)
+                if (codecCameras is IEnumerable<CiscoCamera> ciscoCodecCameras)
                 {
                     var matchingCameras = ciscoCodecCameras.Where(c => c.SerialNumber == e.SerialNumber);
                     if (matchingCameras.Any())
                     {
-                        codec.ClearCameraAssignedSerialNumber(e.CameraId);
+                        foreach (var matchingCamera in matchingCameras)
+                        {
+                            // check if the camera ID of each matching camera matches the camera.SerialNumber.
+                            // If not, clear the assigned serial number on the codec for the camera ID of matchingCamera
+                            if (matchingCamera.CameraId != camera.CameraId)
+                                codec.ClearCameraAssignedSerialNumber(matchingCamera.CameraId);
+                        }
                         this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
                     }
                     else
@@ -256,8 +265,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             var codecCameraReset = sender as ICiscoCodecCameraFactoryReset;
             if (codecCameraReset != null)
             {
-
-
                 this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec to ensure correct pairing");
                 codec.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
             }
