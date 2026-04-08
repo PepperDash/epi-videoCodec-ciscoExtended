@@ -807,7 +807,7 @@ namespace epi_videoCodec_ciscoExtended
             }
             else
             {
-                const string pollString = "xstatus systemunit\r" + "xstatus sip/registration\r" + "xStatus Audio Volume\r";
+                const string pollString = "xstatus systemunit\r" + "xstatus sip\r" + "xStatus Audio Volume\r" + "xStatus UserInterface ContactInfo\r";
 
                 CommunicationMonitor = new GenericCommunicationMonitor(
                     this, 
@@ -1739,6 +1739,7 @@ ConnectorID: {2}"
                             SendText("xStatus");
                             SendText("xStatus SIP");
                             SendText("xStatus Call");
+                            SendText("xStatus UserInterface ContactInfo");
                             CodecPollLayouts();
                         }
                     }
@@ -2263,25 +2264,40 @@ ConnectorID: {2}"
             try
             {
                 if (String.IsNullOrEmpty(sipToken.ToString())) return;
-                var registrationArrayToken = sipToken.SelectToken("Registration");
-                var registrationArray = registrationArrayToken as JArray;
-                if (registrationArray == null) return;
 
                 var sipPhoneNumber = "Unknown";
                 var sipUri = "Unknown";
 
-                var registrationItem =
-                    registrationArray.Children<JObject>().FirstOrDefault(o => o.SelectToken("id").ToString() == "1");
-
-                if (registrationItem != null)
+                var registrationArrayToken = sipToken.SelectToken("Registration");
+                var registrationArray = registrationArrayToken as JArray;
+                if (registrationArray != null)
                 {
-                    sipUri = registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
-                             ?? "Unknown";
-                    var match = Regex.Match(sipUri, @"(\d+)");
-                    sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                    var registrationItem =
+                        registrationArray.Children<JObject>().FirstOrDefault(o => o.SelectToken("id").ToString() == "1");
 
+                    if (registrationItem != null)
+                    {
+                        sipUri = registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
+                                 ?? "Unknown";
+                        var match = Regex.Match(sipUri, @"(\d+)");
+                        sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                    }
                 }
 
+                if (string.Equals(sipUri, "Unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    var alternateUri = sipToken.SelectToken("AlternateUri.Primary.URI.Value");
+                    if (alternateUri != null)
+                    {
+                        var alternateUriValue = alternateUri.ToString().NullIfEmpty();
+                        if (alternateUriValue != null)
+                        {
+                            sipUri = alternateUriValue;
+                            var match = Regex.Match(sipUri, @"(\d+)");
+                            sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                        }
+                    }
+                }
 
                 OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
                 {
@@ -2291,8 +2307,7 @@ ConnectorID: {2}"
             }
             catch (Exception e)
             {
-                Debug.Console(0, this, "Exception in ParseSipToken : ");
-                Debug.Console(0, this, "{0}", e.Message);
+                Debug.Console(0, this, "Exception in ParseSipToken: {0}", e.Message);
             }
 
         }
@@ -2419,8 +2434,29 @@ ConnectorID: {2}"
         
         private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
         {
-            if (sipObject.Registrations.Count <= 0) return;
-            var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
+            var sipUri = "Unknown";
+
+            if (sipObject.Registrations.Count > 0)
+            {
+                sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
+            }
+
+            if (string.Equals(sipUri, "Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                var alternateUri = sipObject.AlternateUri != null
+                    && sipObject.AlternateUri.Primary != null
+                    && sipObject.AlternateUri.Primary.Uri != null
+                    ? sipObject.AlternateUri.Primary.Uri.Value.NullIfEmpty()
+                    : null;
+                if (alternateUri != null)
+                {
+                    sipUri = alternateUri;
+                }
+            }
+
+            if (string.Equals(sipUri, "Unknown", StringComparison.OrdinalIgnoreCase))
+                return;
+
             var match = Regex.Match(sipUri, @"(\d+)");
             var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
             OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
@@ -3307,6 +3343,8 @@ ConnectorID: {2}"
             {
                 ParseSipToken(sipToken);
             }
+
+            ParseCloudSipUriFromContactInfo(statusToken);
             if (layoutsToken != null)
             {
                 ParseLayoutToken(layoutsToken);
@@ -3448,7 +3486,10 @@ ConnectorID: {2}"
                 {
                     Debug.Console(0, this, "Exception in ParseConfigurationObject.Populate Autoanswer : {0}", e.Message);
                     throw;
-                } 
+                }
+
+                ParseSipUriFromConfiguration(configurationToken);
+
                 if (_syncState.InitialConfigurationMessageWasReceived) return;
                 Debug.Console(2, this, "InitialConfig Received");
                 _syncState.InitialConfigurationMessageReceived();
@@ -3462,6 +3503,91 @@ ConnectorID: {2}"
             {
                 
                 Debug.Console(0, this, "Exception in ParseConfigurationObject : {0}", e.Message);
+            }
+        }
+
+        private void ParseSipUriFromConfiguration(JToken configurationToken)
+        {
+            try
+            {
+                var sipUriToken = configurationToken.SelectToken("SIP.URI.Value")
+                    ?? configurationToken.SelectToken("SIP.Uri.Value")
+                    ?? configurationToken.SelectToken("sip.URI.Value")
+                    ?? configurationToken.SelectToken("sip.Uri.Value");
+
+                if (sipUriToken == null) return;
+
+                var sipUri = sipUriToken.ToString().NullIfEmpty();
+                if (string.IsNullOrEmpty(sipUri)) return;
+
+                // Only update if the current SIP URI is Unknown
+                if (!string.IsNullOrEmpty(CodecInfo.SipUri) 
+                    && !string.Equals(CodecInfo.SipUri, "Unknown", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                Debug.Console(1, this, "SIP URI from configuration: {0}", sipUri);
+
+                var match = Regex.Match(sipUri, @"(\d+)");
+                var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
+                {
+                    SipPhoneNumber = sipPhoneNumber,
+                    SipUri = sipUri
+                });
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseSipUriFromConfiguration: {0}", e.Message);
+            }
+        }
+
+        private void ParseCloudSipUriFromContactInfo(JToken statusToken)
+        {
+            try
+            {
+                // Only update if current SIP URI is Unknown
+                if (!string.IsNullOrEmpty(CodecInfo.SipUri)
+                    && !string.Equals(CodecInfo.SipUri, "Unknown", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var contactMethodArray = statusToken.SelectToken("UserInterface.ContactInfo.ContactMethod");
+                if (contactMethodArray == null) return;
+
+                string contactNumber = null;
+
+                var jArray = contactMethodArray as JArray;
+                if (jArray != null)
+                {
+                    var firstContact = jArray.Children<JObject>().FirstOrDefault();
+                    if (firstContact != null)
+                    {
+                        var numberToken = firstContact.SelectToken("Number.Value");
+                        if (numberToken != null)
+                            contactNumber = numberToken.ToString().NullIfEmpty();
+                    }
+                }
+                else
+                {
+                    var directNumber = contactMethodArray.SelectToken("Number.Value");
+                    if (directNumber != null)
+                        contactNumber = directNumber.ToString().NullIfEmpty();
+                }
+
+                if (string.IsNullOrEmpty(contactNumber)) return;
+
+                Debug.Console(1, this, "SIP URI from UserInterface.ContactInfo: {0}", contactNumber);
+
+                var match = Regex.Match(contactNumber, @"(\d+)");
+                var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+                OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
+                {
+                    SipPhoneNumber = sipPhoneNumber,
+                    SipUri = contactNumber
+                });
+            }
+            catch (Exception e)
+            {
+                Debug.Console(0, this, "Exception in ParseCloudSipUriFromContactInfo: {0}", e.Message);
             }
         }
 
@@ -3832,17 +3958,7 @@ ConnectorID: {2}"
                     if (sip != null)
                     {
                         JsonConvert.PopulateObject(response, CodecStatus.Status.Sip);
-                        if (sip.Registrations.Count > 0)
-                        {
-                            var sipUri = sip.Registrations[0].Uri.Value.NullIfEmpty() ?? "Unknown";
-                            var match = Regex.Match(sipUri, @"(\d+)");
-                            var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
-                            OnCodecInfoChanged(new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
-                            {
-                                SipPhoneNumber = sipPhoneNumber,
-                                SipUri = sipUri
-                            });
-                        }
+                        ParseSipObject(CodecStatus.Status.Sip);
                     }
 
                     if (status.Video != null && status.Video.Layout != null)
@@ -5174,7 +5290,7 @@ ConnectorID: {2}"
             trilist.SetSigFalseAction(joinMap.ActivateHalfWakeMode.JoinNumber,
                 halfwakeCodec.HalfwakeActivate);
 
-            CameraTrackingCapabilitiesChanged += (sender, args) =>
+            CameraTrackingCapabilitiesChanged += new EventHandler<CameraTrackingCapabilitiesArgs>((sender, args) =>
             {
 
                 switch (CameraTrackingCapabilities)
@@ -5209,11 +5325,11 @@ ConnectorID: {2}"
                     }
 
                 }
-            };
+            });
 
 
 
-            AvailableLayoutsChanged += (sender, args) =>
+            AvailableLayoutsChanged += new EventHandler<AvailableLayoutsChangedEventArgs>((sender, args) =>
             {
                 Debug.Console(2, this, "AvailableLayoutsChanged Event");
                 var layouts = args.AvailableLayouts;
@@ -5231,9 +5347,9 @@ ConnectorID: {2}"
                 Debug.Console(2, this, "LayoutXsig = {0}", availableLayoutsXSig);
 
                 trilist.SetString(joinMap.AvailableLayoutsFb.JoinNumber, availableLayoutsXSig);
-            };
+            });
 
-            CurrentLayoutChanged += (sender, args) =>
+            CurrentLayoutChanged += new EventHandler<CurrentLayoutChangedEventArgs>((sender, args) =>
             {
                 var currentLayout = args.CurrentLayout;
 
@@ -5241,9 +5357,9 @@ ConnectorID: {2}"
 
                 trilist.SetString(joinMap.CurrentLayoutStringFb.JoinNumber, currentLayout);
 
-            };
+            });
 
-            CodecInfoChanged += (sender, args) =>
+            CodecInfoChanged += new EventHandler<CodecInfoChangedEventArgs>((sender, args) =>
             {
 
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
@@ -5267,7 +5383,7 @@ ConnectorID: {2}"
                         trilist.SetBool(joinMap.AutoAnswerEnabled.JoinNumber, args.AutoAnswerEnabled);
                         break;
                 }
-            };
+            });
 
 
             AvailableLayoutsFeedback.LinkInputSig(trilist.StringInput[joinMap.AvailableLayoutsFb.JoinNumber]);
@@ -5355,12 +5471,12 @@ ConnectorID: {2}"
                 }
             };
 
-            MinuteChanged += (sender, args) =>
+            MinuteChanged += new EventHandler<MinuteChangedEventArgs>((sender, args) =>
             {
                 if (args.EventTime == DateTime.MinValue) return;
                 _scheduleCheckLast = args.EventTime;
                 UpdateMeetingsListEnhanced(this, trilist, joinMap);
-            };
+            });
         }
 
 
@@ -6622,7 +6738,7 @@ ConnectorID: {2}"
         public CiscoCodecInfo(CiscoCodec codec)
         {
             _codec = codec;
-            _codec.CodecInfoChanged += (sender, args) =>
+            _codec.CodecInfoChanged += new EventHandler<CodecInfoChangedEventArgs>((sender, args) =>
             {
                 if (args.InfoChangeType == eCodecInfoChangeType.Unknown) return;
                 switch (args.InfoChangeType)
@@ -6645,7 +6761,7 @@ ConnectorID: {2}"
                         _autoAnswerEnabled = args.AutoAnswerEnabled;
                         break;
                 }
-            };
+            });
         }
 
     }
