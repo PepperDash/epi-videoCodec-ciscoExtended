@@ -1775,6 +1775,15 @@ ConnectorID: {2}"
                 }
 
                 if (!_jsonFeedbackMessageIsIncoming) return;
+
+                // Filter command echoes that may arrive during JSON gathering
+                var trimmedLower = response.Trim().ToLower();
+                if (trimmedLower.StartsWith("xstatus") || trimmedLower.StartsWith("xconfiguration") || trimmedLower.StartsWith("xfeedback"))
+                {
+                    Debug.Console(1, this, "Received command echo response.  Ignoring");
+                    return;
+                }
+
                 _jsonMessage.Append(response);
             }
             catch (Exception ex)
@@ -3606,8 +3615,9 @@ ConnectorID: {2}"
 
                     var directoryResults = new CodecDirectory();
 
-                    if (
-                        phonebookSearchResultResponseObject.ResultInfo
+                    if (phonebookSearchResultResponseObject.ResultInfo != null
+                        && phonebookSearchResultResponseObject.ResultInfo.TotalRows != null
+                        && phonebookSearchResultResponseObject.ResultInfo
                             .TotalRows.Value != "0")
                         directoryResults =
                             CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
@@ -3666,6 +3676,9 @@ ConnectorID: {2}"
             try
             {
                 if (PhonebookSyncState == null) return;
+                if (phonebookSearchResultResponseObject.ResultInfo == null 
+                    || phonebookSearchResultResponseObject.ResultInfo.TotalRows == null
+                    || phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value == null) return;
                 PhonebookSyncState.SetNumberOfContacts(
                     Int32.Parse(
                         phonebookSearchResultResponseObject.ResultInfo
@@ -3757,7 +3770,6 @@ ConnectorID: {2}"
                 if (!PhonebookSyncState.NumberOfContactsWasReceived)
                 {
                     ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
-                    PhonebookSyncState.PhonebookRootEntriesReceived();
                 }
                 ParsePhonebookDirectoryResponseTypical(phonebookSearchResultResponseObject, resultId);
 

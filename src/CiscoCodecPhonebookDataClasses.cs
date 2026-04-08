@@ -227,6 +227,7 @@ namespace epi_videoCodec_ciscoExtended
 
                         if (string.IsNullOrEmpty(c.FolderId.Value))
                         {
+                            contact.ParentFolderId = "root";
                             contact.Name = c.Name.Value;
                             contact.ContactId = c.ContactId.Value;
 
