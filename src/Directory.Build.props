@@ -4,11 +4,11 @@
     <InformationalVersion>$(Version)</InformationalVersion>
     <Authors>PepperDash Technology</Authors>
     <Company>PepperDash Technology</Company>
-    <Product>PepperDash Essentials Plugin Denton COR-TAP</Product>
+    <Product>PepperDash Essentials Plugin</Product>
     <Copyright>Copyright © 2022</Copyright>
-    <RepositoryUrl>https://github.com/PepperDash/epi-denton-cor-tap.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/PepperDash/epi-videoCodec-ciscoExtended</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>Crestron; 4series</PackageTags>
+    <PackageTags>Crestron; 3series</PackageTags>
     <PackageOutputPath>..\output</PackageOutputPath>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
