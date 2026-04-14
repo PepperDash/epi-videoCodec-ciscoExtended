@@ -162,6 +162,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public readonly DoNotDisturbHandler DoNotDisturbHandler;
 		public readonly UIExtensionsHandler UIExtensionsHandler;
 
+		private Dictionary<string, PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent> WebViewEvents = new Dictionary<string, PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+
 		private Meeting _currentMeeting;
 
 		private StandbyState _standbyState;
@@ -3570,7 +3572,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					);
 
 					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					WebviewIsVisible = true;
 				}
+
+				if (userInterfaceObject.WebView.Cleared != null)
+				{
+					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewClear>(
+						JsonConvert.SerializeObject(userInterfaceObject.WebView.Cleared)
+					);
+					WebviewIsVisible = false;
+				}
+				var webview = JsonConvert.DeserializeObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>(JsonConvert.SerializeObject(userInterfaceObject.WebView));
+				WebViewEvents[webview.Id] = webview;
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", webview));
 			}
 		}
 
@@ -6513,7 +6527,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this.LogError("Invalid URL provided for WebView: {url}. Must be absolute URL, IE https://roomos.cisco.com", url);
 					return;
 				}
-				var uwvd = new WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
+				var uwvd = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
 				EnqueueCommand(uwvd.xCommand());
 
 				return;
@@ -6569,7 +6583,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			string title = config.Emergency.UiWebViewDisplay.Title;
 			string target = config.Emergency.UiWebViewDisplay.Target;
 			string urlPath = url + config.Emergency.MobileControlPath;
-			WebViewDisplay uwvd = new WebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
+			PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay uwvd = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
 			EnqueueCommand(uwvd.xCommand());
 		}
 

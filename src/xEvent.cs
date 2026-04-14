@@ -191,6 +191,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     
             [JsonProperty("display")]
             public WebViewDisplay Display { get; set; } // /Event/UserInterface/WebView/Display
+            
+            [JsonProperty("cleared")]
+            public WebViewClear Cleared { get; set; } // /Event/UserInterface/WebView/Cleared
         }
 
 
@@ -240,6 +243,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             [JsonProperty("target")]
             public Target Target { get; set; }
+
+            [JsonProperty("title")]
+            public string Title { get; set; }
+
+            [JsonProperty("id")]
+            public string Id { get; set; }
+        }
+
+        public class WebViewClear
+        {
+            [JsonProperty("target")]
+            public Target Target { get; set; }
+
+            [JsonProperty("id")]
+            public string Id { get; set; }
         }
 
         public class UiExtensions : ValueProperty // /Event/UserInterface/Extensions/
