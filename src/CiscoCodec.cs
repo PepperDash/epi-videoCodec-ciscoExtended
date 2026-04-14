@@ -3584,6 +3584,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						JsonConvert.SerializeObject(userInterfaceObject.WebView.Cleared)
 					);
 					WebviewIsVisible = false;
+					var myEvent = WebViewEvents.TryGetValue(cleared.Id, out var value) ? value : null;
+					
+					if (myEvent != null && myEvent.Display != null)
+					{
+						webview.Cleared.Url = myEvent.Display.Url;
+					}
+					
 					WebViewEvents.Remove(cleared.Id);
 				}				
 				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", webview));
