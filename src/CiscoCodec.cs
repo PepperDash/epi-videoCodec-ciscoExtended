@@ -3565,6 +3565,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (userInterfaceObject.WebView != null)
 			{
+				var webview = JsonConvert.DeserializeObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>(JsonConvert.SerializeObject(userInterfaceObject.WebView));
+				
 				if (userInterfaceObject.WebView.Display != null)
 				{
 					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewDisplay>(
@@ -3573,17 +3575,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
 					WebviewIsVisible = true;
+					WebViewEvents[webview.Id] = webview;
 				}
 
 				if (userInterfaceObject.WebView.Cleared != null)
 				{
-					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewClear>(
+					var cleared = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewClear>(
 						JsonConvert.SerializeObject(userInterfaceObject.WebView.Cleared)
 					);
 					WebviewIsVisible = false;
-				}
-				var webview = JsonConvert.DeserializeObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>(JsonConvert.SerializeObject(userInterfaceObject.WebView));
-				WebViewEvents[webview.Id] = webview;
+					WebViewEvents.Remove(cleared.Id);
+				}				
 				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", webview));
 			}
 		}
