@@ -3646,48 +3646,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		}
 		
 		/// <summary>
-		/// Flattens nested {Value, id} properties to simple values for Core type compatibility.
-		/// The codec sends Url and Title as objects like {"Value": "...", "id": "1"} but Core expects strings.
-		/// </summary>
-		private void FlattenWebViewDisplayProperties(JObject webViewJson, string parentProperty)
-		{
-			try
-			{
-				var parent = webViewJson[parentProperty] as JObject;
-				if (parent == null) return;
-				
-				// Flatten Url property (codec sends {Value, id} but Core expects string)
-				// Handle both "Url" and "url" casing
-				FlattenProperty(parent, "Url");
-				FlattenProperty(parent, "url");
-				
-				// Flatten Title property
-				FlattenProperty(parent, "Title");
-				FlattenProperty(parent, "title");
-				
-				// Flatten Mode property
-				FlattenProperty(parent, "Mode");
-				FlattenProperty(parent, "mode");
-				
-				// Flatten Target property
-				FlattenProperty(parent, "Target");
-				FlattenProperty(parent, "target");
-			}
-			catch
-			{
-				// Ignore errors during flattening - properties may not exist
-			}
-		}
-		
-		private void FlattenProperty(JObject parent, string propertyName)
-		{
-			if (parent[propertyName] is JObject obj && obj["Value"] != null)
-			{
-				parent[propertyName] = obj["Value"];
-			}
-		}
-		
-		/// <summary>
 		/// Handles webview cleared by command (not from codec feedback).
 		/// Fires WebViewStatusChanged so subscribers can handle the close.
 		/// </summary>
