@@ -738,6 +738,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this,
 					EnqueueCommand
 				);
+				
+				// Subscribe to webview cleared event to fire WebViewStatusChanged
+				// (codec doesn't always send feedback when we command it to clear)
+				UiExtensionsHandler.WebViewClearedByCommand += HandleWebViewClearedByCommand;
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -3565,36 +3569,166 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (userInterfaceObject.WebView != null)
 			{
-				var webview = JsonConvert.DeserializeObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>(JsonConvert.SerializeObject(userInterfaceObject.WebView));
+				// Build Core WebViewEvent using JSON with only the properties Core expects
+				// Core types expect simple strings for Url, not complex objects
+				
+				string displayUrl = null;
+				string displayTitle = null;
+				string clearedUrl = null;
 				
 				if (userInterfaceObject.WebView.Display != null)
 				{
-					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewDisplay>(
-						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
-					);
-
-					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					var localDisplay = userInterfaceObject.WebView.Display;
+					displayUrl = localDisplay.Url?.Value;
+					displayTitle = localDisplay.Title?.Value;
+					
+					IsInPwaMode = localDisplay.Target?.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
 					WebviewIsVisible = true;
-					WebViewEvents[webview.Id] = webview;
+					
+					this.LogDebug("WebView Display parsed: Url={url}, Title={title}", displayUrl, displayTitle);
 				}
 
 				if (userInterfaceObject.WebView.Cleared != null)
 				{
-					var cleared = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewClear>(
-						JsonConvert.SerializeObject(userInterfaceObject.WebView.Cleared)
-					);
-					WebviewIsVisible = false;
-					var myEvent = WebViewEvents.TryGetValue(cleared.Id, out var value) ? value : null;
+					var localCleared = userInterfaceObject.WebView.Cleared;
 					
-					if (myEvent != null && myEvent.Display != null)
+					WebviewIsVisible = false;
+					
+					// Get the URL from tracked event if available
+					if (WebViewEvents.TryGetValue(localCleared.Id, out var trackedEvent) && trackedEvent?.Display != null)
 					{
-						webview.Cleared.Url = myEvent.Display.Url;
+						clearedUrl = trackedEvent.Display.Url;
 					}
 					
-					WebViewEvents.Remove(cleared.Id);
-				}				
-				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", webview));
+					WebViewEvents.Remove(localCleared.Id);
+					
+					this.LogDebug("WebView Cleared parsed: Id={id}, Url={url}", localCleared.Id, clearedUrl);
+				}
+				
+				// Build JSON for Core WebViewEvent with only string properties
+				var jsonBuilder = new System.Text.StringBuilder("{");
+				jsonBuilder.Append($"\"Id\":\"{userInterfaceObject.WebView.Id ?? "0"}\"");
+				
+				if (displayUrl != null || displayTitle != null)
+				{
+					jsonBuilder.Append(",\"Display\":{");
+					if (displayUrl != null) jsonBuilder.Append($"\"Url\":\"{EscapeJsonString(displayUrl)}\"");
+					if (displayTitle != null)
+					{
+						if (displayUrl != null) jsonBuilder.Append(",");
+						jsonBuilder.Append($"\"Title\":\"{EscapeJsonString(displayTitle)}\"");
+					}
+					jsonBuilder.Append("}");
+					
+					// Store for later cleared events
+					var tempJson = $"{{\"Id\":\"{userInterfaceObject.WebView.Id}\",\"Display\":{{\"Url\":\"{EscapeJsonString(displayUrl ?? "")}\"}}}}";
+					var storeEvent = JObject.Parse(tempJson).ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+					WebViewEvents[storeEvent.Id] = storeEvent;
+				}
+				
+				if (clearedUrl != null)
+				{
+					jsonBuilder.Append($",\"Cleared\":{{\"Url\":\"{EscapeJsonString(clearedUrl)}\"}}");
+				}
+				
+				jsonBuilder.Append("}");
+				
+				var coreWebView = JObject.Parse(jsonBuilder.ToString()).ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+				
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", coreWebView));
 			}
+		}
+		
+		private string EscapeJsonString(string s)
+		{
+			if (string.IsNullOrEmpty(s)) return s;
+			return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+		}
+		
+		/// <summary>
+		/// Flattens nested {Value, id} properties to simple values for Core type compatibility.
+		/// The codec sends Url and Title as objects like {"Value": "...", "id": "1"} but Core expects strings.
+		/// </summary>
+		private void FlattenWebViewDisplayProperties(JObject webViewJson, string parentProperty)
+		{
+			try
+			{
+				var parent = webViewJson[parentProperty] as JObject;
+				if (parent == null) return;
+				
+				// Flatten Url property (codec sends {Value, id} but Core expects string)
+				// Handle both "Url" and "url" casing
+				FlattenProperty(parent, "Url");
+				FlattenProperty(parent, "url");
+				
+				// Flatten Title property
+				FlattenProperty(parent, "Title");
+				FlattenProperty(parent, "title");
+				
+				// Flatten Mode property
+				FlattenProperty(parent, "Mode");
+				FlattenProperty(parent, "mode");
+				
+				// Flatten Target property
+				FlattenProperty(parent, "Target");
+				FlattenProperty(parent, "target");
+			}
+			catch
+			{
+				// Ignore errors during flattening - properties may not exist
+			}
+		}
+		
+		private void FlattenProperty(JObject parent, string propertyName)
+		{
+			if (parent[propertyName] is JObject obj && obj["Value"] != null)
+			{
+				parent[propertyName] = obj["Value"];
+			}
+		}
+		
+		/// <summary>
+		/// Handles webview cleared by command (not from codec feedback).
+		/// Fires WebViewStatusChanged so subscribers can handle the close.
+		/// </summary>
+		private void HandleWebViewClearedByCommand(object sender, PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplayClearActionArgs args)
+		{
+			try
+			{
+				this.LogDebug("WebView cleared by command, Target={target}", args?.Target ?? "Controller");
+				WebviewIsVisible = false;
+				
+				// Get the URL from any tracked webview event
+				string trackedUrl = null;
+				if (WebViewEvents.Count > 0)
+				{
+					var trackedEvent = WebViewEvents.Values.GetEnumerator();
+					if (trackedEvent.MoveNext() && trackedEvent.Current?.Display != null)
+					{
+						trackedUrl = trackedEvent.Current.Display.Url;
+						this.LogDebug("Using tracked URL for cleared event: {url}", trackedUrl);
+					}
+					WebViewEvents.Clear();
+				}
+				
+				// Create a WebViewEvent with Cleared info via JSON deserialization
+				var webViewJson = JObject.Parse($"{{\"Cleared\": {{\"Url\": \"{EscapeJsonString(trackedUrl ?? string.Empty)}\"}}}}");
+				var webview = webViewJson.ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+				
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs("notvisible", webview));
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Exception in HandleWebViewClearedByCommand: {message}", ex.Message);
+			}
+		}
+		
+		/// <summary>
+		/// Called from CiscoCodecUserInterface when webview is cleared (Navigator uses a separate ExtensionsHandler)
+		/// </summary>
+		public void OnWebViewClearedFromUi(PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplayClearActionArgs args)
+		{
+			HandleWebViewClearedByCommand(this, args);
 		}
 
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
