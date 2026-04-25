@@ -73,7 +73,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 			UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(CurrentUiWebViewStatus));
 		}
 
-		public void ParseErrorStatus(JToken statusToken)
+		public bool ParseErrorStatus(JToken statusToken)
 		{
 			try
 			{
@@ -81,15 +81,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
 				if (status?.XPath?.Value != null && status?.XPath?.Value != WebViewDisplay.xStatusPath)
 				{
-					return;
+					return false;
 				}
 
 				UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(new WebViewStatus(status)));
+				return true;
 			}
 			catch (Exception e)
 			{
 				_parent.LogError("ParseErrorStatus Error: {message}", e.Message);
 				_parent.LogVerbose(e, "Exception");
+				return false;
 			}
 		}
 

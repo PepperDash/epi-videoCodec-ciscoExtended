@@ -3739,10 +3739,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (errorToken != null)
 			{
-				UiExtensionsHandler?.ParseErrorStatus(statusToken);
-				//This is an Error - Deal with it somehow?
+				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
+				var isWebViewError = xPath != null && xPath.StartsWith(UserInterface.WebView.WebViewDisplay.xStatusPath);
 
-				this.LogError("Error in Status Response: {error}", statusToken.ToString());
+				UiExtensionsHandler?.ParseErrorStatus(statusToken);
+
+				if (isWebViewError)
+					this.LogDebug("WebView Status Error (expected when no WebView active): {error}", statusToken.ToString());
+				else
+					this.LogError("Error in Status Response: {error}", statusToken.ToString());
+
 				return;
 			}
 
@@ -4261,6 +4267,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (callHistoryResponseToken == null)
 				return;
+			var resultToken = callHistoryResponseToken.SelectToken("CallHistoryRecentsResult");
+			var callHistoryStatus = resultToken?.SelectToken("status");
+			if (callHistoryStatus != null && callHistoryStatus.ToString().ToLower() == "error")
+			{
+				var reason = resultToken.SelectToken("Reason.Value");
+				this.LogDebug("CallHistory not available: {reason}", reason?.ToString() ?? "unknown");
+				return;
+			}
 			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
 			PopulateObjectWithToken(
 				callHistoryResponseToken,
