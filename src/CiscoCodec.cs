@@ -2630,6 +2630,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						CodecRoomPreset
 					>();
 				}
+
+				if (Cameras == null || Cameras.Count == 0 || SelectedCamera == null)
+				{
+					this.LogDebug("Deferring camera preset change notification until cameras are initialized.");
+					return;
+				}
+
 				CodecRoomPresetsListHasChanged?.Invoke(this, new EventArgs());
 			};
 		}
@@ -6045,6 +6052,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		private void SetUpCamerasFromConfig(List<CameraInfo> cameraInfo)
@@ -6121,6 +6133,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		public void SetCodecProvisionMode(string mode)
