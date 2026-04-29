@@ -3829,6 +3829,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (mainSourceToken == null)
 				return;
 
+			if (Cameras == null)
+			{
+				this.LogDebug("Skipping Main Video Source parse because Cameras collection is not initialized yet.");
+				return;
+			}
+
 			var mainSourceValueToken = mainSourceToken.SelectToken("Value");
 			if (mainSourceValueToken == null)
 				return;
@@ -4144,12 +4150,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (callHistoryResponseToken == null)
 				return;
-			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
-			PopulateObjectWithToken(
-				callHistoryResponseToken,
-				"CallHistoryRecentsResult",
-				codecCallHistory
-			);
+
+			var recentsToken =
+				callHistoryResponseToken.SelectToken("CallHistoryRecentsResult")
+				?? callHistoryResponseToken;
+
+			var status = recentsToken.SelectToken("status")?.ToString();
+			if (!string.IsNullOrEmpty(status) && status.Equals("Error", StringComparison.OrdinalIgnoreCase))
+			{
+				var reason = recentsToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
+				var xpath = recentsToken.SelectToken("XPath.Value")?.ToString() ?? "Unknown";
+				this.LogWarning(
+					"Call history unavailable in current codec state. Reason: {reason}, XPath: {xpath}",
+					reason,
+					xpath
+				);
+				return;
+			}
+
+			var entriesToken = recentsToken.SelectToken("Entry");
+			if (entriesToken == null || (entriesToken.Type == JTokenType.Array && !entriesToken.HasValues))
+			{
+				this.LogDebug("Call history response had no entries.");
+				return;
+			}
+
+			var codecCallHistory = recentsToken.ToObject<CiscoCallHistory.CallHistoryRecentsResult>();
+			if (codecCallHistory?.Entry == null)
+				return;
+
 			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
 		}
 
