@@ -698,8 +698,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public ExtensionsHandler UiExtensionsHandler { get; set; }
 
-		private readonly IBasicCommunication _comms;
-
 		public uint VLanId { get; private set; }
 
 		// Constructor for IBasicCommunication
