@@ -716,7 +716,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			WebexPinRequestHandler = new WebexPinRequestHandler(this, comm, _receiveQueue);
 			DoNotDisturbHandler = new DoNotDisturbHandler(this, comm, _receiveQueue);
 			UIExtensionsHandler = new UIExtensionsHandler(this, comm, _receiveQueue);
-			_comms = comm;
 
 			CrestronEnvironment.ProgramStatusEventHandler += a =>
 			{
@@ -1852,13 +1851,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Event/UserInterface/Presentation/ExternalSource/Selected/SourceIdentifier"
 				+ Delimiter
 				+ prefix
-				+ "Status/UserInterface/WebView/Status"
+				+ "/Status/UserInterface/WebView/Status"
 				+ Delimiter
 				+ prefix
 				+ "/Event/UserInterface/WebView/Display"
 				+ Delimiter
 				+ prefix
-				+ "Status/Network/Ethernet/MacAddress"
+				+ "/Status/Network/Ethernet/MacAddress"
 				+ Delimiter
 				+ prefix
 				+ "/Event/UserInterface/Extensions/Panel/Clicked"
@@ -2112,7 +2111,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							// SendText("xStatus Cameras");
 							// SendText("xStatus SIP");
 							// SendText("xStatus Call");
-							SendText("xStatus");
+							SendTextWithoutQueue("xStatus");
 						}
 					}
 					else if (data.Contains("xfeedback register /event/calldisconnect"))
@@ -2134,7 +2133,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					// Enqueue the complete message to be deserialized
 
-					DeserializeResponse(_jsonMessage.ToString());
+					var success = DeserializeResponse(_jsonMessage.ToString());
+
+					if (success) _jsonMessage = null;
 
 					return;
 				}
@@ -2189,9 +2190,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SyncState.AddCommandToQueue(cmd);
 		}
 
+		internal void SendTextWithoutQueue(string command)
+		{
+			if (Communication == null)
+				return;
+			Communication.SendText(command + Delimiter);
+		}
+
 		public void SendText(string command)
 		{
-			Communication.SendText(command + Delimiter);
+			EnqueueCommand(command);
 		}
 
 		private void UpdateLayoutList()
@@ -3573,7 +3581,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
 					);
 
-					IsInPwaMode = display.Target == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
 				}
 			}
 		}
@@ -3583,7 +3591,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var tokenString = string.Empty;
 			try
 			{
-				//Debug.Console(2, this, "PopulateObjectWithToken: {0}", tokenSelector);
+				// this.LogDebug("PopulateObjectWithToken: {0}", tokenSelector);
 				var token = JTokenValidInToken(jToken, tokenSelector); // JObject
 				if (token == null)
 					return;
@@ -3594,6 +3602,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception e)
 			{
 				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
+				this.LogError("Token String: {tokenString}", tokenString);
 				this.LogVerbose(e, "Exception");
 			}
 		}
@@ -3946,13 +3955,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (!SyncState.InitialConfigurationMessageWasReceived)
 			{
 				this.LogDebug("Sending Configuration");
-				SendText("xConfiguration");
+				SendTextWithoutQueue("xConfiguration");
 			}
 			if (SyncState.FeedbackWasRegistered)
 				return;
 			this.LogDebug("Sending Feedback");
 
-			SendText(BuildFeedbackRegistrationExpression());
+			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
 		}
 
@@ -4433,7 +4442,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void DeserializeResponse(string response)
+		private bool DeserializeResponse(string response)
 		{
 			try
 			{
@@ -4457,18 +4466,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						);
 					}
 				}
+
+				return true;
 			}
 			catch (JsonReaderException ex)
 			{
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
-				this.LogVerbose("Response JSON: {response}", response);
+				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
+
+				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
+				{
+					var responseWithLastBraceRemoved = response.LastIndexOf('}') > 0
+						? response.Remove(response.LastIndexOf('}'))
+						: response;
+
+					DeserializeResponse(responseWithLastBraceRemoved);
+				}
+				return false;
 			}
 			catch (Exception ex)
 			{
 				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
-				this.LogVerbose("Response JSON: {response}", response);
+				this.LogError("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
+
+
+				return false;
 			}
 		}
 

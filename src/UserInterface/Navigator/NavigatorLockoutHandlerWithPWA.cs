@@ -28,7 +28,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
     /// <summary>
     /// Handles Lockout Functionality with Persistent Web App for Navigator Touch Panels
     /// </summary>
-    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHanderWithPwa
+    internal class NavigatorLockoutHandlerWithPWA : IKeyed, INavigatorLockoutHandlerWithPwa
     {
         public const string LOCKOUT_SCENARIO_KEY = "lockout";
         private NavigatorController mcTpController;

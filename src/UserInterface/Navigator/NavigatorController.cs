@@ -213,7 +213,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
 
 
-            if (router is INavigatorLockoutHanderWithPwa pwaRouter)
+            if (router is INavigatorLockoutHandlerWithPwa pwaRouter)
             {
                 if(isAbsoluteUrl)
                 {
@@ -223,7 +223,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         this.LogError("Invalid absolute URL: {url}", url);
                         return;
                     }
-                    pwaRouter.EnterPwaMode(uri.ToString());
+                    pwaRouter.EnterPwaMode(uri.ToString(), false);
                     return;
                 }
 
@@ -240,7 +240,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         /// </summary>
         public void ExitPwaMode()
         {
-            if (router is INavigatorLockoutHanderWithPwa pwaRouter)
+            if (router is INavigatorLockoutHandlerWithPwa pwaRouter)
             {
                 pwaRouter.ExitPwaMode();
             }
