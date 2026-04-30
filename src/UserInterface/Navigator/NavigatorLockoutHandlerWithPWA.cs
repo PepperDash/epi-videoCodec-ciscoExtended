@@ -102,7 +102,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             mcTpController = parent;
 
-            extensionsHandler = parent.UiExtensionsHandler;
+            extensionsHandler = parent.Parent?.UiExtensionsHandler ?? parent.UiExtensionsHandler;
 
             combinerHandler = parent.RoomCombinerHandler;
 

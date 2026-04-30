@@ -2642,6 +2642,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						CodecRoomPreset
 					>();
 				}
+
+				if (Cameras == null || Cameras.Count == 0 || SelectedCamera == null)
+				{
+					this.LogDebug("Deferring camera preset change notification until cameras are initialized.");
+					return;
+				}
+
 				CodecRoomPresetsListHasChanged?.Invoke(this, new EventArgs());
 			};
 		}
@@ -3577,11 +3584,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				if (userInterfaceObject.WebView.Display != null)
 				{
-					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewDisplay>(
-						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
-					);
+					var display = userInterfaceObject.WebView.Display;
 
-					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					IsInPwaMode = display.Target != null && display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
 				}
 			}
 		}
@@ -3970,6 +3975,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (mainSourceToken == null)
 				return;
 
+			if (Cameras == null)
+			{
+				this.LogDebug("Skipping Main Video Source parse because Cameras collection is not initialized yet.");
+				return;
+			}
+
 			var mainSourceValueToken = mainSourceToken.SelectToken("Value");
 			if (mainSourceValueToken == null)
 				return;
@@ -4285,12 +4296,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (callHistoryResponseToken == null)
 				return;
-			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
-			PopulateObjectWithToken(
-				callHistoryResponseToken,
-				"CallHistoryRecentsResult",
-				codecCallHistory
-			);
+
+			var recentsToken =
+				callHistoryResponseToken.SelectToken("CallHistoryRecentsResult")
+				?? callHistoryResponseToken;
+
+			var status = recentsToken.SelectToken("status")?.ToString();
+			if (!string.IsNullOrEmpty(status) && status.Equals("Error", StringComparison.OrdinalIgnoreCase))
+			{
+				var reason = recentsToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
+				var xpath = recentsToken.SelectToken("XPath.Value")?.ToString() ?? "Unknown";
+				this.LogWarning(
+					"Call history unavailable in current codec state. Reason: {reason}, XPath: {xpath}",
+					reason,
+					xpath
+				);
+				return;
+			}
+
+			var entriesToken = recentsToken.SelectToken("Entry");
+			if (entriesToken == null || (entriesToken.Type == JTokenType.Array && !entriesToken.HasValues))
+			{
+				this.LogDebug("Call history response had no entries.");
+				return;
+			}
+
+			var codecCallHistory = recentsToken.ToObject<CiscoCallHistory.CallHistoryRecentsResult>();
+			if (codecCallHistory?.Entry == null)
+				return;
+
 			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
 		}
 
@@ -6187,6 +6221,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		private void SetUpCamerasFromConfig(List<CameraInfo> cameraInfo)
@@ -6263,6 +6302,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		public void SetCodecProvisionMode(string mode)

@@ -296,6 +296,29 @@ There are two different methods supported to show a lockout screen on a Navigato
   - This mode will display a modal webview on the navigator with any URL supplied. However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
   - Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
 
+### RoomOS Firmware Compatibility
+
+#### RoomOS ce26+ Breaking Change
+
+RoomOS ce26 introduced a breaking schema change to WebView Display events:
+
+**Pre-ce26 firmware:**
+```json
+"Url": "http://10.11.50.169:50002/mc/app/techPin?token=..."
+```
+
+**ce26+ firmware:**
+```json
+"Url": {
+  "Value": "http://10.11.50.169:50002/mc/app/techPin?token=...",
+  "id": "1"
+}
+```
+
+Cisco normalized their event property schema to wrap values in objects with `Value` and `id` properties. This change affected WebView URL handling. The plugin includes a custom converter (`UrlConverter` in `xEvent.cs`) that handles both formats transparently for backwards compatibility with older RoomOS versions.
+
+**No action required** – the plugin automatically detects and handles both payload formats.
+
 ### Available default icons
 
 Briefing

@@ -97,7 +97,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             mcTpController = parent;
 
-            extensionsHandler = parent.UiExtensionsHandler;
+            extensionsHandler = parent.Parent?.UiExtensionsHandler ?? parent.UiExtensionsHandler;
 
             combinerHandler = parent.RoomCombinerHandler;
 
@@ -428,9 +428,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 {
                     this.LogDebug("Sending URL to WebView: {Url}", mcPanel.Url);
 
-                    foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                    if (mcPanel.UiWebViewDisplays == null || !mcPanel.UiWebViewDisplays.Any())
                     {
-                        SendWebViewUrl(mcPanel.Url, webView);
+                        this.LogDebug("[Warning] UiWebViewDisplays not found for {PanelName}; using default display config", mcPanel.Name);
+                        SendWebViewUrl(mcPanel.Url, defaultUiWebViewDisplayConfig);
+                    }
+                    else
+                    {
+                        foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                        {
+                            SendWebViewUrl(mcPanel.Url, webView);
+                        }
                     }
 
                     return;
@@ -441,9 +449,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("MobileControlPath not found for {PanelName}", mcPanel.Name);
                     return;
                 }
-                if (mcPanel.UiWebViewDisplays == null)
+                if (mcPanel.UiWebViewDisplays == null || !mcPanel.UiWebViewDisplays.Any())
                 {
-                    this.LogDebug("[Warning] UiWebViewDisplay not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig.Target);
+                    this.LogDebug("[Warning] UiWebViewDisplays not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig.Target);
+                    SendWebViewMcUrl(mcPanel.MobileControlPath, defaultUiWebViewDisplayConfig);
+                    return;
                 }
 
                 foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
