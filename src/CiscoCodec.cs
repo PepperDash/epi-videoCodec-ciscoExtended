@@ -2155,11 +2155,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogDebug("Checking feedbacks... last feedback unregistration: {lastFeedbackFail}", _lastFeedbackFail);
 			this.LogVerbose("Feedback List:\r\n{data}", data);
 
-			if (
-					data.Split('\n').Count()
-					>= BuildFeedbackRegistrationExpression().Split('\n').Count()
-			)
+			var receivedCount = data.Split('\n').Count();
+			var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+			this.LogDebug(
+				"ProcessFeedbackList: receivedCount={received}, expectedCount={expected}",
+				receivedCount, expectedCount);
+
+			if (receivedCount >= expectedCount)
+			{
+				if (!SyncState.FeedbackWasRegistered)
+					SyncState.FeedbackRegistered();
 				return;
+			}
 
 			var now = DateTime.Now;
 			var timeSinceLastFail = now - _lastFeedbackFail;
@@ -3966,6 +3973,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+
+			this.LogDebug("Requesting xFeedback List to verify registration");
+			SendTextWithoutQueue("xFeedback List");
 		}
 
 		private void ParseMainSourceToken(JToken mainSourceToken)
