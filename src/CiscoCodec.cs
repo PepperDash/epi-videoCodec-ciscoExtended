@@ -4314,7 +4314,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				var reason = recentsToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
 				var xpath = recentsToken.SelectToken("XPath.Value")?.ToString() ?? "Unknown";
-				this.LogWarning(
+				this.LogVerbose(
 					"Call history unavailable in current codec state. Reason: {reason}, XPath: {xpath}",
 					reason,
 					xpath

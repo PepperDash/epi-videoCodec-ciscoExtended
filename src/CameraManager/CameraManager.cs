@@ -202,7 +202,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             var camera = managedCameras.FirstOrDefault((c) => c.Value.SerialNumber == e.SerialNumber).Value;
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraDisconnected event from codec {codec?.Key} for camera serial number {e.SerialNumber} but no managed camera has that serial number");
+                this.LogDebug($"Camera Manager {Key} received CameraDisconnected event from codec {codec?.Key} for camera serial number {e.SerialNumber} but no managed camera has that serial number");
                 return;
             }
 
