@@ -13,6 +13,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         public event EventHandler<CameraEventArgs> CameraDisconnected;
         public event EventHandler<CameraEventArgs> CameraConnected;
+        public event EventHandler<CameraEventArgs> CameraAssignedSerialNumberChanged;
 
         public void CameraFactoryReset(uint cameraId)
         {

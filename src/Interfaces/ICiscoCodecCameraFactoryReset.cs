@@ -54,6 +54,12 @@ namespace PepperDash.Essentials.Core.DeviceTypeInterfaces
         event EventHandler<CameraEventArgs> CameraConnected;
 
         /// <summary>
+        /// Fired when camera configuration feedback updates the AssignedSerialNumber
+        /// for a camera slot. A blank SerialNumber value means the assignment is cleared.
+        /// </summary>
+        event EventHandler<CameraEventArgs> CameraAssignedSerialNumberChanged;
+
+        /// <summary>
         /// The VLAN ID that should be assigned to the network switch port for cameras currently paired with this codec.
         /// </summary>
         uint VLanId { get; }

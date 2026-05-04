@@ -3859,10 +3859,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					if (existingCamStatus == null)
 					{
-						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-						CodecStatus.Status.Cameras.CameraList.Add(newCam);
+						// Add only if the status list still does not contain this camera ID.
+						var currentCamStatus =
+							CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
 
-						listWasUpdated = true;
+						if (currentCamStatus == null)
+						{
+							var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
+							CodecStatus.Status.Cameras.CameraList.Add(newCam);
+							listWasUpdated = true;
+						}
+						else
+						{
+							JsonConvert.PopulateObject(
+								cam.ToString(),
+								currentCamStatus,
+								new JsonSerializerSettings
+								{
+									NullValueHandling = NullValueHandling.Ignore,
+									MissingMemberHandling = MissingMemberHandling.Ignore,
+								});
+						}
 					}
 					else
 					{
@@ -4098,6 +4115,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				if (configurationToken == null || (configurationToken.Type == JTokenType.Object && !configurationToken.HasValues))
 					return;
+
+				var cameraConfigurationToken = configurationToken.SelectToken("Cameras.Camera");
+				if (cameraConfigurationToken != null)
+				{
+					ParseCameraAssignedSerialFeedback(cameraConfigurationToken);
+				}
+
 				var configuration = new CiscoCodecConfiguration.Configuration();
 				try
 				{
@@ -4146,6 +4170,46 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogError("Exception in ParseConfigurationObject : {message}", e.Message);
 				this.LogVerbose(e, "Exception");
+			}
+		}
+
+		private void ParseCameraAssignedSerialFeedback(JToken cameraConfigurationToken)
+		{
+			try
+			{
+				IEnumerable<JToken> cameraTokens;
+				if (cameraConfigurationToken.Type == JTokenType.Array)
+				{
+					cameraTokens = cameraConfigurationToken.Children();
+				}
+				else
+				{
+					cameraTokens = new[] { cameraConfigurationToken };
+				}
+
+				foreach (var cameraToken in cameraTokens)
+				{
+					var cameraIdString = cameraToken.SelectToken("id")?.ToString()
+						?? cameraToken.SelectToken("CameraId")?.ToString();
+					if (!uint.TryParse(cameraIdString, out var cameraId))
+					{
+						continue;
+					}
+
+					var assignedSerial = cameraToken.SelectToken("AssignedSerialNumber.Value")?.ToString();
+					if (assignedSerial == null)
+					{
+						continue;
+					}
+
+					this.LogDebug("Camera {cameraId}: assigned serial feedback value '{assignedSerial}'", cameraId, assignedSerial);
+					CameraAssignedSerialNumberChanged?.Invoke(this, new CameraEventArgs(cameraId, assignedSerial));
+				}
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Exception parsing camera assigned serial feedback: {message}", ex.Message);
+				this.LogVerbose(ex, "Exception");
 			}
 		}
 
