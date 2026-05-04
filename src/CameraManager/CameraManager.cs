@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Timers;
 using Org.BouncyCastle.Asn1.X509;
 using PepperDash.Core.Logging;
@@ -30,11 +29,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private readonly Dictionary<string, CameraMigrationState> activeMigrations = new Dictionary<string, CameraMigrationState>();
         private readonly object activeMigrationsLock = new object();
 
-        private readonly Timer switchWarmupRetryTimer;
         private readonly Timer attachVerificationTimer;
-        private string pendingScenarioKey;
-        private readonly object pendingScenarioLock = new object();
-        private EventHandler networkSwitchWarmSessionReadyHandler;
 
         private const int AttachWaitTimeoutMs = 45000;
         private const int MaxPoeOffDurationMs = 60000;
@@ -44,9 +39,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             : base(key, name)
         {
             this.config = config;
-            switchWarmupRetryTimer = new Timer(250) { AutoReset = false };
-            switchWarmupRetryTimer.Elapsed += SwitchWarmupRetryTimer_Elapsed;
-
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
             attachVerificationTimer.Start();
@@ -80,7 +72,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             networkSwitch = networkSwitchDevice;
 
             networkSwitch.PortStateChanged += NetworkSwitch_PortStateChanged;
-            SubscribeToNetworkSwitchWarmSessionReady();
 
             HashSet<string> codecKeysInScenarios = new HashSet<string>();
             HashSet<string> cameraKeysInScenarios = new HashSet<string>();
@@ -280,14 +271,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
-            if (!IsNetworkSwitchReadyForFastCommands())
-            {
-                this.LogInformation($"Camera Manager {Key} is waiting for network switch '{config.NetworkSwitchKey}' to reach privileged exec before resetting cameras for scenario '{scenarioKey}'");
-                RequestNetworkSwitchWarmSession();
-                ScheduleScenarioRetry(scenarioKey);
-                return;
-            }
-
             if (config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig))
             {
                 foreach (var codecConfig in scenarioConfig.CodecConfigs)
@@ -317,122 +300,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             {
                 this.LogInformation($"Camera Manager {Key} has no configuration for room combination scenario '{scenarioKey}'");
             }
-        }
-
-        private void SwitchWarmupRetryTimer_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            string scenarioKey;
-            lock (pendingScenarioLock)
-            {
-                scenarioKey = pendingScenarioKey;
-            }
-
-            if (string.IsNullOrEmpty(scenarioKey))
-            {
-                return;
-            }
-
-            var switchReady = IsNetworkSwitchReadyForFastCommands();
-            this.LogVerbose($"Camera Manager {Key} warm-session retry elapsed for scenario '{scenarioKey}': switchReady={switchReady}");
-
-            if (!switchReady)
-            {
-                RequestNetworkSwitchWarmSession();
-                ScheduleScenarioRetry(scenarioKey);
-                return;
-            }
-
-            lock (pendingScenarioLock)
-            {
-                if (pendingScenarioKey == scenarioKey)
-                {
-                    pendingScenarioKey = null;
-                }
-            }
-
-            TryExecuteScenarioCameraResets(scenarioKey);
-        }
-
-        private void ScheduleScenarioRetry(string scenarioKey)
-        {
-            lock (pendingScenarioLock)
-            {
-                pendingScenarioKey = scenarioKey;
-                switchWarmupRetryTimer.Stop();
-                switchWarmupRetryTimer.Start();
-            }
-        }
-
-        private bool IsNetworkSwitchReadyForFastCommands()
-        {
-            var switchType = networkSwitch?.GetType();
-            var readyProperty = switchType?.GetProperty("IsPrivilegedExecReady", BindingFlags.Public | BindingFlags.Instance);
-            if (readyProperty == null)
-            {
-                return true;
-            }
-
-            if (readyProperty.PropertyType != typeof(bool))
-            {
-                this.LogWarning($"Camera Manager {Key} found IsPrivilegedExecReady on switch '{config.NetworkSwitchKey}' but it is not a bool");
-                return true;
-            }
-
-            return (bool)readyProperty.GetValue(networkSwitch, null);
-        }
-
-        private void SubscribeToNetworkSwitchWarmSessionReady()
-        {
-            var switchType = networkSwitch?.GetType();
-            var warmSessionReadyEvent = switchType?.GetEvent("WarmSessionReady", BindingFlags.Public | BindingFlags.Instance);
-            if (warmSessionReadyEvent == null)
-            {
-                return;
-            }
-
-            networkSwitchWarmSessionReadyHandler = NetworkSwitch_WarmSessionReady;
-            warmSessionReadyEvent.AddEventHandler(networkSwitch, networkSwitchWarmSessionReadyHandler);
-        }
-
-        private void NetworkSwitch_WarmSessionReady(object sender, EventArgs e)
-        {
-            string scenarioKey;
-            lock (pendingScenarioLock)
-            {
-                scenarioKey = pendingScenarioKey;
-            }
-
-            if (string.IsNullOrEmpty(scenarioKey))
-            {
-                return;
-            }
-
-            this.LogInformation($"Camera Manager {Key} received warm-session ready feedback from network switch '{config.NetworkSwitchKey}' for pending scenario '{scenarioKey}'");
-
-            if (!IsNetworkSwitchReadyForFastCommands())
-            {
-                this.LogDebug($"Camera Manager {Key} received warm-session ready feedback for scenario '{scenarioKey}' but switch '{config.NetworkSwitchKey}' still reports not ready");
-                return;
-            }
-
-            switchWarmupRetryTimer.Stop();
-
-            lock (pendingScenarioLock)
-            {
-                if (pendingScenarioKey == scenarioKey)
-                {
-                    pendingScenarioKey = null;
-                }
-            }
-
-            TryExecuteScenarioCameraResets(scenarioKey);
-        }
-
-        private void RequestNetworkSwitchWarmSession()
-        {
-            var switchType = networkSwitch?.GetType();
-            var requestMethod = switchType?.GetMethod("RequestWarmSession", BindingFlags.Public | BindingFlags.Instance);
-            requestMethod?.Invoke(networkSwitch, null);
         }
 
         private void Codec_CameraAssignedSerialNumberChanged(object sender, CameraEventArgs e)
