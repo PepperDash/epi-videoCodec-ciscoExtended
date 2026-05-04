@@ -142,7 +142,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         private void NetworkSwitch_PortStateChanged(object sender, NetworkSwitchPortEventArgs e)
         {
-            this.LogDebug($"Camera Manager {Key} detected network switch port state change on port '{e.Port}' to state '{e.EventType}'");
+            this.LogVerbose($"Camera Manager {Key} detected network switch port state change on port '{e.Port}' to state '{e.EventType}'");
 
             if (e.EventType == NetworkSwitchPortEventType.PoEDisabled)
             {
@@ -333,7 +333,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             var switchReady = IsNetworkSwitchReadyForFastCommands();
-            this.LogDebug($"Camera Manager {Key} warm-session retry elapsed for scenario '{scenarioKey}': switchReady={switchReady}");
+            this.LogVerbose($"Camera Manager {Key} warm-session retry elapsed for scenario '{scenarioKey}': switchReady={switchReady}");
 
             if (!switchReady)
             {
@@ -580,7 +580,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             var camera = ResolveManagedCamera(codec, e);
             if (camera == null)
             {
-                this.LogWarning($"Camera Manager {Key} received CameraConnected event from codec {codec?.Key} for camera ID {e.CameraId} / serial {e.SerialNumber} but no managed camera was resolved");
+                this.LogDebug($"Camera Manager {Key} received CameraConnected event from codec {codec?.Key} for camera ID {e.CameraId} / serial {e.SerialNumber} but no managed camera was resolved");
                 return;
             }
 
@@ -669,7 +669,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (!migration.PoeDisabledConfirmed || !migration.AssignmentClearedConfirmed)
             {
                 this.LogInformation($"CAMERA_SWITCHOVER_WAITING camera='{migration?.CameraKey}' sourceCodec='{migration?.SourceCodecKey}' sourceCameraId='{migration?.SourceCameraId}' targetCodec='{migration?.TargetCodecKey}' port='{migration?.Port}' PoEDisabled='{migration?.PoeDisabledConfirmed}' AssignedCleared='{migration?.AssignmentClearedConfirmed}'");
-                this.LogDebug($"Camera Manager {Key} holding VLAN switch for camera '{migration?.CameraKey}': PoEDisabled={migration?.PoeDisabledConfirmed} AssignedCleared={migration?.AssignmentClearedConfirmed}");
+                this.LogVerbose($"Camera Manager {Key} holding VLAN switch for camera '{migration?.CameraKey}': PoEDisabled={migration?.PoeDisabledConfirmed} AssignedCleared={migration?.AssignmentClearedConfirmed}");
                 return;
             }
 

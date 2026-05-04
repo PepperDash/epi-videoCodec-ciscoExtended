@@ -3896,14 +3896,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (listWasUpdated)
 				{
-					this.LogDebug(
+					this.LogVerbose(
 							"Connected Cameras: {@cameras}",
 							CodecStatus.Status.Cameras.CameraList.Count(c =>
 								c.Connected?.Value.ToLower() == "true"));
 
 					foreach (var cam in CodecStatus.Status.Cameras.CameraList)
 					{
-						this.LogDebug(
+						this.LogVerbose(
 							"Camera: {cameraId} connected: {connected} serial: {serialNumber}",
 							cam.CameraId, cam.Connected?.Value ?? "false",
 							cam.SerialNumber?.Value ?? "--empty---");
