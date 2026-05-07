@@ -39,7 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PepperDashEssentials" Version="2.29.0-feature-add-network-switch-poe-interfaces.4">
+    <PackageReference Include="PepperDashEssentials" Version="2.29.0-feature-web-api-updates.1">
 	    <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />
