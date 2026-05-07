@@ -165,6 +165,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     this.LogError($"Camera Manager {Key} failed to activate: Camera device with key {cameraKey} not found or not a CiscoCamera");
                     return false;
                 }
+
+                if (string.IsNullOrWhiteSpace(cameraDevice.NetworkSwitchPort))
+                {
+                    this.LogError($"Camera Manager {Key} failed to activate: Camera device with key {cameraKey} is missing required migration property NetworkSwitchPort");
+                    return false;
+                }
+
+                if (string.IsNullOrWhiteSpace(cameraDevice.SerialNumber))
+                {
+                    this.LogError($"Camera Manager {Key} failed to activate: Camera device with key {cameraKey} is missing required migration property SerialNumber");
+                    return false;
+                }
+
                 managedCameras.Add(cameraKey, cameraDevice);
             }
 
