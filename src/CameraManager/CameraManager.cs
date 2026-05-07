@@ -4,11 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Timers;
-using Org.BouncyCastle.Asn1.X509;
 using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
-using PepperDash.Essentials.Core.Web.RequestHandlers;
 using PepperDash.Essentials.Devices.Common.Cameras;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
