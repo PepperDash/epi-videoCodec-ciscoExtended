@@ -374,11 +374,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 foreach (var migrationKey in pendingPoeSafeguardKeys)
                 {
-                    string cameraKey = null;
-                    string sourceCodecKey = null;
-                    uint sourceCameraId = 0;
-                    string targetCodecKey = null;
-                    string port = null;
+                    string cameraKey;
+                    string sourceCodecKey;
+                    uint sourceCameraId;
+                    string targetCodecKey;
+                    string port;
                     lock (activeMigrationsLock)
                     {
                         if (!activeMigrations.TryGetValue(migrationKey, out var migration)
@@ -406,11 +406,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 foreach (var migrationKey in pendingAttachKeys)
                 {
-                    string cameraKey = null;
-                    string sourceCodecKey = null;
-                    uint sourceCameraId = 0;
-                    string targetCodecKey = null;
-                    string port = null;
+                    string cameraKey;
+                    string sourceCodecKey;
+                    uint sourceCameraId;
+                    string targetCodecKey;
+                    string port;
                     int attachRecoveryAttempts = 0;
                     bool shouldReseed = false;
                     bool shouldReassertTarget = false;
