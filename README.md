@@ -463,34 +463,34 @@ In order for this functionality to work, each codec config must specify a `vlanI
   "name": "Camera Manager",
   "type": "cameramanager",
   "properties": {
-      "networkSwitchKey": "networkSwitch1",
-      "roomCombinerConfig": {
-        "roomCombinerKey": "roomCombiner1",
-        "combineScenarios": {
-          "divided": {
-            "codecConfigs": [
-              { "codecKey": "codecA", "cameraKeys": ["cameraA"},
-              { "codecKey": "codecB", "cameraKeys": ["cameraB"]},
-              { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
-            ]
-          },
-          "combined": {
-            "codecConfigs": [
-            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"]},
-            ]
-          },
-          "abCombined": {
+    "networkSwitchKey": "networkSwitch1",
+    "roomCombinerConfig": {
+      "roomCombinerKey": "roomCombiner1",
+      "combineScenarios": {
+        "divided": {
           "codecConfigs": [
-            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"]},
-            { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
-            ]
-          },
-          "bcCombined": {
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] },
+            { "codecKey": "codecB", "cameraKeys": ["cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "combined": {
           "codecConfigs": [
-            { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"]},
-            { "codecKey": "codecA", "cameraKeys": ["cameraA"]},
-            ]
-          }
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"] }
+          ]
+        },
+        "abCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "bcCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"] },
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] }
+          ]
+        }
       }
     }
   }
