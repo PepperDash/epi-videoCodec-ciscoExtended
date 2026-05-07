@@ -63,7 +63,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (string.IsNullOrWhiteSpace(config.RoomCombinerConfig.RoomCombinerKey))
             {
-                this.LogError($"Camera Manager {Key} failed to activate: roomCombinerConfig.roomCombinerKey is required");
+                this.LogError($"Camera Manager {Key} failed to activate: RoomCombinerConfig.RoomCombinerKey is required");
                 return false;
             }
 
