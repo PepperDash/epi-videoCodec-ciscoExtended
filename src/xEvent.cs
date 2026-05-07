@@ -20,6 +20,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
             var token = JToken.Load(reader);
+
+            if (token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                return null;
+            }
+
             var urlInstance = Activator.CreateInstance(objectType);
 
             if (token.Type == JTokenType.String)
