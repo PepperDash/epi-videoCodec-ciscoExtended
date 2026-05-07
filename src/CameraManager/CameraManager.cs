@@ -257,48 +257,88 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (e.EventType == NetworkSwitchPortEventType.PoEDisabled)
             {
-                var migration = GetMigrationByPort(e.Port);
-                if (migration == null)
+                CameraMigrationState migrationForVlanSwitch = null;
+                string cameraKey = null;
+                string port = null;
+
+                lock (activeMigrationsLock)
                 {
-                    this.LogDebug($"Camera Manager {Key} detected PoE disabled event on port '{e.Port}' but no active camera migration is associated with that port");
-                    return;
+                    var migration = GetMigrationByPort(e.Port);
+                    if (migration == null)
+                    {
+                        this.LogDebug($"Camera Manager {Key} detected PoE disabled event on port '{e.Port}' but no active camera migration is associated with that port");
+                        return;
+                    }
+
+                    migration.PoeDisabledConfirmed = true;
+                    migration.PoeOffDeadlineUtc = DateTime.UtcNow.AddMilliseconds(MaxPoeOffDurationMs);
+                    migration.PoeOffSafeguardTriggered = false;
+                    migrationForVlanSwitch = migration;
+                    cameraKey = migration.CameraKey;
+                    port = migration.Port;
                 }
 
-                migration.PoeDisabledConfirmed = true;
-                migration.PoeOffDeadlineUtc = DateTime.UtcNow.AddMilliseconds(MaxPoeOffDurationMs);
-                migration.PoeOffSafeguardTriggered = false;
-                this.LogDebug($"Camera Manager {Key} confirmed PoE disabled for camera '{migration.CameraKey}' on port '{migration.Port}'");
-                TryIssueVlanSwitch(migration);
+                this.LogDebug($"Camera Manager {Key} confirmed PoE disabled for camera '{cameraKey}' on port '{port}'");
+                TryIssueVlanSwitch(migrationForVlanSwitch);
             }
             else if (e.EventType == NetworkSwitchPortEventType.VlanChanged)
             {
-                var migration = GetMigrationByPort(e.Port);
-                if (migration == null)
+                bool shouldEnablePoe = false;
+                string cameraKey = null;
+
+                lock (activeMigrationsLock)
                 {
-                    this.LogDebug($"Camera Manager {Key} detected VLAN changed event on port '{e.Port}' with no active migration");
-                    return;
+                    var migration = GetMigrationByPort(e.Port);
+                    if (migration == null)
+                    {
+                        this.LogDebug($"Camera Manager {Key} detected VLAN changed event on port '{e.Port}' with no active migration");
+                        return;
+                    }
+
+                    migration.VlanChangedConfirmed = true;
+                    if (!migration.PoeEnableIssued)
+                    {
+                        migration.PoeEnableIssued = true;
+                        shouldEnablePoe = true;
+                        cameraKey = migration.CameraKey;
+                    }
                 }
 
-                migration.VlanChangedConfirmed = true;
-                if (!migration.PoeEnableIssued)
+                if (shouldEnablePoe)
                 {
-                    migration.PoeEnableIssued = true;
                     networkSwitch.SetPortPoeState(e.Port, true);
-                    this.LogDebug($"Camera Manager {Key} confirmed VLAN changed for camera '{migration.CameraKey}', re-enabling PoE on port '{e.Port}'");
+                    this.LogDebug($"Camera Manager {Key} confirmed VLAN changed for camera '{cameraKey}', re-enabling PoE on port '{e.Port}'");
                 }
             }
             else if (e.EventType == NetworkSwitchPortEventType.PoEEnabled)
             {
-                var migration = GetMigrationByPort(e.Port);
-                if (migration == null)
+                string cameraKey = null;
+                string sourceCodecKey = null;
+                string sourceCameraId = null;
+                string targetCodecKey = null;
+                string port = null;
+                bool vlanChangedConfirmed = false;
+
+                lock (activeMigrationsLock)
                 {
-                    return;
+                    var migration = GetMigrationByPort(e.Port);
+                    if (migration == null)
+                    {
+                        return;
+                    }
+
+                    migration.AttachWaitStarted = true;
+                    migration.AttachWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
+                    cameraKey = migration.CameraKey;
+                    sourceCodecKey = migration.SourceCodecKey;
+                    sourceCameraId = migration.SourceCameraId;
+                    targetCodecKey = migration.TargetCodecKey;
+                    port = migration.Port;
+                    vlanChangedConfirmed = migration.VlanChangedConfirmed;
                 }
 
-                migration.AttachWaitStarted = true;
-                migration.AttachWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
-                this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' vlanChanged='{migration.VlanChangedConfirmed}' poeEnabled='True'");
-                this.LogDebug($"Camera Manager {Key} confirmed migration sequence complete for camera '{migration.CameraKey}' on port '{migration.Port}'");
+                this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='{vlanChangedConfirmed}' poeEnabled='True'");
+                this.LogDebug($"Camera Manager {Key} confirmed migration sequence complete for camera '{cameraKey}' on port '{port}'");
             }
         }
 
