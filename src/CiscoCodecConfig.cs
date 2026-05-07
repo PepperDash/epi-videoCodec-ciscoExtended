@@ -141,8 +141,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>
         /// Optional property to specify the VLAN ID for the camera network. This is used by the CameraManager to set the correct VLAN when switching cameras between codecs.
         /// </summary>
-        [JsonProperty("vlanId")]
-        public uint VLanId { get; set; }
+        [JsonProperty("vlanId", NullValueHandling = NullValueHandling.Ignore)]
+        public uint? VLanId { get; set; }
 
         public CiscoCodecConfig()
         {
