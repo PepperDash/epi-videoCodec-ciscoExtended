@@ -78,6 +78,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             roomCombiner.RoomCombinationScenarioChanged += RoomCombiner_RoomCombinationScenarioChanged;
 
+            if (string.IsNullOrWhiteSpace(config.NetworkSwitchKey))
+            {
+                this.LogError($"Camera Manager {Key} failed to activate: NetworkSwitchKey is required");
+                return false;
+            }
+
             var networkSwitchDevice = DeviceManager.GetDeviceForKey(config.NetworkSwitchKey) as INetworkSwitchPoeVlanManager;
             if (networkSwitchDevice == null)
             {
