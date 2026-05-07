@@ -51,7 +51,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public void ClearCameraAssignedSerialNumber(uint cameraId)
         {
             this.LogDebug("Clearing the assigned serial number for camera ID {cameraId}", cameraId);
-            EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: \"\" ");
+            EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: \"\"");
         }
     }
 
