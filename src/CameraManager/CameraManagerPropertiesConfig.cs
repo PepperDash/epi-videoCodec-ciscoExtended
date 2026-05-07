@@ -10,38 +10,39 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     /// </summary>
     /// <example>
     ///   {
-    ///   "key": "cameraManager1",
-    ///   "name": "Camera Manager",
-    ///   "type": "cameramanager",
-    ///   "properties": {
+    ///     "key": "cameraManager1",
+    ///     "name": "Camera Manager",
+    ///     "type": "cameramanager",
+    ///     "properties": {
     ///       "networkSwitchKey": "networkSwitch1",
     ///       "roomCombinerConfig": {
     ///         "roomCombinerKey": "roomCombiner1",
     ///         "combineScenarios": {
     ///           "divided": {
     ///             "codecConfigs": [
-    ///               { "codecKey": "codecA", "cameraKeys": ["cameraA"},
-    ///               { "codecKey": "codecB", "cameraKeys": ["cameraB"]},
-    ///               { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
+    ///               { "codecKey": "codecA", "cameraKeys": ["cameraA"] },
+    ///               { "codecKey": "codecB", "cameraKeys": ["cameraB"] },
+    ///               { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
     ///             ]
     ///           },
     ///           "combined": {
     ///             "codecConfigs": [
-    ///             { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"]},
+    ///               { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"] }
     ///             ]
     ///           },
     ///           "abCombined": {
-    ///           "codecConfigs": [
-    ///             { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"]},
-    ///             { "codecKey": "codecC", "cameraKeys": ["cameraC"]},
+    ///             "codecConfigs": [
+    ///               { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"] },
+    ///               { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
     ///             ]
     ///           },
     ///           "bcCombined": {
-    ///           "codecConfigs": [
-    ///             { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"]},
-    ///             { "codecKey": "codecA", "cameraKeys": ["cameraA"]},
+    ///             "codecConfigs": [
+    ///               { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"] },
+    ///               { "codecKey": "codecA", "cameraKeys": ["cameraA"] }
     ///             ]
     ///           }
+    ///         }
     ///       }
     ///     }
     ///   }
