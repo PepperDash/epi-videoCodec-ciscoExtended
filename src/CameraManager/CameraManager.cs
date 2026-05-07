@@ -287,9 +287,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             continue;
                         }
 
+                        var currentParentCodecKey = camera.ParentCodec?.Key;
+                        if (string.IsNullOrEmpty(currentParentCodecKey))
+                        {
+                            this.LogWarning($"Camera Manager {Key} cannot reset camera '{cameraKey}' for scenario '{scenarioKey}' because its parent codec is not available");
+                            continue;
+                        }
+
+                        if (string.Equals(currentParentCodecKey, codecConfig.CodecKey, StringComparison.Ordinal))
+                        {
+                            this.LogDebug($"Camera Manager {Key} skipping factory reset for camera '{cameraKey}' because it is already assigned to target codec '{codecConfig.CodecKey}' for scenario '{scenarioKey}'");
+                            continue;
+                        }
+
                         // Here we would implement the logic to assign the camera to the codec, e.g. by calling a method on the codec interface
                         this.LogDebug($"Camera Manager {Key} would assign camera '{cameraKey}' to codec '{codecConfig.CodecKey}' based on scenario '{scenarioKey}'");
-                        this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{camera.ParentCodec.Key}' to trigger re-pairing with correct codec based on new scenario");
+                        this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{currentParentCodecKey}' to trigger re-pairing with correct codec based on new scenario");
                         camera.ParentCodec.CameraFactoryReset(camera.CameraId);
                     }
                 }
