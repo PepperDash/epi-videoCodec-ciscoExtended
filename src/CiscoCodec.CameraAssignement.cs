@@ -31,7 +31,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             else
             {
-                this.LogWarning($"Camera with ID {cameraId} not found on codec {Key}");
+                this.LogWarning("Camera with ID {cameraId} not found on codec {codecKey}", cameraId, Key);
                 return null;
             }
         }
