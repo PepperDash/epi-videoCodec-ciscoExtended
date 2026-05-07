@@ -269,7 +269,7 @@ Provided under MIT license
         "Name": "Presenter"
       }
     ],
-    "vlanId": 1 // optional property to specify the VLAN ID for the camera network on a manages switch.  Used by the CameraManager
+    "vlanId": 1 // optional property to specify the VLAN ID for the camera network on a managed switch. Used by the CameraManager
   }
 }
 ```
