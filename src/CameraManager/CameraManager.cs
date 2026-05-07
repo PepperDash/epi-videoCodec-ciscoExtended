@@ -80,7 +80,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (string.IsNullOrWhiteSpace(config.NetworkSwitchKey))
             {
-                this.LogError($"Camera Manager {Key} failed to activate: NetworkSwitchKey cannot be null or empty");
+                this.LogError($"Camera Manager {Key} failed to activate: required network switch identifier (networkSwitchKey) is missing or empty");
                 return false;
             }
 
