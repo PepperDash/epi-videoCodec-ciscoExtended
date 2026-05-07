@@ -733,7 +733,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				config.Properties.ToString()
 			);
 
-			VLanId = props.VLanId;
+			VLanId = props.VLanId ?? 0u;
 
 			UiExtensions = props.Extensions;
 			if (props?.Extensions?.ConfigId > 0)
