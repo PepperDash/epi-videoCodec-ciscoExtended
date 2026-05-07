@@ -898,19 +898,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (props.CommunicationMonitorProperties != null)
 			{
+				// Ensure the poll string ends with the codec delimiter (\r\n).
+				// GenericCommunicationMonitor sends the poll string verbatim with no terminator,
+				// so without one the bytes buffer and merge with the next command on the wire.
+				var monitorConfig = props.CommunicationMonitorProperties;
+				if (!string.IsNullOrEmpty(monitorConfig.PollString))
+				{
+					monitorConfig.PollString = monitorConfig.PollString.TrimEnd('\r', '\n') + Delimiter;
+				}
+
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
 					Communication,
-					props.CommunicationMonitorProperties
+					monitorConfig
 				);
 			}
 			else
 			{
 				const string pollString =
-					"xstatus systemunit\r"
-					+ "xstatus cameras\r"
-					+ "xstatus sip/registration\r"
-					+ "xStatus Audio Volume\r";
+					"xstatus systemunit"
+					+ Delimiter
+					+ "xstatus cameras"
+					+ Delimiter
+					+ "xstatus sip/registration"
+					+ Delimiter
+					+ "xStatus Audio Volume";
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
@@ -2199,7 +2211,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (Communication == null)
 				return;
-			Communication.SendText(command + Delimiter);
+
+			if (string.IsNullOrEmpty(command))
+				return;
+
+			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
+			// concatenating multiple commands into a single malformed expression.
+			var normalized = command
+				.Replace("\r\n", "\n")
+				.Replace("\r", "\n")
+				.Replace("\n", Delimiter)
+				.TrimEnd('\r', '\n');
+
+			Communication.SendText(normalized + Delimiter);
 		}
 
 		public void SendText(string command)
@@ -3619,11 +3643,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private bool AddCamera(uint cameraId, JObject cam, CiscoCamera existingCameraDevice, string serialNumber)
 		{
+			if (cam == null)
+			{
+				this.LogWarning("Camera {camId} payload was null. Skipping AddCamera.", cameraId);
+				return false;
+			}
+
 			this.LogDebug("Camera {camId} is connected.", cameraId);
 			var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
 			CodecStatus.Status.Cameras.CameraList.Add(newCam);
 
-			CameraConnected.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
+			CameraConnected?.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
 
 			// if we have a cameras with a matching serial number, set it's parent codec and add it.
 			if (existingCameraDevice != null)
