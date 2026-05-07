@@ -49,6 +49,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// <returns></returns>
         public override bool CustomActivate()
         {
+            if (config == null)
+            {
+                this.LogError($"Camera Manager {Key} failed to activate: missing camera manager configuration");
+                return false;
+            }
+
+            if (config.RoomCombinerConfig == null)
+            {
+                this.LogError($"Camera Manager {Key} failed to activate: missing required roomCombinerConfig block");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(config.RoomCombinerConfig.RoomCombinerKey))
+            {
+                this.LogError($"Camera Manager {Key} failed to activate: roomCombinerConfig.roomCombinerKey is required");
+                return false;
+            }
+
             var roomCombinerDevice = DeviceManager.GetDeviceForKey(config.RoomCombinerConfig.RoomCombinerKey) as EssentialsRoomCombiner;
             if (roomCombinerDevice == null)
             {
