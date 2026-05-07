@@ -17,7 +17,7 @@ namespace PepperDash.Essentials.Core.DeviceTypeInterfaces
 
 
         /// <summary>Initialises a new instance of <see cref="CameraEventArgs"/>.</summary>
-        /// <param name="cameraId">Camera ID string as reported by the codec</param>
+        /// <param name="cameraId">Camera ID as reported by the codec (1-based)</param>
         /// <param name="serialNumber">Serial number of the camera, when available</param>
         public CameraEventArgs(uint cameraId, string serialNumber = null)
         {
@@ -30,7 +30,7 @@ namespace PepperDash.Essentials.Core.DeviceTypeInterfaces
 
     /// <summary>
     /// Interface that Cisco codec devices (epi-videoCodec-ciscoExtended) must implement so that
-    /// <see cref="CiscoNetworkCameraManagerDevice"/> can orchestrate the camera factory-reset
+    /// <see cref="PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras.CameraManager"/> can orchestrate the camera factory-reset
     /// and VLAN-migration sequence.
     /// </summary>
     public interface ICiscoCodecCameraFactoryReset
