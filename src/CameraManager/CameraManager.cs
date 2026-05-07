@@ -598,7 +598,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (codecCameraReset != null)
             {
                 this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec '{codec?.Key}' to ensure correct pairing");
-                codec.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
+                codecCameraReset.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
             }
             else
             {
