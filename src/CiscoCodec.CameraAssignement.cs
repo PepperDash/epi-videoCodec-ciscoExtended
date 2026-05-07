@@ -38,8 +38,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
 		{
+			if (string.IsNullOrEmpty(serialNumber))
+			{
+				this.LogDebug("Clearing the serial number of camera {id}", cameraId);
+				ClearCameraAssignedSerialNumber(cameraId);
+				return;
+			}
+
 			this.LogDebug("Setting the serial number of camera {id} to {serialNumber}", cameraId, serialNumber);
-			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
+			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: \"{EscapeConfigurationStringValue(serialNumber)}\"");
+		}
+
+		private static string EscapeConfigurationStringValue(string value)
+		{
+			return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 		}
 
 		public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
