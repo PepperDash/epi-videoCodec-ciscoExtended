@@ -91,7 +91,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (config.RoomCombinerConfig.CombineScenarios == null || !config.RoomCombinerConfig.CombineScenarios.Any())
             {
-                this.LogError($"Camera Manager {Key} failed to activate: RoomCombinerConfig.CombineScenarios is missing or empty");
+                this.LogError($"Camera Manager {Key} failed to activate: RoomCombinerConfig.CombineScenarios is null or empty");
                 return false;
             }
 
@@ -107,7 +107,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 if (scenario.Value.CodecConfigs == null || !scenario.Value.CodecConfigs.Any())
                 {
-                    this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs is missing or empty");
+                    this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs is null or empty");
                     return false;
                 }
 
@@ -115,13 +115,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     if (codecConfig == null)
                     {
-                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs contains a null entry");
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs contains a null item");
                         return false;
                     }
 
                     if (string.IsNullOrWhiteSpace(codecConfig.CodecKey))
                     {
-                        this.LogError($"Camera Manager {Key} failed to activate: A CodecConfig in CombineScenarios['{scenario.Key}'].CodecConfigs is missing a required CodecKey");
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs contains a CodecConfig where CodecKey is null or empty");
                         return false;
                     }
 
@@ -129,7 +129,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     if (codecConfig.CameraKeys == null || !codecConfig.CameraKeys.Any())
                     {
-                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys is missing or empty");
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys is null or empty");
                         return false;
                     }
 
@@ -137,7 +137,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     {
                         if (string.IsNullOrWhiteSpace(cameraKey))
                         {
-                            this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys contains an empty key");
+                            this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys contains a null or empty key");
                             return false;
                         }
 
