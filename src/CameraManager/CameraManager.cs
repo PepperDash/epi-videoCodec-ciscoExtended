@@ -89,15 +89,58 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             networkSwitch.PortStateChanged += NetworkSwitch_PortStateChanged;
 
+            if (config.RoomCombinerConfig.CombineScenarios == null || !config.RoomCombinerConfig.CombineScenarios.Any())
+            {
+                this.LogError($"Camera Manager {Key} failed to activate: RoomCombinerConfig.CombineScenarios is missing or empty");
+                return false;
+            }
+
             HashSet<string> codecKeysInScenarios = new HashSet<string>();
             HashSet<string> cameraKeysInScenarios = new HashSet<string>();
             foreach (var scenario in config.RoomCombinerConfig.CombineScenarios)
             {
-                foreach (var config in scenario.Value.CodecConfigs)
+                if (scenario.Value == null)
                 {
-                    codecKeysInScenarios.Add(config.CodecKey);
-                    foreach (var cameraKey in config.CameraKeys)
+                    this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'] is missing");
+                    return false;
+                }
+
+                if (scenario.Value.CodecConfigs == null || !scenario.Value.CodecConfigs.Any())
+                {
+                    this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs is missing or empty");
+                    return false;
+                }
+
+                foreach (var codecConfig in scenario.Value.CodecConfigs)
+                {
+                    if (codecConfig == null)
                     {
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs contains a null entry");
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(codecConfig.CodecKey))
+                    {
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs.CodecKey is required");
+                        return false;
+                    }
+
+                    codecKeysInScenarios.Add(codecConfig.CodecKey);
+
+                    if (codecConfig.CameraKeys == null || !codecConfig.CameraKeys.Any())
+                    {
+                        this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys is missing or empty");
+                        return false;
+                    }
+
+                    foreach (var cameraKey in codecConfig.CameraKeys)
+                    {
+                        if (string.IsNullOrWhiteSpace(cameraKey))
+                        {
+                            this.LogError($"Camera Manager {Key} failed to activate: CombineScenarios['{scenario.Key}'].CodecConfigs['{codecConfig.CodecKey}'].CameraKeys contains an empty key");
+                            return false;
+                        }
+
                         cameraKeysInScenarios.Add(cameraKey);
                     }
                 }
