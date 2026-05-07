@@ -39,8 +39,39 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             this.config = config;
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
-            attachVerificationTimer.Start();
+            AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
 
+        }
+
+        ~CameraManager()
+        {
+            StopAndDisposeAttachVerificationTimer();
+        }
+
+        private void StartAttachVerificationTimer()
+        {
+            if (!attachVerificationTimer.Enabled)
+            {
+                attachVerificationTimer.Start();
+            }
+        }
+
+        private void StopAndDisposeAttachVerificationTimer()
+        {
+            try
+            {
+                attachVerificationTimer.Stop();
+                attachVerificationTimer.Elapsed -= AttachVerificationTimer_Elapsed;
+                attachVerificationTimer.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        private void CurrentDomain_ProcessExit(object sender, EventArgs e)
+        {
+            StopAndDisposeAttachVerificationTimer();
         }
 
         /// <summary>
@@ -48,6 +79,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         /// <returns></returns>
         public override bool CustomActivate()
+        {
+            var activated = CustomActivateInternal();
+            if (activated)
+            {
+                StartAttachVerificationTimer();
+            }
+
+            return activated;
+        }
+
+        private bool CustomActivateInternal()
         {
             if (config == null)
             {
