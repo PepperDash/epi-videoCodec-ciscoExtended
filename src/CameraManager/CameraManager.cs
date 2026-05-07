@@ -51,7 +51,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         {
             if (config == null)
             {
-                this.LogError($"Camera Manager {Key} failed to activate: missing camera manager configuration");
+                this.LogError($"Camera Manager {Key} failed to activate: missing required config");
                 return false;
             }
 
