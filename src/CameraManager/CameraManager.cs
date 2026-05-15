@@ -30,9 +30,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private readonly Timer attachVerificationTimer;
         private int attachVerificationTimerHandlerActive;
 
-        private const int AttachWaitTimeoutMs = 45000;
+        private const int AttachWaitTimeoutMs = 120000;
         private const int MaxPoeOffDurationMs = 60000;
-        private const int MaxAttachRecoveryAttempts = 1;
+        private const int MaxAttachRecoveryAttempts = 2;
 
         public CameraManager(string key, string name, CameraManagerPropertiesConfig config)
             : base(key, name)
@@ -243,6 +243,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             {
                 this.LogInformation($"Camera Manager {Key} startup reconciliation for current scenario '{startupScenario}'");
                 TryExecuteScenarioCameraResets(startupScenario);
+                TryEnsureScenarioCameraPortStates(startupScenario);
             }
             else
             {
@@ -300,6 +301,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     if (!migration.PoeEnableIssued)
                     {
                         migration.PoeEnableIssued = true;
+                        migration.PoeReenableDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
                         shouldEnablePoe = true;
                         cameraKey = migration.CameraKey;
                     }
@@ -354,6 +356,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             {
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
+                List<string> pendingPoeReenableRetryKeys;
                 var now = DateTime.UtcNow;
                 lock (activeMigrationsLock)
                 {
@@ -370,6 +373,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             && m.PoeOffDeadlineUtc <= now)
                         .Select(m => m.CameraKey)
                         .ToList();
+
+                    pendingPoeReenableRetryKeys = activeMigrations.Values
+                        .Where(m => m.VlanChangedConfirmed
+                            && m.PoeEnableIssued
+                            && !m.AttachWaitStarted
+                            && m.PoeReenableDeadlineUtc != DateTime.MinValue
+                            && m.PoeReenableDeadlineUtc <= now)
+                        .Select(m => m.CameraKey)
+                        .ToList();
+                }
+
+                foreach (var migrationKey in pendingPoeReenableRetryKeys)
+                {
+                    string cameraKey;
+                    string sourceCodecKey;
+                    uint sourceCameraId;
+                    string targetCodecKey;
+                    string port;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!activeMigrations.TryGetValue(migrationKey, out var migration)
+                            || !migration.VlanChangedConfirmed
+                            || !migration.PoeEnableIssued
+                            || migration.AttachWaitStarted
+                            || migration.PoeReenableDeadlineUtc == DateTime.MinValue
+                            || migration.PoeReenableDeadlineUtc > now)
+                        {
+                            continue;
+                        }
+
+                        migration.PoeReenableDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
+                        cameraKey = migration.CameraKey;
+                        sourceCodecKey = migration.SourceCodecKey;
+                        sourceCameraId = migration.SourceCameraId;
+                        targetCodecKey = migration.TargetCodecKey;
+                        port = migration.Port;
+                    }
+
+                    this.LogInformation($"CAMERA_SWITCHOVER_POE_REENABLE_RETRY camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' reason='poeEnabledEventNotConfirmed'");
+                    this.LogDebug($"Camera Manager {Key} retrying PoE re-enable for camera '{cameraKey}' on port '{port}' — PoEEnabled event was not confirmed after VLAN change");
+                    networkSwitch.SetPortPoeState(port, true);
                 }
 
                 foreach (var migrationKey in pendingPoeSafeguardKeys)
@@ -498,6 +542,54 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             this.LogInformation($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
 
             TryExecuteScenarioCameraResets(currentScenario?.Key);
+            TryEnsureScenarioCameraPortStates(currentScenario?.Key);
+        }
+
+        private void TryEnsureScenarioCameraPortStates(string scenarioKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey))
+            {
+                return;
+            }
+
+            if (!config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig))
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                if (!managedCodecs.TryGetValue(codecConfig.CodecKey, out var codec))
+                {
+                    continue;
+                }
+
+                foreach (var cameraKey in codecConfig.CameraKeys)
+                {
+                    if (!managedCameras.TryGetValue(cameraKey, out var camera))
+                    {
+                        continue;
+                    }
+
+                    bool hasActiveMigration;
+                    lock (activeMigrationsLock)
+                    {
+                        hasActiveMigration = activeMigrations.ContainsKey(cameraKey);
+                    }
+
+                    if (hasActiveMigration)
+                    {
+                        this.LogDebug($"Camera Manager {Key} skipping port-state ensure for camera '{cameraKey}': active migration in progress");
+                        continue;
+                    }
+
+                    var port = camera.NetworkSwitchPort;
+                    var vlanId = codec.VLanId;
+                    this.LogInformation($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}'");
+                    networkSwitch.SetPortVlan(port, vlanId);
+                    networkSwitch.SetPortPoeState(port, true);
+                }
+            }
         }
 
         private void TryExecuteScenarioCameraResets(string scenarioKey)
@@ -651,6 +743,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         this.LogInformation($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='duplicateDisconnectEmptySerial'");
                         this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' by duplicate disconnect fallback with empty serial");
                         TryIssueVlanSwitch(existingMigration);
+                    }
+
+                    if (!existingMigration.PoeDisabledConfirmed && !existingMigration.VlanSwitchIssued)
+                    {
+                        this.LogInformation($"CAMERA_SWITCHOVER_POE_DISABLE_RETRY camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='previousPoeDisableNotConfirmed'");
+                        this.LogDebug($"Camera Manager {Key} retrying PoE disable for camera '{camera.Key}' on port '{existingMigration.Port}' — previous disable was never confirmed");
+                        networkSwitch.SetPortPoeState(existingMigration.Port, false);
                     }
 
                     this.LogDebug($"Camera Manager {Key} ignoring duplicate CameraDisconnected for camera '{camera.Key}' while migration is already in progress");
@@ -936,6 +1035,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public bool PoeOffSafeguardTriggered { get; set; }
             public bool AttachWaitStarted { get; set; }
             public DateTime AttachWaitDeadlineUtc { get; set; }
+            public DateTime PoeReenableDeadlineUtc { get; set; }
             public int AttachRecoveryAttempts { get; set; }
         }
     }

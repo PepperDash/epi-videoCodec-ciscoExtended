@@ -14,7 +14,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         public CiscoNetworkCameraManagerFactory()
         {
-            MinimumEssentialsFrameworkVersion = "2.29.0-feature-web-api-updates.1";
+            MinimumEssentialsFrameworkVersion = "2.29.0";
             TypeNames = new List<string> { "ciscocameramanager", "cameramanager" };
         }
 
