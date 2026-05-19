@@ -241,7 +241,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             var startupScenario = roomCombiner.CurrentScenario?.Key;
             if (!string.IsNullOrEmpty(startupScenario))
             {
-                this.LogInformation($"Camera Manager {Key} startup reconciliation for current scenario '{startupScenario}'");
+                this.LogDebug($"Camera Manager {Key} startup reconciliation for current scenario '{startupScenario}'");
                 TryExecuteScenarioCameraResets(startupScenario);
                 TryEnsureScenarioCameraPortStates(startupScenario);
             }
@@ -309,6 +309,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 if (shouldEnablePoe)
                 {
+                    this.LogDebug($"CAMERA_SWITCHOVER_POE_ON_AFTER_VLAN camera='{cameraKey}' port='{e.Port}' reason='vlanChangedConfirmed'");
                     networkSwitch.SetPortPoeState(e.Port, true);
                     this.LogDebug($"Camera Manager {Key} confirmed VLAN changed for camera '{cameraKey}', re-enabling PoE on port '{e.Port}'");
                 }
@@ -340,7 +341,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     vlanChangedConfirmed = migration.VlanChangedConfirmed;
                 }
 
-                this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='{vlanChangedConfirmed}' poeEnabled='True'");
+                this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='{vlanChangedConfirmed}' poeEnabled='True'");
                 this.LogDebug($"Camera Manager {Key} confirmed migration sequence complete for camera '{cameraKey}' on port '{port}'");
             }
         }
@@ -411,7 +412,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         port = migration.Port;
                     }
 
-                    this.LogInformation($"CAMERA_SWITCHOVER_POE_REENABLE_RETRY camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' reason='poeEnabledEventNotConfirmed'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_POE_REENABLE_RETRY camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' reason='poeEnabledEventNotConfirmed'");
                     this.LogDebug($"Camera Manager {Key} retrying PoE re-enable for camera '{cameraKey}' on port '{port}' — PoEEnabled event was not confirmed after VLAN change");
                     networkSwitch.SetPortPoeState(port, true);
                 }
@@ -443,7 +444,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         port = migration.Port;
                     }
 
-                    this.LogInformation($"CAMERA_SWITCHOVER_POE_SAFEGUARD_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' action='forcePoeOnAfterOffTimeout' maxOffMs='{MaxPoeOffDurationMs}'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_POE_SAFEGUARD_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' action='forcePoeOnAfterOffTimeout' maxOffMs='{MaxPoeOffDurationMs}'");
                     this.LogDebug($"Camera Manager {Key} forcing PoE on for camera '{cameraKey}' after extended PoE-off interval");
                     networkSwitch.SetPortPoeState(port, true);
                 }
@@ -491,8 +492,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     if (shouldReseed)
                     {
-                        this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_FAILED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reseedSourceVlanAndPoe'");
-                        this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='failed' action='reseedSourceVlanAndPoe' attempts='{attachRecoveryAttempts}'");
+                        this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_FAILED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reseedSourceVlanAndPoe'");
+                        this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='failed' action='reseedSourceVlanAndPoe' attempts='{attachRecoveryAttempts}'");
                         this.LogDebug($"Camera Manager {Key} attach failed diagnostics camera='{cameraKey}' managed='{BuildManagedCameraSnapshot(cameraKey)}' sourceSnapshot='{BuildCodecCameraSnapshot(sourceCodecKey)}' targetSnapshot='{BuildCodecCameraSnapshot(targetCodecKey)}'");
 
                         if (managedCodecs.TryGetValue(sourceCodecKey, out var sourceCodecDevice))
@@ -514,8 +515,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
-                    this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_TIMEOUT camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reassertTargetVlanAndPoe'");
-                    this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='timeout' action='reassertTargetVlanAndPoe' attempts='{attachRecoveryAttempts}'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_TIMEOUT camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reassertTargetVlanAndPoe'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='timeout' action='reassertTargetVlanAndPoe' attempts='{attachRecoveryAttempts}'");
                     this.LogDebug($"Camera Manager {Key} attach timeout diagnostics camera='{cameraKey}' managed='{BuildManagedCameraSnapshot(cameraKey)}' sourceSnapshot='{BuildCodecCameraSnapshot(sourceCodecKey)}' targetSnapshot='{BuildCodecCameraSnapshot(targetCodecKey)}'");
                     this.LogDebug($"Camera Manager {Key} reasserting target VLAN/PoE for camera '{cameraKey}' after attach timeout");
 
@@ -539,7 +540,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         {
             var currentScenario = roomCombiner.CurrentScenario;
 
-            this.LogInformation($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
+            this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
 
             TryExecuteScenarioCameraResets(currentScenario?.Key);
             TryEnsureScenarioCameraPortStates(currentScenario?.Key);
@@ -585,7 +586,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     var port = camera.NetworkSwitchPort;
                     var vlanId = codec.VLanId;
-                    this.LogInformation($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}'");
+                    this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}'");
                     networkSwitch.SetPortVlan(port, vlanId);
                     networkSwitch.SetPortPoeState(port, true);
                 }
@@ -633,6 +634,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                         // Here we would implement the logic to assign the camera to the codec, e.g. by calling a method on the codec interface
                         this.LogDebug($"Camera Manager {Key} would assign camera '{cameraKey}' to codec '{codecConfig.CodecKey}' based on scenario '{scenarioKey}'");
+                        this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{cameraKey}' sourceCodec='{currentParentCodecKey}' sourceCameraId='{camera.CameraId}' targetCodec='{codecConfig.CodecKey}' scenario='{scenarioKey}'");
                         this.LogDebug($"Camera Manager {Key} sending factory reset command for camera '{cameraKey}' on codec '{currentParentCodecKey}' to trigger re-pairing with correct codec based on new scenario");
                         camera.ParentCodec.CameraFactoryReset(camera.CameraId);
                     }
@@ -640,7 +642,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
             else
             {
-                this.LogInformation($"Camera Manager {Key} has no configuration for room combination scenario '{scenarioKey}'");
+                this.LogDebug($"Camera Manager {Key} has no configuration for room combination scenario '{scenarioKey}'");
             }
         }
 
@@ -720,6 +722,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            // Phantom-disconnect guard: if this camera is currently present on its target codec
+            // (by serial match), the disconnect from some other codec is a stale-cache artifact —
+            // do NOT start a migration. Most common at startup when codecs come up holding old
+            // AssignedSerialNumber bindings for cameras that have since moved.
+            if (managedCodecs.TryGetValue(targetCodecKey, out var targetCodecDevice))
+            {
+                var targetCodec = targetCodecDevice as CiscoCodec;
+                var onTarget = targetCodec?.Cameras?.OfType<CiscoCamera>()
+                    .Any(c => !string.IsNullOrEmpty(c.SerialNumber)
+                              && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase));
+                if (onTarget == true)
+                {
+                    this.LogDebug($"CAMERA_SWITCHOVER_PHANTOM_DISCONNECT camera='{camera.Key}' sourceCodec='{codec?.Key}' sourceCameraId='{e.CameraId}' targetCodec='{targetCodecKey}' reason='cameraAlreadyOnTargetCodec'");
+                    this.LogDebug($"Camera Manager {Key} ignoring phantom CameraDisconnected for camera '{camera.Key}' from codec '{codec?.Key}': camera is already attached to its target codec '{targetCodecKey}'");
+                    return;
+                }
+            }
+
             CameraMigrationState existingMigration;
             lock (activeMigrationsLock)
             {
@@ -734,20 +754,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 if (sameSource && sameTarget && samePort)
                 {
-                    this.LogInformation($"CAMERA_SWITCHOVER_DUPLICATE_DISCONNECT camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' PoEDisabled='{existingMigration.PoeDisabledConfirmed}' AssignedCleared='{existingMigration.AssignmentClearedConfirmed}' VlanIssued='{existingMigration.VlanSwitchIssued}'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_DUPLICATE_DISCONNECT camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' PoEDisabled='{existingMigration.PoeDisabledConfirmed}' AssignedCleared='{existingMigration.AssignmentClearedConfirmed}' VlanIssued='{existingMigration.VlanSwitchIssued}'");
 
                     var duplicateSerial = e.SerialNumber?.Trim();
                     if (!existingMigration.AssignmentClearedConfirmed && string.IsNullOrEmpty(duplicateSerial))
                     {
                         existingMigration.AssignmentClearedConfirmed = true;
-                        this.LogInformation($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='duplicateDisconnectEmptySerial'");
+                        this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='duplicateDisconnectEmptySerial'");
                         this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' by duplicate disconnect fallback with empty serial");
                         TryIssueVlanSwitch(existingMigration);
                     }
 
                     if (!existingMigration.PoeDisabledConfirmed && !existingMigration.VlanSwitchIssued)
                     {
-                        this.LogInformation($"CAMERA_SWITCHOVER_POE_DISABLE_RETRY camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='previousPoeDisableNotConfirmed'");
+                        this.LogDebug($"CAMERA_SWITCHOVER_POE_DISABLE_RETRY camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='previousPoeDisableNotConfirmed'");
                         this.LogDebug($"Camera Manager {Key} retrying PoE disable for camera '{camera.Key}' on port '{existingMigration.Port}' — previous disable was never confirmed");
                         networkSwitch.SetPortPoeState(existingMigration.Port, false);
                     }
@@ -770,7 +790,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (string.IsNullOrEmpty(initialDisconnectSerial))
             {
                 migration.AssignmentClearedConfirmed = true;
-                this.LogInformation($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='initialDisconnectEmptySerial'");
+                this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='initialDisconnectEmptySerial'");
                 this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' from initial disconnect with empty serial");
             }
 
@@ -781,6 +801,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             // Feedback-driven sequence: issue both actions, then wait for both confirmations
             // (PoEDisabled + AssignedSerialNumber cleared) before switching VLAN.
+            this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='PoeOff+ClearAssignedSerial'");
             this.LogDebug($"Camera Manager {Key} handling CameraDisconnected event for camera '{camera.Key}' (Serial Number {e.SerialNumber})");
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}'");
             networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, false);
@@ -808,14 +829,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (activeMigration != null && string.Equals(codec?.Key, activeMigration.TargetCodecKey, StringComparison.OrdinalIgnoreCase))
             {
-                this.LogInformation($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' attempts='{activeMigration.AttachRecoveryAttempts}'");
+                this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' attempts='{activeMigration.AttachRecoveryAttempts}'");
                 lock (activeMigrationsLock)
                 {
                     activeMigrations.Remove(camera.Key);
                 }
 
                 // Final guard: ensure the migration port is left with PoE enabled.
-                this.LogInformation($"CAMERA_SWITCHOVER_POE_GUARD_ENSURE_ON camera='{activeMigration.CameraKey}' port='{activeMigration.Port}' targetCodec='{activeMigration.TargetCodecKey}'");
+                this.LogDebug($"CAMERA_SWITCHOVER_POE_GUARD_ENSURE_ON camera='{activeMigration.CameraKey}' port='{activeMigration.Port}' targetCodec='{activeMigration.TargetCodecKey}'");
                 networkSwitch.SetPortPoeState(activeMigration.Port, true);
             }
 
@@ -833,36 +854,53 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            // Camera is on the correct codec — proceed with normal setup
+            // Camera is on the correct codec — proceed with normal setup.
+            // Clear stale serial assignments on any slot that isn't the configured DefaultCameraId.
+            // Two sources of stale slots:
+            //   1. matchingCameras: the codec's local CiscoCamera collection (synced via Path B)
+            //   2. e.CameraId from the event itself, when the codec attached the camera at a slot
+            //      that the local collection hasn't yet absorbed (timing race that produces the
+            //      "no cameras on codec X have a matching serial number" warning).
+            // Combine both sources so we always clear the slot the codec just told us about,
+            // even when Path B hasn't caught up yet.
+            var slotsToClear = new HashSet<uint>();
             var codecCameras = codec?.Cameras;
             if (codecCameras != null)
             {
                 var ciscoCodecCameras = codecCameras.OfType<CiscoCamera>().ToList();
-                var matchingCameras = ciscoCodecCameras.Where(c => c.SerialNumber == e.SerialNumber);
-                if (matchingCameras.Any())
+                var matchingCameras = ciscoCodecCameras
+                    .Where(c => !string.IsNullOrEmpty(c.SerialNumber)
+                                && string.Equals(c.SerialNumber, e.SerialNumber, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (!matchingCameras.Any())
                 {
-                    foreach (var matchingCamera in matchingCameras)
+                    this.LogDebug($"Camera Manager {Key} CameraConnected for serial {e.SerialNumber} on codec '{codec?.Key}': local camera collection has not absorbed the serial yet — using event slot {e.CameraId} as authoritative");
+                }
+                foreach (var matchingCamera in matchingCameras)
+                {
+                    if (matchingCamera.CameraId != camera.DefaultCameraId)
                     {
-                        // check if the camera ID of each matching camera matches the camera.SerialNumber.
-                        // If not, clear the assigned serial number on the codec for the camera ID of matchingCamera
-                        if (matchingCamera.CameraId != camera.CameraId)
-                        {
-                            codec.ClearCameraAssignedSerialNumber(matchingCamera.CameraId);
-                            this.LogDebug($"Camera Manager {Key} found matching camera '{camera.Key}' for CameraConnected event with serial number {e.SerialNumber}, clearing assigned serial number on codec to ensure correct pairing");
-                        }
+                        slotsToClear.Add(matchingCamera.CameraId);
                     }
                 }
-                else
-                {
-                    this.LogWarning($"Camera Manager {Key} received CameraConnected event for camera serial number {e.SerialNumber} but no cameras on codec '{codec.Key}' have a matching serial number");
-                }
+            }
+            if (e.CameraId != camera.DefaultCameraId)
+            {
+                slotsToClear.Add(e.CameraId);
+            }
+            foreach (var staleSlot in slotsToClear)
+            {
+                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_CLEAR camera='{camera.Key}' codec='{codec?.Key}' staleSlot='{staleSlot}' configuredSlot='{camera.DefaultCameraId}' serial='{e.SerialNumber}'");
+                codec.ClearCameraAssignedSerialNumber(staleSlot);
+                this.LogDebug($"Camera Manager {Key} clearing stale serial assignment for camera '{camera.Key}' on codec '{codec?.Key}' slot {staleSlot} (configured slot is {camera.DefaultCameraId})");
             }
 
             var codecCameraReset = sender as ICiscoCodecCameraFactoryReset;
             if (codecCameraReset != null)
             {
-                this.LogDebug($"Camera Manager {Key} setting assigned serial number for camera '{camera.Key}' on codec '{codec?.Key}' to ensure correct pairing");
-                codecCameraReset.SetCameraAssignedSerialNumber(camera.CameraId, camera.SerialNumber);
+                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_ASSIGN camera='{camera.Key}' codec='{codec?.Key}' configuredSlot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' attachedSlot='{e.CameraId}'");
+                this.LogDebug($"Camera Manager {Key} assigning serial '{camera.SerialNumber}' to configured slot {camera.DefaultCameraId} on codec '{codec?.Key}' for camera '{camera.Key}'");
+                codecCameraReset.SetCameraAssignedSerialNumber(camera.DefaultCameraId, camera.SerialNumber);
             }
             else
             {
@@ -884,7 +922,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (!migration.PoeDisabledConfirmed || !migration.AssignmentClearedConfirmed)
             {
-                this.LogInformation($"CAMERA_SWITCHOVER_WAITING camera='{migration?.CameraKey}' sourceCodec='{migration?.SourceCodecKey}' sourceCameraId='{migration?.SourceCameraId}' targetCodec='{migration?.TargetCodecKey}' port='{migration?.Port}' PoEDisabled='{migration?.PoeDisabledConfirmed}' AssignedCleared='{migration?.AssignmentClearedConfirmed}'");
+                this.LogDebug($"CAMERA_SWITCHOVER_WAITING camera='{migration?.CameraKey}' sourceCodec='{migration?.SourceCodecKey}' sourceCameraId='{migration?.SourceCameraId}' targetCodec='{migration?.TargetCodecKey}' port='{migration?.Port}' PoEDisabled='{migration?.PoeDisabledConfirmed}' AssignedCleared='{migration?.AssignmentClearedConfirmed}'");
                 this.LogVerbose($"Camera Manager {Key} holding VLAN switch for camera '{migration?.CameraKey}': PoEDisabled={migration?.PoeDisabledConfirmed} AssignedCleared={migration?.AssignmentClearedConfirmed}");
                 return;
             }
@@ -895,7 +933,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
-            this.LogInformation($"CAMERA_SWITCHOVER_READY camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' prereqs='PoEDisabled+AssignedCleared'");
+            this.LogDebug($"CAMERA_SWITCHOVER_READY camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' prereqs='PoEDisabled+AssignedCleared'");
             migration.VlanSwitchIssued = true;
             migration.AttachWaitStarted = false;
             migration.AttachWaitDeadlineUtc = DateTime.MinValue;
@@ -923,7 +961,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (sourceCodecCamera == null || string.IsNullOrWhiteSpace(sourceCodecCamera.SerialNumber))
             {
                 migration.AssignmentClearedConfirmed = true;
-                this.LogInformation($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='sourceCodecCameraMissingOrEmptySerial'");
+                this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='sourceCodecCameraMissingOrEmptySerial'");
                 this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{migration.CameraKey}' by source codec camera state fallback");
             }
         }

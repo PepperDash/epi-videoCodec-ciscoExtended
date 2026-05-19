@@ -20,6 +20,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         public uint CameraId { get; private set; }
 
+        /// <summary>
+        /// The camera ID defined in config (DefaultCameraId). Unlike <see cref="CameraId"/>, this value
+        /// never changes after construction and represents the slot the camera is intended to occupy
+        /// on its codec. Use this when assigning the camera's serial number to a codec slot
+        /// (e.g. after migration); use <see cref="CameraId"/> when targeting the camera's current
+        /// live slot (e.g. for factory reset on the source codec).
+        /// </summary>
+        public uint DefaultCameraId { get; private set; }
+
         private bool maintainConfiguredCameraId = false;
 
         /// <summary>
@@ -75,6 +84,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             ParentCodec = codec;
 
             CameraId = id;
+            DefaultCameraId = id;
             SourceId = id;
 
             // Set default speeds
@@ -110,6 +120,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom | eCameraCapabilities.Focus;
 
             CameraId = props.DefaultCameraId;
+            DefaultCameraId = props.DefaultCameraId;
 
             SetupOutputPort();
 
@@ -137,11 +148,37 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (!maintainConfiguredCameraId)
             {
                 CameraId = id;
+                return;
             }
-            else
+
+            if (id == CameraId)
             {
                 this.LogDebug("Maintaining configured camera ID {CameraId} for camera {Key} as maintainConfiguredCameraId is set to true", CameraId, Key);
+                return;
             }
+
+            // Codec has the camera at a slot other than the configured DefaultCameraId.
+            // With maintainConfiguredCameraId enabled, clear any stale AssignedSerialNumber at the
+            // current slot (so a persistent assignment there doesn't conflict) and push the
+            // AssignedSerialNumber for the configured slot so the codec moves the camera.
+            // Common cases:
+            //   - codec auto-paired the camera at startup with no assignment (clear is a no-op,
+            //     set moves the camera)
+            //   - prior session left an AssignedSerialNumber for this serial at a different slot
+            //     (clear removes that binding, set creates the correct one)
+            this.LogDebug("Camera {Key}: codec reports camera at slot {actualSlot} but config requires slot {configuredSlot}. Clearing slot {actualSlot} and pushing AssignedSerialNumber for slot {configuredSlot}.", Key, id, CameraId);
+            if (ParentCodec == null)
+            {
+                this.LogWarning("Camera {Key}: cannot enforce configured slot {configuredSlot} — ParentCodec is null", Key, CameraId);
+                return;
+            }
+            if (string.IsNullOrEmpty(SerialNumber))
+            {
+                this.LogWarning("Camera {Key}: cannot enforce configured slot {configuredSlot} — SerialNumber is null/empty", Key, CameraId);
+                return;
+            }
+            ParentCodec.ClearCameraAssignedSerialNumber(id);
+            ParentCodec.SetCameraAssignedSerialNumber(CameraId, SerialNumber);
         }
 
         public void SetParentCodec(CiscoCodec codec)
