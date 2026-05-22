@@ -26,9 +26,9 @@
   "branches": [
     "main",
     {
-      "name": "copilot/merge-v2-9-0-feature-track-webview-states",
-      "prerelease": "feature-track-webview-states",
-      "channel": "feature-track-webview-states"
+      "name": "replace-me-feature-branch",
+      "prerelease": "replace-me-prerelease",
+      "channel": "replace-me-prerelease"
     }
   ]
 }
