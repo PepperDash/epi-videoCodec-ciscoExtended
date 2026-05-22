@@ -98,7 +98,7 @@
                 "title": "Poll String",
                 "type": "string",
                 "default": "",
-                "examples": ["xStatus SystemUnit Software Version\r"],
+                "examples": ["xStatus SystemUnit Software Version"],
                 "pattern": "^.*$"
               },
               "pollInterval": {
@@ -276,7 +276,7 @@
                 "title": "Poll String",
                 "type": "string",
                 "default": "",
-                "examples": ["xStatus SystemUnit Software Version\r"],
+                "examples": ["xStatus SystemUnit Software Version"],
                 "pattern": "^.*$"
               },
               "pollInterval": {

@@ -14,13 +14,13 @@ Additionally, every component implements `IKeyed` and all devices are added to t
 
 As of [v1.6.0](https://github.com/PepperDash/epi-videoCodec-ciscoExtended/tree/v1.6.0), this plugin requires Essentials 2.1.0 or later. See table below for plugin/Essentials version mapping:
 
-| Plugin version | Minimum Essentials Version | 
-| -------------- | ------------------ |
-| 2.0.x | 2.7.0 |
-| 1.11.x, 1.10.x, 1.9.x | 2.7.0 | 
-| 1.8.x, 1.7.x | 2.3.0 |
-| 1.6.x | 2.1.0 |
-| 1.5.x & below | 1.16.x |
+| Plugin version        | Minimum Essentials Version |
+| --------------------- | -------------------------- |
+| 2.0.x                 | 2.7.0                      |
+| 1.11.x, 1.10.x, 1.9.x | 2.7.0                      |
+| 1.8.x, 1.7.x          | 2.3.0                      |
+| 1.6.x                 | 2.1.0                      |
+| 1.5.x & below         | 1.16.x                     |
 
 ## License
 
@@ -225,7 +225,7 @@ Provided under MIT license
 
 # Configuration
 
-## Device
+## Codec Device
 
 ```json
 {
@@ -268,12 +268,14 @@ Provided under MIT license
         "CameraNumber": 2,
         "Name": "Presenter"
       }
-    ]
+    ],
+    "vlanId": 1 // optional property to specify the VLAN ID for the camera network on a managed switch. Used by the CameraManager
   }
 }
 ```
 
 ## Navigator
+
 Place your custom icon .png files in the /user/programX/navigatorIcons/ folder.
 This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
@@ -283,16 +285,39 @@ which contains the Base64-encoded "customIconContent" for each icon.
 
 There are two different methods supported to show a lockout screen on a Navigator panel for use in combined room systems where there is a desire to lockout navigator panels that are attached to a codec not being used as the primary codec in a room combination scenario.
 
-* Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
-  * Preffered as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, usually a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
-  * If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
-  * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
-  each panel in PWA or controller mode require the MAC address.
-  * To get the mac addresses of the Navigator panels, the command `xcommand Peripherals list Type: touchpanel` can be sent to the codec or you can use the codec's web interface and view the paired peripherals.
-  * Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration.  The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
-* WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
-  * This mode will display a modal webview on the navigator with any URL supplied.  However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
-  * Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
+- Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
+  - Preferred as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, usually a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
+  - If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
+  - Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
+    each panel in PWA or controller mode require the MAC address.
+  - To get the mac addresses of the Navigator panels, the command `xcommand Peripherals list Type: touchpanel` can be sent to the codec or you can use the codec's web interface and view the paired peripherals.
+  - Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration. The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
+- WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
+  - This mode will display a modal webview on the navigator with any URL supplied. However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
+  - Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
+
+### RoomOS Firmware Compatibility
+
+#### RoomOS ce26+ Breaking Change
+
+RoomOS ce26 introduced a breaking schema change to WebView Display events:
+
+**Pre-ce26 firmware:**
+```json
+"Url": "http://10.11.50.169:50002/mc/app/techPin?token=..."
+```
+
+**ce26+ firmware:**
+```json
+"Url": {
+  "Value": "http://10.11.50.169:50002/mc/app/techPin?token=...",
+  "id": "1"
+}
+```
+
+Cisco normalized their event property schema to wrap values in objects with `Value` and `id` properties. This change affected WebView URL handling. The plugin includes a custom converter (`UrlConverter` in `xEvent.cs`) that handles both formats transparently for backwards compatibility with older RoomOS versions.
+
+**No action required** – the plugin automatically detects and handles both payload formats.
 
 ### Available default icons
 
@@ -323,77 +348,155 @@ Sliders
 
 ```json
 {
-        "key": "navigator",
-        "name": "Rm Navigator",
-        "type": "ciscoRoomOsMobileControl",
-        "group": "videoCodecTouchpanel",
-        "properties": {
-          "defaultRoomKey": "room",
-          "macAddress": "a0:b1:c2:d3:e4:f5", // CASE SENSITIVE VALUE!!!!
-          "useDirectServer": true,
-          "videoCodecKey": "Codec-1",
-          "enableLockoutPoll": true,
-          "lockout": {
-            "mobileControlPath": "/lockout",
-            "uiWebViewDisplays": {
-              "title": "Room Lockout",
-              "mode": "Fullscreen",
+  "key": "navigator",
+  "name": "Rm Navigator",
+  "type": "ciscoRoomOsMobileControl",
+  "group": "videoCodecTouchpanel",
+  "properties": {
+    "defaultRoomKey": "room",
+    "macAddress": "a0:b1:c2:d3:e4:f5", // CASE SENSITIVE VALUE!!!!
+    "useDirectServer": true,
+    "videoCodecKey": "Codec-1",
+    "enableLockoutPoll": true,
+    "lockout": {
+      "mobileControlPath": "/lockout",
+      "uiWebViewDisplays": {
+        "title": "Room Lockout",
+        "mode": "Fullscreen",
+        "target": "Controller"
+      }
+    },
+    "extensions": {
+      "configId": 1,
+      "panels": [
+        {
+          "order": 2,
+          "panelId": "audio",
+          "location": "ControlPanel",
+          "icon": "Sliders",
+          "name": "Volume",
+          "mobileControlPath": "/audio",
+          "uiWebViewDisplays": [
+            {
+              "title": "Audio Volume",
+              "mode": "Modal",
               "target": "Controller"
             }
-          },
-          "extensions": {
-            "configId": 1,
-            "panels": [
-              {
-                "order": 2,
-                "panelId": "audio",
-                "location": "ControlPanel",
-                "icon": "Sliders",
-                "name": "Volume",
-                "mobileControlPath": "/audio",
-                "uiWebViewDisplays": [
-                  {
-                  "title": "Audio Volume",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              },
-              {
-                "order": 3,
-                "panelId": "roomCombine",
-                "location": "ControlPanel",
-                "icon": "Custom",
-                "iconId": "1234",
-                "customIconContent":"iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAYAAAA6/NlyAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAABS8AAAUvAVpwdGYAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAw4MAAOgDAADDgwAA6AMAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACJB7xjFmMTpAAAAepJREFUaEPtmuFRwjAUx/91AjYQJxAnECeQEXQC2EDdQCaADagTiBOIG+AEssHzS9JL/7xYEbw2r/nd5UNf2pLfpS85Lq8QEfSJMw5YJwtbJwtbp3fCRcO2NAAwAXANYMidHWML4A1ACWDHnRUiorWBiCwkXRbOgb3UGR4BeHWzmzI7ADcANmGQc9iKLJzDq3OqCGd4COA9IrsDsAbwwR1/5IGun+j6UC4BjH8Y+5XL8VoOrzgRRORLRGacB0e2R/4RF+OBVijviLU7N2Zm5e/xn/TQrcYhPgeeKd5llm7MvEpP/C7jhaf1fgDAPSd8Imzc2JkpAuFaYruHSoqlRKlM1giB8Ljehxe6ThF2GEPZlsyTha2Tha2ThbtIURQHtxhJCJ+SLGydNoTPORCJHYv6zjaEPzkQiVX4/7K/IbhXfWcbwq2ShVOni/uwtphosYomiUNoQ1hbTLTYv9CGcKtkYetk4S6inDA0thhJCJ+SLGydLGwdL7ym+C1dpwg7rBEIaydtfF6cEpPIiWglPK/3AQAWykMpMHJjZ+YIhLfKebAvCplRvMvMIkU5pa/x6F1RC9dpWSpbglarxdvSJlIUkiJ7slCE4W64cBUxqbJ0Drz77H3SjLni0iZhc2iftGmysHWysHV6J/wNJ9Ukf3MotnsAAAAASUVORK5CYII=",
-                "name": "Room Setup",
-                "mobileControlPath": "/roomCombine",
-                "uiWebViewDisplays": [{
-                  "title": "Room Setup",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              },
-              {
-                "order": 1,
-                "panelId": "techPin",
-                "location": "ControlPanel",
-                "icon": "Language",
-                "name": "Technician",
-                "mobileControlPath": "/techPin",
-                "uiWebViewDisplays": [{
-                  "title": "Technician",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              }]
-              }
-            ]
-          }
+          ]
+        },
+        {
+          "order": 3,
+          "panelId": "roomCombine",
+          "location": "ControlPanel",
+          "icon": "Custom",
+          "iconId": "1234",
+          "customIconContent": "iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAYAAAA6/NlyAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAABS8AAAUvAVpwdGYAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAw4MAAOgDAADDgwAA6AMAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACJB7xjFmMTpAAAAepJREFUaEPtmuFRwjAUx/91AjYQJxAnECeQEXQC2EDdQCaADagTiBOIG+AEssHzS9JL/7xYEbw2r/nd5UNf2pLfpS85Lq8QEfSJMw5YJwtbJwtbp3fCRcO2NAAwAXANYMidHWML4A1ACWDHnRUiorWBiCwkXRbOgb3UGR4BeHWzmzI7ADcANmGQc9iKLJzDq3OqCGd4COA9IrsDsAbwwR1/5IGun+j6UC4BjH8Y+5XL8VoOrzgRRORLRGacB0e2R/4RF+OBVijviLU7N2Zm5e/xn/TQrcYhPgeeKd5llm7MvEpP/C7jhaf1fgDAPSd8Imzc2JkpAuFaYruHSoqlRKlM1giB8Ljehxe6ThF2GEPZlsyTha2Tha2ThbtIURQHtxhJCJ+SLGydNoTPORCJHYv6zjaEPzkQiVX4/7K/IbhXfWcbwq2ShVOni/uwtphosYomiUNoQ1hbTLTYv9CGcKtkYetk4S6inDA0thhJCJ+SLGydLGwdL7ym+C1dpwg7rBEIaydtfF6cEpPIiWglPK/3AQAWykMpMHJjZ+YIhLfKebAvCplRvMvMIkU5pa/x6F1RC9dpWSpbglarxdvSJlIUkiJ7slCE4W64cBUxqbJ0Drz77H3SjLni0iZhc2iftGmysHWysHV6J/wNJ9Ukf3MotnsAAAAASUVORK5CYII=",
+          "name": "Room Setup",
+          "mobileControlPath": "/roomCombine",
+          "uiWebViewDisplays": [
+            {
+              "title": "Room Setup",
+              "mode": "Modal",
+              "target": "Controller"
+            }
+          ]
+        },
+        {
+          "order": 1,
+          "panelId": "techPin",
+          "location": "ControlPanel",
+          "icon": "Language",
+          "name": "Technician",
+          "mobileControlPath": "/techPin",
+          "uiWebViewDisplays": [
+            {
+              "title": "Technician",
+              "mode": "Modal",
+              "target": "Controller"
+            }
+          ]
         }
-      },
+      ]
+    }
+  }
+}
 ```
 
 > Note: Not all configuration properties are currently shown
+
+## Camera
+
+The typename `ciscocamera` will create a device that represents a Cisco camera attached to a Cisco codec
+
+```json
+{
+  "key": "camera1",
+  "name": "Camera 1",
+  "type": "ciscocamera",
+  "properties": {
+    "defaultParentCodecKey": "codec1",
+    "defaultCameraId": 1,
+    "serialNumber": "123456789",
+    "macAddress": "00:1A:2B:3C:4D:5E",
+    "flipImage": false,
+    "sourceId": 1,
+    "networkSwitchPort": "Gi/0/1" // used by the CameraManager to setup network port as needed for switching cameras between codecs
+  }
+}
+```
+
+## CameraManager
+
+the typename `ciscocameramanager` will create a device that manages cameras that can switch between different codecs based on room combination scenarios.
+
+The `CameraManager` device interacts with a managed network switch that must implement `INetworkSwitchPoeVlanManager` as well as instances of `CiscoCodec` that implement `ICiscoCodecCameraFactoryReset` and `CiscoCamera`.
+
+Based on the configuration specified, this device will monitor the current room combination scenario and automatically execute the necessary actions on the codec and the network switch to be able to assign a Cisco Vision camera to a different codec at runtime.
+
+The CameraManager config should ONLY list the cameras that need to be moved between codecs.  Any cameras that will be statically assigned to a single codec and not change at runtime should not be included in the `cameraKeys` arrays for any of the `codecConfig` arrays.
+
+In order for this functionality to work, each codec config must specify a `vlanId` property, and each camera config must specify a `networkSwitchPort` property as well as `defaultParentCodecKey`, `defaultCameraId`, `serialNumber` and `sourceId`.
+
+```json
+{
+  "key": "cameraManager1",
+  "name": "Camera Manager",
+  "type": "cameramanager",
+  "properties": {
+    "networkSwitchKey": "networkSwitch1",
+    "roomCombinerConfig": {
+      "roomCombinerKey": "roomCombiner1",
+      "combineScenarios": {
+        "divided": {
+          "codecConfigs": [
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] },
+            { "codecKey": "codecB", "cameraKeys": ["cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "combined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"] }
+          ]
+        },
+        "abCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "bcCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"] },
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] }
+          ]
+        }
+      }
+    }
+  }
+}
+
+```
 
 ## Bridge
 
@@ -441,5 +544,3 @@ Sliders
 - `setcodeccommdebug {1 | 0}`
   - Turn on device-level communications debugging. In order to see thes messages, the `appdebug 1` command must be sent
   - {1 | 0} - 1 turns debuggging on, 0 turns it off
-
-

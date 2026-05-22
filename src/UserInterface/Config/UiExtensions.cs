@@ -181,7 +181,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
             {
                 if (parent.CurrentProvisioningRoomType == CodecProvisionMode.Classroom && Panels.Find(p => p.PanelId == classroomPanel.PanelId) == null)
                 {
-                    parent.LogWarning("Provisioning Room Type is Classroom, adding Classroom Panel to UI Extensions");
+                    parent.LogDebug("Provisioning Room Type is Classroom, adding Classroom Panel to UI Extensions");
                     // Check if any existing panel has the same order as the classroom panel
                     var classroomOrder = classroomPanel.Order;
                     var conflictingPanels = Panels.FindAll(p => p.Order >= classroomOrder);
@@ -201,7 +201,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
                 }
                 else if (parent.CurrentProvisioningRoomType != CodecProvisionMode.Classroom)
                 {
-                    parent.LogWarning("Provisioning Room Type is not Classroom, removing Classroom Panel from UI Extensions");
+                    parent.LogDebug("Provisioning Room Type is not Classroom, removing Classroom Panel from UI Extensions");
                     // Remove Classroom panel if it exists and the provisioning mode is not Classroom
                     var existingClassroomPanel = Panels.Find(p => p.PanelId == classroomPanel.PanelId);
                     if (existingClassroomPanel != null)
