@@ -586,9 +586,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     var port = camera.NetworkSwitchPort;
                     var vlanId = codec.VLanId;
-                    this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}'");
-                    networkSwitch.SetPortVlan(port, vlanId);
-                    networkSwitch.SetPortPoeState(port, true);
+
+                    /*Only disturb a camera that isn't already confirmed on its target codec.
+                     A correctly-placed camera is left powered and untouched. A camera that is on
+                     the wrong codec, or stranded with a null ParentCodec (which never raises a
+                     disconnect), is handed to the proven migration cascade via
+                     TryStartCameraMigration. The cascade is the single owner of the
+                     PoE-off -> VLAN -> PoE-on sequence, with switch-confirmation timing,
+                     attach-wait, and safeguards, so we don't issue an ad-hoc PoE cycle here.*/
+                    var targetCodec = codec as CiscoCodec;
+                    var alreadyOnTargetCodec = targetCodec?.Cameras?.OfType<CiscoCamera>()
+                        .Any(c => !string.IsNullOrEmpty(c.SerialNumber)
+                                  && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase)) == true;
+
+                    if (alreadyOnTargetCodec)
+                    {
+                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='ensureOnTarget'");
+                        networkSwitch.SetPortVlan(port, vlanId);
+                        networkSwitch.SetPortPoeState(port, true);
+                    }
+                    else
+                    {
+                        /* No active migration here (line 581 already skipped those). Pass a null
+                         source serial when there is no source codec so the assignment-cleared
+                         prerequisite is satisfied immediately for a stranded camera.*/
+                        var sourceCodec = camera.ParentCodec;
+                        var sourceSerial = sourceCodec != null ? camera.SerialNumber : null;
+                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='startMigration' sourceCodec='{sourceCodec?.Key}'");
+                        TryStartCameraMigration(camera, sourceCodec, camera.CameraId, codecConfig.CodecKey, sourceSerial, "scenarioEnsure");
+                    }
                 }
             }
         }
@@ -777,21 +803,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
+            TryStartCameraMigration(camera, codec, e.CameraId, targetCodecKey, e.SerialNumber, "cameraDisconnected");
+        }
+
+        /// <summary>
+        /// Starts the feedback-driven camera migration cascade for a camera that is not on its
+        /// target codec. This is the single owner of the PoE-off -> VLAN -> PoE-on sequence: PoE is
+        /// turned off here, the switch's PoEDisabled confirmation drives the VLAN switch, and the
+        /// VlanChanged confirmation drives PoE back on (with attach-wait and safeguards). It can be
+        /// initiated by a codec CameraDisconnected event OR proactively (e.g. from scenario
+        /// port-state reconciliation), so that a stranded camera with a null ParentCodec — which
+        /// never raises a disconnect — still gets re-paired. Pass a null/empty
+        /// <paramref name="sourceSerial"/> when there is no source binding to clear; the
+        /// assignment-cleared prerequisite is then satisfied immediately.
+        /// </summary>
+        private void TryStartCameraMigration(CiscoCamera camera, CiscoCodec sourceCodec, uint sourceCameraId, string targetCodecKey, string sourceSerial, string trigger)
+        {
+            if (camera == null || string.IsNullOrEmpty(targetCodecKey))
+            {
+                return;
+            }
+
             var migration = new CameraMigrationState
             {
                 CameraKey = camera.Key,
                 Port = camera.NetworkSwitchPort,
-                SourceCodecKey = codec?.Key,
-                SourceCameraId = e.CameraId,
+                SourceCodecKey = sourceCodec?.Key,
+                SourceCameraId = sourceCameraId,
                 TargetCodecKey = targetCodecKey
             };
 
-            var initialDisconnectSerial = e.SerialNumber?.Trim();
-            if (string.IsNullOrEmpty(initialDisconnectSerial))
+            var trimmedSerial = sourceSerial?.Trim();
+            if (string.IsNullOrEmpty(trimmedSerial))
             {
                 migration.AssignmentClearedConfirmed = true;
-                this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='initialDisconnectEmptySerial'");
-                this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' from initial disconnect with empty serial");
+                this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='noSourceSerial:{trigger}'");
+                this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' (no source serial to clear; trigger={trigger})");
             }
 
             lock (activeMigrationsLock)
@@ -799,15 +846,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 activeMigrations[camera.Key] = migration;
             }
 
-            // Feedback-driven sequence: issue both actions, then wait for both confirmations
+            // Feedback-driven sequence: turn PoE off, then wait for both confirmations
             // (PoEDisabled + AssignedSerialNumber cleared) before switching VLAN.
-            this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='PoeOff+ClearAssignedSerial'");
-            this.LogDebug($"Camera Manager {Key} handling CameraDisconnected event for camera '{camera.Key}' (Serial Number {e.SerialNumber})");
+            this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{camera.Key}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='PoeOff+ClearAssignedSerial' trigger='{trigger}'");
+            this.LogDebug($"Camera Manager {Key} starting migration for camera '{camera.Key}' (trigger={trigger}, source serial {sourceSerial})");
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{camera.Key}' on network switch port '{camera.NetworkSwitchPort}'");
             networkSwitch.SetPortPoeState(camera.NetworkSwitchPort, false);
 
-            this.LogDebug($"Camera Manager {Key} clearing assigned serial number for camera '{camera.Key}' on codec");
-            codec?.ClearCameraAssignedSerialNumber(e.CameraId);
+            this.LogDebug($"Camera Manager {Key} clearing assigned serial number for camera '{camera.Key}' on source codec");
+            sourceCodec?.ClearCameraAssignedSerialNumber(sourceCameraId);
         }
 
         private void Codec_CameraConnected(object sender, CameraEventArgs e)
