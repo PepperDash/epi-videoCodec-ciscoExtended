@@ -463,11 +463,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         }
 
                         var configDeviceKey = action.DeviceKey;
+                        var configParams = action.Params;
 
                         if (action.DeviceKey == defaultRoomKey && defaultRoomKey != currentScenarioRoomKey)
                         {
                             this.LogInformation("Sending action {ActionId} to primary room {PrimaryRoomId}", action.MethodName, currentScenarioRoomKey);
                             action.DeviceKey = currentScenarioRoomKey;
+                            action.Params = GetScenarioAwareActionParams(action);
                         }
 
                         this.LogDebug("Running DeviceAction {MethodName} on device {key}", action.MethodName, action.DeviceKey);
@@ -475,9 +477,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                         this.LogInformation("Resetting action deviceKey to config value");
                         action.DeviceKey = configDeviceKey;
+                        action.Params = configParams;
                     }
                 }
-
                 if (!string.IsNullOrEmpty(mcPanel.Url))
                 {
                     this.LogDebug("Sending URL to WebView: {Url}", mcPanel.Url);
@@ -510,6 +512,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 this.LogDebug("Error Sending Mc URL to Cisco Ui: {Message}", ex.Message);
                 this.LogVerbose(ex, "Error Sending Mc URL to Cisco Ui");
             }
+        }
+
+        private object[] GetScenarioAwareActionParams(DeviceActionWrapper action)
+        {
+            if (!string.Equals(action.MethodName, "RunRouteAction", StringComparison.OrdinalIgnoreCase)
+                || action.Params == null
+                || action.Params.Length < 2
+                || currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY
+                || !(action.Params[1] is string sourceListKey)
+                || !string.Equals(sourceListKey, defaultRoomKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return action.Params;
+            }
+
+            var scenarioParams = (object[])action.Params.Clone();
+            scenarioParams[1] = currentScenarioRoomKey;
+
+            return scenarioParams;
         }
 
         /// <summary>
