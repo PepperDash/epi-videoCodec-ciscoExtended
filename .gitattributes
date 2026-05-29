@@ -1,0 +1,13 @@
+# Auto-detect text files and normalize line endings to LF in the repo.
+# Working-copy line endings on checkout follow the platform/core.autocrlf.
+* text=auto
+
+# Batch files must remain CRLF on Windows to execute correctly.
+*.bat   text eol=crlf
+*.BAT   text eol=crlf
+
+# Treat these as binary so Git never touches their bytes.
+*.dll   binary
+*.zip   binary
+*.smw   binary
+*.ASV   binary
