@@ -398,6 +398,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     return;
                 }
 
+                if (string.Equals(panelId, "catv", StringComparison.OrdinalIgnoreCase) && CodecIsInCall())
+                {
+                    this.LogInformation("Ignoring CATV panel click - codec is in a call");
+                    return;
+                }
+
                 if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
                 {
                     foreach (DeviceActionWrapper action in mcPanel.DeviceActions)
@@ -486,6 +492,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             scenarioParams[1] = currentScenarioRoomKey;
 
             return scenarioParams;
+        }
+
+        private bool CodecIsInCall()
+        {
+            var calls = mcTpController?.Parent?.ActiveCalls;
+            return calls != null && calls.Any(c => c != null && c.IsActiveCall);
         }
 
         /// <summary>
