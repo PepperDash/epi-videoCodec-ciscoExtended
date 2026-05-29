@@ -7,6 +7,7 @@ using Crestron.SimplSharp.Net;
 using PepperDash.Core;
 using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
@@ -496,8 +497,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private bool CodecIsInCall()
         {
-            var calls = mcTpController?.Parent?.ActiveCalls;
-            return calls != null && calls.Any(c => c != null && c.IsActiveCall);
+            var ownCodec = mcTpController?.Parent;
+            var ownInCall = ownCodec?.IsInCall ?? false;
+            var ownActiveCount = ownCodec?.ActiveCalls?.Count ?? 0;
+
+            this.LogVerbose(
+                "CodecIsInCall check: ownCodec={ownCodecKey} ownInCall={ownInCall} ownActiveCalls={ownActiveCount}",
+                ownCodec?.Key, ownInCall, ownActiveCount);
+
+            return ownInCall;
         }
 
         /// <summary>
