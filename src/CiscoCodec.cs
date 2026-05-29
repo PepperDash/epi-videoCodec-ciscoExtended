@@ -242,6 +242,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public bool WebviewIsVisible { get; private set; }
 
+		/// <summary>
+		/// True when the codec reports any active call (native SIP/H.323, MTR, Webex, Zoom, WebRTC, etc.).
+		/// Derived from xStatus SystemUnit State NumberOfActiveCalls.
+		/// </summary>
+		public bool IsAnyCallActive
+		{
+			get
+			{
+				var raw = CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value;
+				return int.TryParse(raw, out var n) && n > 0;
+			}
+		}
+
 		private bool _isInPwaMode;
 
 		public bool IsInPwaMode
@@ -1790,6 +1803,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Status/Call"
+				+ Delimiter
+				+ prefix
+				+ "/Status/SystemUnit/State"
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/Presentation"
@@ -3839,6 +3855,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
+			var systemUnitStateToken = statusToken.SelectToken("SystemUnit.State");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 			var provisioningToken = statusToken.SelectToken("Provisioning");
 
@@ -4094,6 +4111,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (callToken != null)
 			{
 				ParseCallArrayToken(callToken);
+			}
+			if (systemUnitStateToken != null)
+			{
+				PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
+				this.LogVerbose("SystemUnit State updated: NumberOfActiveCalls={n} IsAnyCallActive={inCall}",
+					CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value,
+					IsAnyCallActive);
 			}
 			if (mediaChannelsToken != null)
 			{

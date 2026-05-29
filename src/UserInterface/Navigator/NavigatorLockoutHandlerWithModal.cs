@@ -498,14 +498,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private bool CodecIsInCall()
         {
             var ownCodec = mcTpController?.Parent;
-            var ownInCall = ownCodec?.IsInCall ?? false;
-            var ownActiveCount = ownCodec?.ActiveCalls?.Count ?? 0;
+            var inCall = ownCodec?.IsAnyCallActive ?? false;
 
             this.LogVerbose(
-                "CodecIsInCall check: ownCodec={ownCodecKey} ownInCall={ownInCall} ownActiveCalls={ownActiveCount}",
-                ownCodec?.Key, ownInCall, ownActiveCount);
+                "CodecIsInCall check: ownCodec={ownCodecKey} IsAnyCallActive={inCall}",
+                ownCodec?.Key, inCall);
 
-            return ownInCall;
+            return inCall;
         }
 
         /// <summary>
