@@ -587,33 +587,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     var port = camera.NetworkSwitchPort;
                     var vlanId = codec.VLanId;
 
-                    /*Only disturb a camera that isn't already confirmed on its target codec.
-                     A correctly-placed camera is left powered and untouched. A camera that is on
-                     the wrong codec, or stranded with a null ParentCodec (which never raises a
-                     disconnect), is handed to the proven migration cascade via
-                     TryStartCameraMigration. The cascade is the single owner of the
-                     PoE-off -> VLAN -> PoE-on sequence, with switch-confirmation timing,
-                     attach-wait, and safeguards, so we don't issue an ad-hoc PoE cycle here.*/
-                    var targetCodec = codec as CiscoCodec;
-                    var alreadyOnTargetCodec = targetCodec?.Cameras?.OfType<CiscoCamera>()
-                        .Any(c => !string.IsNullOrEmpty(c.SerialNumber)
-                                  && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase)) == true;
-
-                    if (alreadyOnTargetCodec)
+                    /*This reconciliation sweep owns ONLY the stranded-camera case: a camera whose
+                     ParentCodec is null. That state is a structural dead-end — the codec nulls
+                     ParentCodec and drops the camera from its Cameras list on every disconnect
+                     (CiscoCodec RemoveCamera), and a camera whose migration never completed is left
+                     parent-null with no recovery path: it raises no CameraDisconnected (so the
+                     migration cascade never fires) and the factory-reset sweep
+                     (TryExecuteScenarioCameraResets) explicitly skips null-parent cameras. We hand
+                     it to the proven migration cascade via TryStartCameraMigration (single owner of
+                     PoE-off -> VLAN -> PoE-on, with switch-confirmation timing, attach-wait, and
+                     safeguards). Cameras that still have a parent are intentionally left to the
+                     factory-reset sweep so the two paths never act on the same camera at once.*/
+                    if (camera.ParentCodec == null)
                     {
-                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='ensureOnTarget'");
-                        networkSwitch.SetPortVlan(port, vlanId);
-                        networkSwitch.SetPortPoeState(port, true);
+                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='startMigrationForStranded'");
+                        TryStartCameraMigration(camera, null, camera.CameraId, codecConfig.CodecKey, null, "scenarioEnsureStranded");
                     }
                     else
                     {
-                        /* No active migration here (line 581 already skipped those). Pass a null
-                         source serial when there is no source codec so the assignment-cleared
-                         prerequisite is satisfied immediately for a stranded camera.*/
-                        var sourceCodec = camera.ParentCodec;
-                        var sourceSerial = sourceCodec != null ? camera.SerialNumber : null;
-                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='startMigration' sourceCodec='{sourceCodec?.Key}'");
-                        TryStartCameraMigration(camera, sourceCodec, camera.CameraId, codecConfig.CodecKey, sourceSerial, "scenarioEnsure");
+                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='ensure' parentCodec='{camera.ParentCodec?.Key}'");
+                        networkSwitch.SetPortVlan(port, vlanId);
+                        networkSwitch.SetPortPoeState(port, true);
                     }
                 }
             }
