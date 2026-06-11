@@ -60,6 +60,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // DefaultFactoryResetSettleMs.
         private readonly int factoryResetSettleMs;
 
+        // When true, the migration cascade and recovery/reconcile paths skip all PoE off/on calls
+        // and move cameras by VLAN change + serial reassignment only. The cascade is advanced
+        // manually at the points the PoE off/on feedback events would normally drive it.
+        // Configurable via disablePoeCycling; defaults to false (normal PoE cycling).
+        private readonly bool disablePoeCycling;
+
         // Safety-net reconciliation cadence and per-camera backoff. The periodic sweep catches
         // cameras that ended up floating after a recovery dead-end (e.g. the source codec never
         // re-reported the camera online after a reseed, so no fresh migration cascade ever
@@ -74,6 +80,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             factoryResetSettleMs = config != null && config.FactoryResetSettleMs > 0
                 ? config.FactoryResetSettleMs
                 : DefaultFactoryResetSettleMs;
+            disablePoeCycling = config != null && config.DisablePoeCycling;
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
             AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
@@ -322,7 +329,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             else if (e.EventType == NetworkSwitchPortEventType.VlanChanged)
             {
                 bool shouldEnablePoe = false;
+                bool shouldStartAttachWait = false;
                 string cameraKey = null;
+                string sourceCodecKey = null;
+                uint sourceCameraId = 0;
+                string targetCodecKey = null;
+                string port = null;
 
                 lock (activeMigrationsLock)
                 {
@@ -334,7 +346,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     }
 
                     migration.VlanChangedConfirmed = true;
-                    if (!migration.PoeEnableIssued)
+                    if (disablePoeCycling)
+                    {
+                        // PoE cycling disabled: there is no PoE-on step (and therefore no PoEEnabled
+                        // event) to drive the attach wait, so advance the cascade straight to the
+                        // attach-wait / target-serial-assign step here.
+                        if (!migration.AttachWaitStarted)
+                        {
+                            migration.PoeEnableIssued = true;
+                            migration.AttachWaitStarted = true;
+                            migration.AttachWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
+                            shouldStartAttachWait = true;
+                            cameraKey = migration.CameraKey;
+                            sourceCodecKey = migration.SourceCodecKey;
+                            sourceCameraId = migration.SourceCameraId;
+                            targetCodecKey = migration.TargetCodecKey;
+                            port = migration.Port;
+                        }
+                    }
+                    else if (!migration.PoeEnableIssued)
                     {
                         migration.PoeEnableIssued = true;
                         migration.PoeReenableDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
@@ -348,6 +378,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     this.LogDebug($"CAMERA_SWITCHOVER_POE_ON_AFTER_VLAN camera='{cameraKey}' port='{e.Port}' reason='vlanChangedConfirmed'");
                     networkSwitch.SetPortPoeState(e.Port, true);
                     this.LogDebug($"Camera Manager {Key} confirmed VLAN changed for camera '{cameraKey}', re-enabling PoE on port '{e.Port}'");
+                }
+                else if (shouldStartAttachWait)
+                {
+                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='True' poeEnabled='disabled'");
+                    this.LogDebug($"Camera Manager {Key} PoE cycling disabled — VLAN changed for camera '{cameraKey}', advancing straight to attach wait without a PoE cycle on port '{e.Port}'");
+                    TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachWaitStartNoPoe");
                 }
             }
             else if (e.EventType == NetworkSwitchPortEventType.PoEEnabled)
@@ -524,6 +560,34 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
+            if (disablePoeCycling)
+            {
+                // PoE cycling disabled: skip the PoE-off step entirely. Clear the source codec's
+                // assigned serial and advance straight to the VLAN switch. The PoEDisabled event
+                // that normally drives TryIssueVlanSwitch will never fire, so synthesize the
+                // confirmation and call it directly (if the serial clear is not yet confirmed, the
+                // serial-changed feedback will retry the VLAN switch later).
+                this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='ClearAssignedSerial' poeCycling='disabled'");
+                this.LogDebug($"Camera Manager {Key} PoE cycling disabled — skipping PoE-off for camera '{migration.CameraKey}' on port '{migration.Port}', clearing assigned serial and advancing to VLAN switch");
+                sourceCodec?.ClearCameraAssignedSerialNumber(migration.SourceCameraId);
+
+                CameraMigrationState migrationForVlanSwitch = null;
+                lock (activeMigrationsLock)
+                {
+                    if (activeMigrations.TryGetValue(migration.CameraKey, out var current) && ReferenceEquals(current, migration))
+                    {
+                        migration.PoeDisabledConfirmed = true;
+                        migrationForVlanSwitch = migration;
+                    }
+                }
+
+                if (migrationForVlanSwitch != null)
+                {
+                    TryIssueVlanSwitch(migrationForVlanSwitch);
+                }
+                return;
+            }
+
             this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='PoeOff+ClearAssignedSerial'");
             this.LogDebug($"Camera Manager {Key} turning off PoE for camera '{migration.CameraKey}' on network switch port '{migration.Port}'");
             networkSwitch.SetPortPoeState(migration.Port, false);
@@ -685,9 +749,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     if (managedCodecs.TryGetValue(sourceCodecKey, out var sourceCodecDevice))
                     {
-                        this.LogDebug($"Camera Manager {Key} re-seeding source VLAN/PoE for camera '{cameraKey}' after attach failure to force rediscovery");
+                        this.LogDebug($"Camera Manager {Key} re-seeding source VLAN for camera '{cameraKey}' after attach failure to force rediscovery (poeCycling='{(disablePoeCycling ? "disabled" : "enabled")}')");
                         networkSwitch.SetPortVlan(port, sourceCodecDevice.VLanId);
-                        networkSwitch.SetPortPoeState(port, true);
+                        if (!disablePoeCycling)
+                        {
+                            networkSwitch.SetPortPoeState(port, true);
+                        }
                     }
                     else
                     {
@@ -806,6 +873,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
                     }
 
+                    if (disablePoeCycling)
+                    {
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='poeCyclingDisabled' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        continue;
+                    }
+
                     this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='bouncePoe' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
                     networkSwitch.SetPortPoeState(port, false);
                     ScheduleDelayed(MigrationPoeOffDelayMs, () =>
@@ -917,9 +990,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     var port = camera.NetworkSwitchPort;
                     var vlanId = codec.VLanId;
-                    this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}'");
+                    this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' poeCycling='{(disablePoeCycling ? "disabled" : "enabled")}'");
                     networkSwitch.SetPortVlan(port, vlanId);
-                    networkSwitch.SetPortPoeState(port, true);
+                    if (!disablePoeCycling)
+                    {
+                        networkSwitch.SetPortPoeState(port, true);
+                    }
                 }
             }
         }

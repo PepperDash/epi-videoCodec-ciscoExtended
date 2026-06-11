@@ -73,6 +73,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         [JsonProperty("factoryResetSettleMs")]
         public int FactoryResetSettleMs { get; set; }
 
+        /// <summary>
+        /// When true, the camera-migration cascade does NOT power-cycle (PoE off/on) the camera's
+        /// network-switch port. Migrations move the camera by VLAN change and serial reassignment
+        /// only, and the recovery/reconcile paths skip their PoE bounces as well. Use this when the
+        /// switch port's PoE must stay on (e.g. the camera is powered/managed elsewhere, or the
+        /// switch handles the power cycle itself on a VLAN change). Defaults to false, which keeps
+        /// the normal PoE-off &#8594; VLAN &#8594; PoE-on cycling.
+        /// </summary>
+        [JsonProperty("disablePoeCycling")]
+        public bool DisablePoeCycling { get; set; }
+
         // /// <summary>
         // /// Maximum milliseconds to wait for the camera-ghost (unpaired) event after
         // /// issuing a factory-reset command. Defaults to 30 000 ms.

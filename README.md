@@ -465,6 +465,7 @@ In order for this functionality to work, each codec config must specify a `vlanI
   "properties": {
     "networkSwitchKey": "networkSwitch1",
     "factoryResetSettleMs": 2000, // optional; ms to wait after the source-codec factory reset before moving the camera. Defaults to 2000 when omitted or <= 0. Increase if the target codec reports "pinhole factory reset required" on the first attach attempt.
+    "disablePoeCycling": false, // optional; when true, migrations and recovery move cameras by VLAN change + serial reassignment only and never power-cycle (PoE off/on) the switch port. Defaults to false (normal PoE cycling).
     "roomCombinerConfig": {
       "roomCombinerKey": "roomCombiner1",
       "combineScenarios": {
@@ -504,6 +505,8 @@ In order for this functionality to work, each codec config must specify a `vlanI
 When the room combination scenario changes, the `CameraManager` moves each affected camera to the codec that owns it in the new scenario. A migration is only ever started after the camera is **confirmed online** on its current (wrong) codec, then runs a feedback-driven cascade: factory-reset the camera on the source codec → disable PoE and clear the source codec's assigned serial → switch the switch port to the target codec's VLAN → re-enable PoE → wait for the target codec to report the camera attached.
 
 After the factory reset is issued, the manager waits `factoryResetSettleMs` (default 2000 ms) before tearing down PoE and moving the camera. The reset clears the camera's pairing/authentication to the source codec, and that takes time to take effect; if the camera is moved too soon it arrives at the target codec still carrying the source codec's credentials, and the target reports `authentication failed, pinhole factory reset required`. Note that the source codec's connected feedback is not a reliable signal for this — the codec keeps reporting the camera connected until it actually reboots — so a fixed settle delay is used instead. If you still see the pinhole diagnostic on the first attach attempt, increase `factoryResetSettleMs`.
+
+By default the cascade power-cycles (PoE off → VLAN → PoE on) the switch port to force the camera to reboot onto the new VLAN. Set `disablePoeCycling` to `true` to suppress every PoE off/on step: migrations then move the camera by VLAN change and serial reassignment only, the attach-failure reseed re-asserts the source VLAN without re-powering, and the safety-net sweep skips its PoE bounce. Use this when the port's PoE must stay on (for example when the camera is powered/managed elsewhere, or the switch performs the power cycle itself on a VLAN change). The state machine is advanced internally at the points the PoE feedback events would normally drive it.
 
 If the target codec does not report the camera attached within the attach-wait window, the manager performs an **automatic recovery**: it reseeds the camera back onto the source codec's VLAN with PoE on. The source codec then rediscovers the camera, which triggers a fresh migration cascade from scratch. This reseed-and-retry is the only action proven to recover a stuck attach; it repeats until the camera attaches. The retry loop is scoped to the single affected camera's switch port and does not disturb other cameras or codecs.
 
