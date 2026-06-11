@@ -66,6 +66,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // Configurable via disablePoeCycling; defaults to false (normal PoE cycling).
         private readonly bool disablePoeCycling;
 
+        // When true, the post-factory-reset settle is gated on the source codec reporting the
+        // camera disconnected (the reset actually taking effect) rather than the fixed
+        // factoryResetSettleMs timer. A bounded fallback (FactoryResetDisconnectTimeoutMs) starts
+        // the cascade anyway if no disconnect arrives. Configurable via
+        // useCameraFactoryResetDisconnectFeedback; defaults to false (fixed timer).
+        private readonly bool useCameraFactoryResetDisconnectFeedback;
+
+        // Upper bound on how long to wait for the source-codec disconnect feedback before starting
+        // the PoE/VLAN cascade anyway, when useCameraFactoryResetDisconnectFeedback is enabled.
+        private const int FactoryResetDisconnectTimeoutMs = 25000;
+
         // Safety-net reconciliation cadence and per-camera backoff. The periodic sweep catches
         // cameras that ended up floating after a recovery dead-end (e.g. the source codec never
         // re-reported the camera online after a reseed, so no fresh migration cascade ever
@@ -81,6 +92,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 ? config.FactoryResetSettleMs
                 : DefaultFactoryResetSettleMs;
             disablePoeCycling = config != null && config.DisablePoeCycling;
+            useCameraFactoryResetDisconnectFeedback = config != null && config.UseCameraFactoryResetDisconnectFeedback;
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
             AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
@@ -506,10 +518,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}'");
-            this.LogDebug($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {factoryResetSettleMs}ms");
             sourceCodec.CameraFactoryReset(sourceCameraId);
 
-            ScheduleDelayed(factoryResetSettleMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
+            if (useCameraFactoryResetDisconnectFeedback)
+            {
+                lock (activeMigrationsLock)
+                {
+                    if (activeMigrations.TryGetValue(camera.Key, out var current) && ReferenceEquals(current, migration))
+                    {
+                        migration.WaitingForSourceDisconnect = true;
+                        migration.DisconnectWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(FactoryResetDisconnectTimeoutMs);
+                    }
+                }
+                this.LogDebug($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then waiting for the source codec to report it disconnected before starting the PoE/VLAN cascade (fallback after {FactoryResetDisconnectTimeoutMs}ms)");
+            }
+            else
+            {
+                this.LogDebug($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {factoryResetSettleMs}ms");
+                ScheduleDelayed(factoryResetSettleMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
+            }
             return true;
         }
 
@@ -608,6 +635,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
+                List<string> pendingDisconnectWaitKeys;
                 var now = DateTime.UtcNow;
                 lock (activeMigrationsLock)
                 {
@@ -633,6 +661,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             && m.PoeReenableDeadlineUtc <= now)
                         .Select(m => m.CameraKey)
                         .ToList();
+
+                    pendingDisconnectWaitKeys = activeMigrations.Values
+                        .Where(m => m.WaitingForSourceDisconnect
+                            && m.DisconnectWaitDeadlineUtc != DateTime.MinValue
+                            && m.DisconnectWaitDeadlineUtc <= now)
+                        .Select(m => m.CameraKey)
+                        .ToList();
+                }
+
+                foreach (var migrationKey in pendingDisconnectWaitKeys)
+                {
+                    CameraMigrationState migrationForCascade = null;
+                    string sourceCodecKey = null;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!activeMigrations.TryGetValue(migrationKey, out var migration)
+                            || !migration.WaitingForSourceDisconnect
+                            || migration.DisconnectWaitDeadlineUtc == DateTime.MinValue
+                            || migration.DisconnectWaitDeadlineUtc > now)
+                        {
+                            continue;
+                        }
+
+                        migration.WaitingForSourceDisconnect = false;
+                        migrationForCascade = migration;
+                        sourceCodecKey = migration.SourceCodecKey;
+                    }
+
+                    this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_DISCONNECT_TIMEOUT camera='{migrationForCascade.CameraKey}' sourceCodec='{sourceCodecKey}' targetCodec='{migrationForCascade.TargetCodecKey}' port='{migrationForCascade.Port}' timeoutMs='{FactoryResetDisconnectTimeoutMs}' action='startCascadeAnyway'");
+                    this.LogWarning($"Camera Manager {Key} did not receive a source-codec disconnect for camera '{migrationForCascade.CameraKey}' within {FactoryResetDisconnectTimeoutMs}ms of the factory reset — starting the PoE/VLAN cascade anyway");
+                    var sourceCodecForCascade = managedCodecs.TryGetValue(sourceCodecKey, out var sourceDevice) ? sourceDevice as CiscoCodec : null;
+                    BeginMigrationPoeOffAndClearSerial(migrationForCascade, sourceCodecForCascade);
                 }
 
                 foreach (var migrationKey in pendingPoeReenableRetryKeys)
@@ -1128,6 +1188,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            // Factory-reset settle via disconnect feedback: if a migration for this camera is
+            // waiting for the source codec to report it dropped (the factory reset taking effect),
+            // this disconnect from that source codec is the signal to start the PoE/VLAN cascade
+            // now instead of waiting out the fixed settle timer. Resolved before the generic
+            // disconnect guards because the source-codec + migration-state match is unambiguous.
+            CameraMigrationState resetWaitMigration = null;
+            lock (activeMigrationsLock)
+            {
+                if (activeMigrations.TryGetValue(camera.Key, out var waitingMigration)
+                    && waitingMigration.WaitingForSourceDisconnect
+                    && string.Equals(waitingMigration.SourceCodecKey, codec?.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    waitingMigration.WaitingForSourceDisconnect = false;
+                    resetWaitMigration = waitingMigration;
+                }
+            }
+
+            if (resetWaitMigration != null)
+            {
+                this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_DISCONNECT_CONFIRMED camera='{camera.Key}' sourceCodec='{codec?.Key}' sourceCameraId='{e.CameraId}' targetCodec='{resetWaitMigration.TargetCodecKey}' port='{resetWaitMigration.Port}'");
+                this.LogDebug($"Camera Manager {Key} source codec '{codec?.Key}' reported camera '{camera.Key}' disconnected after factory reset — starting PoE/VLAN cascade (disconnect-feedback gate)");
+                BeginMigrationPoeOffAndClearSerial(resetWaitMigration, codec);
+                return;
+            }
+
             // Check if this camera is supposed to be on the codec that sent the disconnect event.
             // If so, this is a transient disconnect during camera initialization — ignore it to avoid a PoE/VLAN loop.
             var currentScenario = roomCombiner.CurrentScenario;
@@ -1515,6 +1600,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public bool AttachWaitStarted { get; set; }
             public DateTime AttachWaitDeadlineUtc { get; set; }
             public DateTime PoeReenableDeadlineUtc { get; set; }
+            public bool WaitingForSourceDisconnect { get; set; }
+            public DateTime DisconnectWaitDeadlineUtc { get; set; }
         }
     }
 }

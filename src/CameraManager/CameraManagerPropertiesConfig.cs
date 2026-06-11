@@ -74,6 +74,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public int FactoryResetSettleMs { get; set; }
 
         /// <summary>
+        /// When true, the manager does NOT wait a fixed <see cref="FactoryResetSettleMs"/> timer
+        /// after issuing the camera factory reset before tearing down PoE and moving the camera.
+        /// Instead it waits for the source codec to report the camera <b>disconnected</b> — the
+        /// real signal that the factory reset took effect and the camera dropped/rebooted — then
+        /// starts the PoE/VLAN cascade immediately. A safety fallback still starts the cascade if
+        /// no disconnect is reported within a bounded window. Defaults to false (fixed timer).
+        /// </summary>
+        [JsonProperty("useCameraFactoryResetDisconnectFeedback")]
+        public bool UseCameraFactoryResetDisconnectFeedback { get; set; }
+
+        /// <summary>
         /// When true, the camera-migration cascade does NOT power-cycle (PoE off/on) the camera's
         /// network-switch port. Migrations move the camera by VLAN change and serial reassignment
         /// only, and the recovery/reconcile paths skip their PoE bounces as well. Use this when the
