@@ -45,6 +45,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // re-entrancy guard), so it needs no lock.
         private DateTime nextReconcileSweepUtc = DateTime.MinValue;
 
+        // Set to 1 when activation runs before the room combiner has resolved its scenario, so the
+        // initial reconciliation must be deferred. The attach-verification timer (which runs every
+        // second from activation) retries it once the combiner reports a scenario; cleared when the
+        // deferred run executes or when a scenario-changed event runs reconciliation instead.
+        private int startupReconciliationPending;
+
         private const int AttachWaitTimeoutMs = 120000;
         private const int MaxPoeOffDurationMs = 60000;
         private const int MigrationPoeOffDelayMs = 500;
@@ -297,12 +303,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (!string.IsNullOrEmpty(startupScenario))
             {
                 this.LogDebug($"Camera Manager {Key} startup reconciliation for current scenario '{startupScenario}'");
-                TryExecuteScenarioCameraResets(startupScenario);
-                TryEnsureScenarioCameraPortStates(startupScenario);
+                RunScenarioReconciliation(startupScenario);
             }
             else
             {
-                this.LogWarning($"Camera Manager {Key} could not run startup reconciliation because current room scenario is empty");
+                System.Threading.Interlocked.Exchange(ref startupReconciliationPending, 1);
+                this.LogWarning($"Camera Manager {Key} deferring startup reconciliation: current room scenario not resolved yet — will run once the room combiner reports a scenario");
             }
 
             return base.CustomActivate();
@@ -632,6 +638,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             try
             {
+                TryRunDeferredStartupReconciliation();
+
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
@@ -1004,10 +1012,50 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         {
             var currentScenario = roomCombiner.CurrentScenario;
 
+            // A scenario-changed event covers the startup case too, so any pending deferred
+            // reconciliation is now satisfied by this run.
+            System.Threading.Interlocked.Exchange(ref startupReconciliationPending, 0);
+
             this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
 
-            TryExecuteScenarioCameraResets(currentScenario?.Key);
-            TryEnsureScenarioCameraPortStates(currentScenario?.Key);
+            RunScenarioReconciliation(currentScenario?.Key);
+        }
+
+        /// <summary>
+        /// Runs the full reconciliation pass for a scenario: factory-reset migrations for cameras
+        /// on the wrong codec, then port-state (VLAN/PoE) enforcement.
+        /// </summary>
+        private void RunScenarioReconciliation(string scenarioKey)
+        {
+            TryExecuteScenarioCameraResets(scenarioKey);
+            TryEnsureScenarioCameraPortStates(scenarioKey);
+        }
+
+        /// <summary>
+        /// If activation deferred the initial reconciliation because the room combiner had not yet
+        /// resolved its scenario, run it now that a scenario is available. Invoked from the
+        /// attach-verification timer so it retries every second until the combiner is ready.
+        /// </summary>
+        private void TryRunDeferredStartupReconciliation()
+        {
+            if (System.Threading.Volatile.Read(ref startupReconciliationPending) == 0)
+            {
+                return;
+            }
+
+            var scenarioKey = roomCombiner?.CurrentScenario?.Key;
+            if (string.IsNullOrEmpty(scenarioKey))
+            {
+                return;
+            }
+
+            if (System.Threading.Interlocked.Exchange(ref startupReconciliationPending, 0) == 0)
+            {
+                return;
+            }
+
+            this.LogDebug($"Camera Manager {Key} running deferred startup reconciliation for scenario '{scenarioKey}' (room combiner resolved its scenario after activation)");
+            RunScenarioReconciliation(scenarioKey);
         }
 
         private void TryEnsureScenarioCameraPortStates(string scenarioKey)
