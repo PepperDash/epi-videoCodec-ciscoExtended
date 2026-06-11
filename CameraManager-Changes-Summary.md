@@ -170,3 +170,54 @@ Operational impact:
 - Lower chance of cameras getting stuck in off/unattached states.
 - Faster troubleshooting due to clearer marker logs and less noise.
 - Simpler control flow with fewer non-essential readiness branches.
+
+## Port-State Reconciliation Fix (Stranded-Camera Bug)
+
+Primary file: src/CameraManager/CameraManager.cs (TryEnsureScenarioCameraPortStates)
+
+Problem:
+
+- On a room combination scenario change, the port-state reconciliation pass moved each
+  camera's switch port to the target codec's VLAN unconditionally.
+- When the migration/factory-reset was skipped by the source-online gate (camera not yet
+  confirmed online on its source codec at scenario change), the VLAN was still flipped to
+  the target codec.
+- This stranded the camera on the target VLAN before any migration ran. The source codec
+  could then never see the camera report "online on the wrong codec", so the deferred
+  Codec_CameraConnected -> TryStartMigration path never fired.
+- With disablePoeCycling set, the reconcile watchdog logged action='none'
+  reason='poeCyclingDisabled' and could not bounce the port, leaving the camera floating
+  unpaired until the room was reverted to divided.
+
+Fix:
+
+- TryEnsureScenarioCameraPortStates now gates the VLAN/PoE re-assert on
+  IsCameraOnlineOnCodec(targetCodec, camera):
+	- Camera confirmed online on target codec -> re-assert VLAN/PoE (idempotent alignment
+	  for already-migrated cameras).
+	- Camera not yet on target codec -> leave the port on its current VLAN and log
+	  CAMERA_PORT_ENSURE ... action='skipped' reason='notOnlineOnTargetCodec' so the camera
+	  stays visible to its source codec and the normal confirmed-online migration cascade
+	  can move it.
+
+Camera moves now gated on known state of all involved cameras:
+
+- Cameras are only sent to switch codecs after the actual (codec-reported) state of all
+  cameras involved in the scenario is known, rather than acting on assumed or stale state.
+- This prevents moving a camera on a guess (for example at startup before the codecs have
+  reported real camera status), which was a contributing factor to the stranded-camera and
+  restart-recovery failures above.
+
+Additional startup scenario covered by this fix:
+
+- Restarting the program with the partition physically open (rooms combined) while the
+  room combiner config is set to auto but was last left in manual/divided previously did
+  not recover: the port-ensure pass would strand cameras on the target VLAN before startup
+  reconciliation could migrate them. With the target-online gate in place, cameras now stay
+  on their source codec until the proper migration moves them, so the system recovers on
+  restart regardless of the prior manual/divided combiner state.
+
+Applied to branches:
+
+- feat/cameramanager-configurable-poe-cycling
+- feat/cameamanager-useFactoryResetDisconnectFeedback
