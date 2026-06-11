@@ -3987,6 +3987,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
 							{
 								this.LogDebug("Camera {camId} is ghosted.  Removing from Codec.", camId);
+								existingCameraDevice?.SetOnlineStatus(false);
 								RemoveCamera(camIdInt, existingCameraDevice);
 								removedCameraIds.Add(camIdInt);
 							}
@@ -3997,11 +3998,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						this.LogDebug("Camera {camId}: connected=false, calling RemoveCamera with serial={serial} device={device}",
 							camId, serialNumber, existingCameraDevice != null ? existingCameraDevice.Key : "null");
+						existingCameraDevice?.SetOnlineStatus(false);
 						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
 						removedCameraIds.Add(camIdInt);
 					}
 					else if (connected != null && connected.Equals("true", StringComparison.OrdinalIgnoreCase))
 					{
+						existingCameraDevice?.SetOnlineStatus(true);
 						if (existingCamStatus == null)
 						{
 							this.LogDebug("Camera {camId}: connected=true and new, calling AddCamera with serial={serial}", camId, serialNumber);

@@ -186,6 +186,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             ParentCodec = codec;
         }
 
+        /// <summary>
+        /// True only when the codec's live <c>xStatus Cameras Camera Connected</c> value reports this
+        /// camera as connected. Presence of a serial number in a codec's camera list is NOT sufficient
+        /// to consider a camera reachable; callers that need to confirm a camera is actually reachable
+        /// (e.g. before issuing a migration/factory reset) must check this flag.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsOnline { get; private set; }
+
+        /// <summary>
+        /// Updates the live online status of the camera as reported by the codec's Connected status.
+        /// </summary>
+        public void SetOnlineStatus(bool isOnline)
+        {
+            IsOnline = isOnline;
+        }
+
         //  Takes a string from the camera capabilities value and converts from "ptzf" to enum bitmask
         public void SetCapabilites(string capabilites)
         {
