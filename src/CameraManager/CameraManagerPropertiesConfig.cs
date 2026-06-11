@@ -58,6 +58,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         [JsonProperty("networkSwitchKey")]
         public string NetworkSwitchKey { get; set; }
 
+        /// <summary>
+        /// Milliseconds to wait after issuing the camera factory reset on the source codec
+        /// before tearing down PoE and moving the camera's VLAN to the target codec. The
+        /// factory reset clears the camera's pairing/authentication to the source codec, but
+        /// that takes time to take effect; if the camera is moved before the reset settles, it
+        /// arrives at the target codec still carrying the old codec's credentials and the target
+        /// reports "authentication failed, pinhole factory reset required". This delay gives the
+        /// reset time to complete so the camera pairs on the first attempt. The source codec's
+        /// Connected feedback is not a reliable gate (the codec keeps reporting Connected=true
+        /// until the camera actually reboots), so a fixed delay is used. When omitted or
+        /// non-positive, defaults to 2 000 ms.
+        /// </summary>
+        [JsonProperty("factoryResetSettleMs")]
+        public int FactoryResetSettleMs { get; set; }
+
         // /// <summary>
         // /// Maximum milliseconds to wait for the camera-ghost (unpaired) event after
         // /// issuing a factory-reset command. Defaults to 30 000 ms.

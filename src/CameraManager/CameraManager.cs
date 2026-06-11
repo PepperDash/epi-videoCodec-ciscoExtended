@@ -27,18 +27,53 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private readonly Dictionary<string, CameraMigrationState> activeMigrations = new Dictionary<string, CameraMigrationState>();
         private readonly object activeMigrationsLock = new object();
 
+        // Cumulative attach-timeout count per camera, preserved across the reseed→fresh-cascade
+        // retry loop (the migration state is recreated each cycle, so the count must live here).
+        // Used for log visibility only; it does not change recovery behavior. Cleared on a
+        // confirmed attach.
+        private readonly Dictionary<string, int> attachFailureCounts = new Dictionary<string, int>();
+
+        // Safety-net reconciliation: per-camera earliest UTC at which the periodic floating-camera
+        // sweep may next act. Seeded after a reseed so the normal rediscovery cascade gets a grace
+        // period before the watchdog intervenes; cleared on a confirmed attach. Guarded by
+        // activeMigrationsLock.
+        private readonly Dictionary<string, DateTime> reconcileNextActionUtc = new Dictionary<string, DateTime>();
+
         private readonly Timer attachVerificationTimer;
         private int attachVerificationTimerHandlerActive;
+        // Only touched from inside AttachVerificationTimer_Elapsed (single-threaded via the
+        // re-entrancy guard), so it needs no lock.
+        private DateTime nextReconcileSweepUtc = DateTime.MinValue;
 
         private const int AttachWaitTimeoutMs = 120000;
         private const int MaxPoeOffDurationMs = 60000;
-        private const int MaxAttachRecoveryAttempts = 2;
         private const int MigrationPoeOffDelayMs = 500;
+        private const int DefaultFactoryResetSettleMs = 2000;
+
+        // Delay between issuing the source-codec factory reset and tearing down PoE/VLAN to move
+        // the camera. The reset must take effect first, otherwise the camera arrives at the target
+        // codec still paired to the source and the target reports "pinhole factory reset required".
+        // NOTE: the source codec's Connected feedback is NOT a reliable signal here — the camera
+        // begins factory-defaulting as soon as the command is sent, but the codec keeps reporting
+        // Connected=true until the camera actually reboots/drops, so we cannot gate on it. A fixed
+        // settle delay is used instead. Configurable via factoryResetSettleMs; defaults to
+        // DefaultFactoryResetSettleMs.
+        private readonly int factoryResetSettleMs;
+
+        // Safety-net reconciliation cadence and per-camera backoff. The periodic sweep catches
+        // cameras that ended up floating after a recovery dead-end (e.g. the source codec never
+        // re-reported the camera online after a reseed, so no fresh migration cascade ever
+        // restarted). The backoff keeps the watchdog from disrupting an in-flight recovery.
+        private const int ReconcileSweepIntervalMs = 30000;
+        private const int ReconcileBackoffMs = AttachWaitTimeoutMs;
 
         public CameraManager(string key, string name, CameraManagerPropertiesConfig config)
             : base(key, name)
         {
             this.config = config;
+            factoryResetSettleMs = config != null && config.FactoryResetSettleMs > 0
+                ? config.FactoryResetSettleMs
+                : DefaultFactoryResetSettleMs;
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
             AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
@@ -435,10 +470,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}'");
-            this.LogDebug($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {MigrationPoeOffDelayMs}ms");
+            this.LogDebug($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {factoryResetSettleMs}ms");
             sourceCodec.CameraFactoryReset(sourceCameraId);
 
-            ScheduleDelayed(MigrationPoeOffDelayMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
+            ScheduleDelayed(factoryResetSettleMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
             return true;
         }
 
@@ -607,9 +642,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     uint sourceCameraId;
                     string targetCodecKey;
                     string port;
-                    int attachRecoveryAttempts = 0;
-                    bool shouldReseed = false;
-                    bool shouldReassertTarget = false;
                     lock (activeMigrationsLock)
                     {
                         if (!activeMigrations.TryGetValue(migrationKey, out var migration)
@@ -625,68 +657,214 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         targetCodecKey = migration.TargetCodecKey;
                         port = migration.Port;
 
-                        if (migration.AttachRecoveryAttempts >= MaxAttachRecoveryAttempts)
-                        {
-                            attachRecoveryAttempts = migration.AttachRecoveryAttempts;
-                            activeMigrations.Remove(migration.CameraKey);
-                            shouldReseed = true;
-                        }
-                        else
-                        {
-                            migration.AttachRecoveryAttempts++;
-                            migration.AttachWaitStarted = true;
-                            migration.AttachWaitDeadlineUtc = now.AddMilliseconds(AttachWaitTimeoutMs);
-                            attachRecoveryAttempts = migration.AttachRecoveryAttempts;
-                            shouldReassertTarget = true;
-                        }
+                        // On attach timeout we always reseed the camera back onto the source codec.
+                        // Reasserting the target VLAN/PoE in place never re-prompts the codec to
+                        // discover the camera; only forcing it back to the source (which makes the
+                        // source codec rediscover it and fire a fresh factory-reset migration cascade)
+                        // is proven to recover a stuck attach. Clearing the migration here lets that
+                        // rediscovery start a brand-new migration from scratch.
+                        activeMigrations.Remove(migration.CameraKey);
+
+                        // Give the normal rediscovery cascade a grace period before the floating-camera
+                        // watchdog can intervene on this camera. If the source codec re-reports it (the
+                        // proven recovery path), a fresh migration starts well within this window.
+                        reconcileNextActionUtc[migration.CameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
                     }
 
-                    if (shouldReseed)
+                    int attachFailureCount;
+                    lock (activeMigrationsLock)
                     {
-                        this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_FAILED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reseedSourceVlanAndPoe'");
-                        this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='failed' action='reseedSourceVlanAndPoe' attempts='{attachRecoveryAttempts}'");
-                        this.LogDebug($"Camera Manager {Key} attach failed diagnostics camera='{cameraKey}' managed='{BuildManagedCameraSnapshot(cameraKey)}' sourceSnapshot='{BuildCodecCameraSnapshot(sourceCodecKey)}' targetSnapshot='{BuildCodecCameraSnapshot(targetCodecKey)}'");
-
-                        if (managedCodecs.TryGetValue(sourceCodecKey, out var sourceCodecDevice))
-                        {
-                            this.LogDebug($"Camera Manager {Key} re-seeding source VLAN/PoE for camera '{cameraKey}' after attach failure to force rediscovery");
-                            networkSwitch.SetPortVlan(port, sourceCodecDevice.VLanId);
-                            networkSwitch.SetPortPoeState(port, true);
-                        }
-                        else
-                        {
-                            this.LogError($"Camera Manager {Key} cannot run attach failure reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
-                        }
-
-                        continue;
+                        attachFailureCounts.TryGetValue(cameraKey, out var priorCount);
+                        attachFailureCount = priorCount + 1;
+                        attachFailureCounts[cameraKey] = attachFailureCount;
                     }
 
-                    if (!shouldReassertTarget)
+                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_FAILED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' failedAttempts='{attachFailureCount}' action='reseedSourceVlanAndPoe'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='failed' failedAttempts='{attachFailureCount}' action='reseedSourceVlanAndPoe'");
+                    this.LogDebug($"Camera Manager {Key} attach failed diagnostics camera='{cameraKey}' failedAttempts='{attachFailureCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}' sourceSnapshot='{BuildCodecCameraSnapshot(sourceCodecKey)}' targetSnapshot='{BuildCodecCameraSnapshot(targetCodecKey)}'");
+
+                    if (managedCodecs.TryGetValue(sourceCodecKey, out var sourceCodecDevice))
                     {
-                        continue;
+                        this.LogDebug($"Camera Manager {Key} re-seeding source VLAN/PoE for camera '{cameraKey}' after attach failure to force rediscovery");
+                        networkSwitch.SetPortVlan(port, sourceCodecDevice.VLanId);
+                        networkSwitch.SetPortPoeState(port, true);
                     }
-
-                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_TIMEOUT camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' attempts='{attachRecoveryAttempts}' action='reassertTargetVlanAndPoe'");
-                    this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' phase='timeout' action='reassertTargetVlanAndPoe' attempts='{attachRecoveryAttempts}'");
-                    this.LogDebug($"Camera Manager {Key} attach timeout diagnostics camera='{cameraKey}' managed='{BuildManagedCameraSnapshot(cameraKey)}' sourceSnapshot='{BuildCodecCameraSnapshot(sourceCodecKey)}' targetSnapshot='{BuildCodecCameraSnapshot(targetCodecKey)}'");
-                    this.LogDebug($"Camera Manager {Key} reasserting target VLAN/PoE for camera '{cameraKey}' after attach timeout");
-
-                    if (!managedCodecs.TryGetValue(targetCodecKey, out var targetCodecDevice))
+                    else
                     {
-                        this.LogError($"Camera Manager {Key} cannot run attach timeout recovery for camera '{cameraKey}': target codec '{targetCodecKey}' not found");
-                        continue;
+                        this.LogError($"Camera Manager {Key} cannot run attach failure reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
                     }
+                }
 
-                    networkSwitch.SetPortVlan(port, targetCodecDevice.VLanId);
-                    networkSwitch.SetPortPoeState(port, true);
-
-                    TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachTimeoutReassert");
+                // Periodic safety-net sweep: catch cameras that ended up floating with no active
+                // migration (the recovery dead-end). Throttled to ReconcileSweepIntervalMs.
+                if (now >= nextReconcileSweepUtc)
+                {
+                    nextReconcileSweepUtc = DateTime.UtcNow.AddMilliseconds(ReconcileSweepIntervalMs);
+                    TryReconcileFloatingCameras(now);
                 }
             }
             finally
             {
                 System.Threading.Interlocked.Exchange(ref attachVerificationTimerHandlerActive, 0);
             }
+        }
+
+        /// <summary>
+        /// Safety-net watchdog. For the current scenario, finds cameras that are NOT correctly
+        /// placed on their target codec and have no active migration, then nudges them back toward
+        /// recovery. This closes the recovery dead-end where, after an attach-failure reseed, the
+        /// source codec never re-reports the camera online — leaving it floating with nothing to
+        /// restart the migration cascade.
+        /// </summary>
+        private void TryReconcileFloatingCameras(DateTime now)
+        {
+            var currentScenario = roomCombiner?.CurrentScenario;
+            if (currentScenario == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                var targetCodecKey = codecConfig.CodecKey;
+                foreach (var cameraKey in codecConfig.CameraKeys)
+                {
+                    if (!managedCameras.TryGetValue(cameraKey, out var camera))
+                    {
+                        continue;
+                    }
+
+                    bool hasActiveMigration;
+                    DateTime nextActionUtc;
+                    lock (activeMigrationsLock)
+                    {
+                        hasActiveMigration = activeMigrations.ContainsKey(cameraKey);
+                        reconcileNextActionUtc.TryGetValue(cameraKey, out nextActionUtc);
+                    }
+
+                    // The migration machinery already owns this camera.
+                    if (hasActiveMigration)
+                    {
+                        continue;
+                    }
+
+                    // Correctly placed = confirmed online on the target codec with a matching serial.
+                    if (IsCameraOnlineOnCodec(targetCodecKey, camera))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc.Remove(cameraKey);
+                        }
+                        continue;
+                    }
+
+                    // Floating. Back off so the normal rediscovery cascade (and any in-flight
+                    // recovery) gets time to finish before the watchdog intervenes.
+                    if (now < nextActionUtc)
+                    {
+                        continue;
+                    }
+
+                    var currentCodecKey = FindCodecKeyWhereCameraOnline(camera);
+                    var port = camera.NetworkSwitchPort;
+
+                    if (!string.IsNullOrEmpty(currentCodecKey)
+                        && !string.Equals(currentCodecKey, targetCodecKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Stuck online on the wrong codec with no connect event to drive a migration.
+                        // Start the migration cascade now.
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_WRONG_CODEC camera='{cameraKey}' currentCodec='{currentCodecKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='startMigration'");
+                        if (managedCodecs.TryGetValue(currentCodecKey, out var sourceCodecDevice)
+                            && sourceCodecDevice is CiscoCodec sourceCiscoCodec)
+                        {
+                            lock (activeMigrationsLock)
+                            {
+                                reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                            }
+                            TryStartMigration(camera, sourceCiscoCodec, camera.CameraId, targetCodecKey, currentScenario.Key);
+                        }
+                        else
+                        {
+                            this.LogError($"Camera Manager {Key} reconcile cannot start migration for camera '{cameraKey}': current codec '{currentCodecKey}' not a managed CiscoCodec");
+                        }
+                        continue;
+                    }
+
+                    // Online nowhere: the recovery dead-end. The camera never came back after a
+                    // reseed (firmware hang, cable/PoE fault, or it simply never re-registered).
+                    // Bounce PoE on the port to give it another chance to power up and re-register;
+                    // once it reports online anywhere, the connect handler or the next sweep routes it.
+                    if (string.IsNullOrWhiteSpace(port))
+                    {
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' scenario='{currentScenario.Key}' action='none' reason='noNetworkSwitchPort'");
+                        continue;
+                    }
+
+                    lock (activeMigrationsLock)
+                    {
+                        reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                    }
+
+                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='bouncePoe' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    networkSwitch.SetPortPoeState(port, false);
+                    ScheduleDelayed(MigrationPoeOffDelayMs, () =>
+                    {
+                        this.LogDebug($"Camera Manager {Key} reconcile re-enabling PoE for floating camera '{cameraKey}' on port '{port}'");
+                        networkSwitch.SetPortPoeState(port, true);
+                    });
+                }
+            }
+        }
+
+        private bool IsCameraOnlineOnCodec(string codecKey, CiscoCamera camera)
+        {
+            if (string.IsNullOrWhiteSpace(codecKey) || camera == null || string.IsNullOrWhiteSpace(camera.SerialNumber))
+            {
+                return false;
+            }
+
+            if (!managedCodecs.TryGetValue(codecKey, out var codecDevice))
+            {
+                return false;
+            }
+
+            var codec = codecDevice as CiscoCodec;
+            if (codec == null)
+            {
+                return false;
+            }
+
+            return codec.Cameras?.OfType<CiscoCamera>().Any(c => c.IsOnline
+                && !string.IsNullOrEmpty(c.SerialNumber)
+                && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase)) == true;
+        }
+
+        private string FindCodecKeyWhereCameraOnline(CiscoCamera camera)
+        {
+            if (camera == null || string.IsNullOrWhiteSpace(camera.SerialNumber))
+            {
+                return null;
+            }
+
+            foreach (var kvp in managedCodecs)
+            {
+                var codec = kvp.Value as CiscoCodec;
+                if (codec == null)
+                {
+                    continue;
+                }
+
+                var match = codec.Cameras?.OfType<CiscoCamera>().Any(c => c.IsOnline
+                    && !string.IsNullOrEmpty(c.SerialNumber)
+                    && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase)) == true;
+                if (match)
+                {
+                    return kvp.Key;
+                }
+            }
+
+            return null;
         }
 
         private void RoomCombiner_RoomCombinationScenarioChanged(object sender, EventArgs e)
@@ -980,7 +1158,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             if (activeMigration != null && string.Equals(codec?.Key, activeMigration.TargetCodecKey, StringComparison.OrdinalIgnoreCase))
             {
-                this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' attempts='{activeMigration.AttachRecoveryAttempts}'");
+                int priorFailedAttempts;
+                lock (activeMigrationsLock)
+                {
+                    attachFailureCounts.TryGetValue(camera.Key, out priorFailedAttempts);
+                    attachFailureCounts.Remove(camera.Key);
+                    reconcileNextActionUtc.Remove(camera.Key);
+                }
+
+                this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' failedAttempts='{priorFailedAttempts}'");
                 lock (activeMigrationsLock)
                 {
                     activeMigrations.Remove(camera.Key);
@@ -1253,7 +1439,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public bool AttachWaitStarted { get; set; }
             public DateTime AttachWaitDeadlineUtc { get; set; }
             public DateTime PoeReenableDeadlineUtc { get; set; }
-            public int AttachRecoveryAttempts { get; set; }
         }
     }
 }

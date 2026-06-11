@@ -1817,6 +1817,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Status/Conference/DoNotDisturb"
 				+ Delimiter
 				+ prefix
+				+ "/Status/Diagnostics"
+				+ Delimiter
+				+ prefix
 				+ "/Status/Cameras/Camera"
 				+ Delimiter
 				+ prefix
@@ -3858,6 +3861,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var systemUnitStateToken = statusToken.SelectToken("SystemUnit.State");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 			var provisioningToken = statusToken.SelectToken("Provisioning");
+			var diagnosticsToken = statusToken.SelectToken("Diagnostics");
 
 			var serializedToken = statusToken.ToString();
 
@@ -4146,6 +4150,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseProvisioningToken(provisioningToken);
 			}
+			if (diagnosticsToken != null)
+			{
+				ParseDiagnosticsToken(diagnosticsToken);
+			}
 			if (mainSourceToken != null)
 			{
 				ParseMainSourceToken(mainSourceToken);
@@ -4173,6 +4181,56 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			this.LogDebug("Requesting xFeedback List to verify registration");
 			SendTextWithoutQueue("xFeedback List");
+		}
+
+		private void ParseDiagnosticsToken(JToken diagnosticsToken)
+		{
+			if (diagnosticsToken == null)
+				return;
+
+			try
+			{
+				var messagesToken = diagnosticsToken.SelectToken("Message");
+				if (messagesToken == null)
+					return;
+
+				var messages = messagesToken is JArray
+					? messagesToken.Children<JObject>()
+					: new[] { messagesToken as JObject }.Where(m => m != null);
+
+				foreach (var message in messages)
+				{
+					var ghost = message.SelectToken("ghost")?.ToString();
+					var isGhost = ghost != null && bool.TryParse(ghost, out var g) && g;
+
+					var type = message.SelectToken("Type.Value")?.ToString() ?? "Unknown";
+					var level = message.SelectToken("Level.Value")?.ToString() ?? "Unknown";
+					var description = message.SelectToken("Description.Value")?.ToString() ?? string.Empty;
+					var references = message.SelectToken("References.Value")?.ToString() ?? string.Empty;
+
+					if (isGhost)
+					{
+						this.LogDebug(
+							"Codec Diagnostic CLEARED - Type={type} Level={level} References='{references}'",
+							type, level, references);
+						continue;
+					}
+
+					var logMessage = "Codec Diagnostic - Type={type} Level={level} Description='{description}' References='{references}'";
+
+					if (level.Equals("Error", StringComparison.OrdinalIgnoreCase) ||
+						level.Equals("Critical", StringComparison.OrdinalIgnoreCase))
+						this.LogError(logMessage, type, level, description, references);
+					else if (level.Equals("Warning", StringComparison.OrdinalIgnoreCase))
+						this.LogWarning(logMessage, type, level, description, references);
+					else
+						this.LogInformation(logMessage, type, level, description, references);
+				}
+			}
+			catch (Exception ex)
+			{
+				this.LogDebug("Error parsing Diagnostics status: {message}", ex.Message);
+			}
 		}
 
 		private void ParseMainSourceToken(JToken mainSourceToken)

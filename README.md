@@ -464,6 +464,7 @@ In order for this functionality to work, each codec config must specify a `vlanI
   "type": "cameramanager",
   "properties": {
     "networkSwitchKey": "networkSwitch1",
+    "factoryResetSettleMs": 2000, // optional; ms to wait after the source-codec factory reset before moving the camera. Defaults to 2000 when omitted or <= 0. Increase if the target codec reports "pinhole factory reset required" on the first attach attempt.
     "roomCombinerConfig": {
       "roomCombinerKey": "roomCombiner1",
       "combineScenarios": {
@@ -497,6 +498,22 @@ In order for this functionality to work, each codec config must specify a `vlanI
 }
 
 ```
+
+### Migration behavior and recovery
+
+When the room combination scenario changes, the `CameraManager` moves each affected camera to the codec that owns it in the new scenario. A migration is only ever started after the camera is **confirmed online** on its current (wrong) codec, then runs a feedback-driven cascade: factory-reset the camera on the source codec → disable PoE and clear the source codec's assigned serial → switch the switch port to the target codec's VLAN → re-enable PoE → wait for the target codec to report the camera attached.
+
+After the factory reset is issued, the manager waits `factoryResetSettleMs` (default 2000 ms) before tearing down PoE and moving the camera. The reset clears the camera's pairing/authentication to the source codec, and that takes time to take effect; if the camera is moved too soon it arrives at the target codec still carrying the source codec's credentials, and the target reports `authentication failed, pinhole factory reset required`. Note that the source codec's connected feedback is not a reliable signal for this — the codec keeps reporting the camera connected until it actually reboots — so a fixed settle delay is used instead. If you still see the pinhole diagnostic on the first attach attempt, increase `factoryResetSettleMs`.
+
+If the target codec does not report the camera attached within the attach-wait window, the manager performs an **automatic recovery**: it reseeds the camera back onto the source codec's VLAN with PoE on. The source codec then rediscovers the camera, which triggers a fresh migration cascade from scratch. This reseed-and-retry is the only action proven to recover a stuck attach; it repeats until the camera attaches. The retry loop is scoped to the single affected camera's switch port and does not disturb other cameras or codecs.
+
+The number of failed attach attempts is tracked per camera and reported in the logs (`failedAttempts`) on `CAMERA_SWITCHOVER_ATTACH_FAILED`, `CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED`, and `CAMERA_SWITCHOVER_ATTACH_CONFIRMED`, so it is visible how many retries a recovery required.
+
+A periodic **safety-net reconciliation sweep** guards against the case where a reseed never recovers — for example, a camera that, after being pushed back to the source codec, never re-registers (firmware hang, dead NIC, or a cable/PoE fault), leaving it floating with no active migration to retry. The sweep runs on a fixed interval and, for each scenario camera that is not confirmed online on its target codec and has no active migration, takes one of two actions after a per-camera backoff: if the camera is found online on the wrong codec it starts a migration (`CAMERA_SWITCHOVER_RECONCILE_WRONG_CODEC`); if it is online nowhere it bounces PoE on the port to force re-registration (`CAMERA_SWITCHOVER_RECONCILE_FLOATING`). The backoff gives the normal recovery cascade time to complete before the watchdog intervenes.
+
+### Codec diagnostics logging
+
+The codec subscribes to `/Status/Diagnostics` and logs each diagnostics message the codec reports (`Type`, `Level`, `Description`, `References`). `Error`/`Critical` messages are logged as errors, `Warning` as warnings, and others as information; cleared (ghosted) messages are logged at debug level. This surfaces camera-related conditions such as `CameraAuthentication`, `CameraPairing`, and `CameraSerial` failures (for example, a camera that requires a physical pinhole factory reset) that the migration logic cannot resolve on its own.
 
 ## Bridge
 
