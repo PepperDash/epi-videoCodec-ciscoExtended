@@ -1096,8 +1096,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // Target-online gate: only re-assert the port VLAN/PoE for a camera we can CONFIRM
+                    // is already correctly homed on the target codec. This is an idempotent alignment
+                    // for cameras that are already migrated. We must NOT move the VLAN for a camera that
+                    // is not yet on the target codec: doing so strands the camera on the target VLAN
+                    // before the migration cascade (factory reset -> clear serial -> VLAN -> assign serial)
+                    // has run. Once stranded on the target VLAN, the source codec can never see the
+                    // camera report online on the "wrong codec", so the deferred connect-handler
+                    // migration (Codec_CameraConnected -> TryStartMigration) never fires and the camera
+                    // floats unpaired. Leaving the port on its current VLAN keeps the camera visible on
+                    // its source codec so the reset/connect migration path can move it properly.
                     var port = camera.NetworkSwitchPort;
                     var vlanId = codec.VLanId;
+
+                    if (!IsCameraOnlineOnCodec(codecConfig.CodecKey, camera))
+                    {
+                        this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' action='skipped' reason='notOnlineOnTargetCodec' - leaving port VLAN unchanged so the migration path can move the camera");
+                        continue;
+                    }
+
                     this.LogDebug($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' poeCycling='{(disablePoeCycling ? "disabled" : "enabled")}'");
                     networkSwitch.SetPortVlan(port, vlanId);
                     if (!disablePoeCycling)
