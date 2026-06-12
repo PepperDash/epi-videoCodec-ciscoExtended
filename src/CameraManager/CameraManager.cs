@@ -39,6 +39,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // activeMigrationsLock.
         private readonly Dictionary<string, DateTime> reconcileNextActionUtc = new Dictionary<string, DateTime>();
 
+        // Counts floating watchdog recovery attempts per camera. Floating recovery uses PoE
+        // bounce on every attempt and stops once the attempt limit is reached.
+        private readonly Dictionary<string, int> floatingRecoveryCounts = new Dictionary<string, int>();
+
         private readonly Timer attachVerificationTimer;
         private int attachVerificationTimerHandlerActive;
         // Only touched from inside AttachVerificationTimer_Elapsed (single-threaded via the
@@ -89,6 +93,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // restarted). The backoff keeps the watchdog from disrupting an in-flight recovery.
         private const int ReconcileSweepIntervalMs = 30000;
         private const int ReconcileBackoffMs = AttachWaitTimeoutMs;
+        private const int FloatingRecoveryAttemptLimit = 12;
+
+        // Maximum time to wait for source-side assigned-serial clear feedback before forcing the
+        // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
+        private const int AssignmentClearTimeoutMs = 5000;
 
         public CameraManager(string key, string name, CameraManagerPropertiesConfig config)
             : base(key, name)
@@ -603,6 +612,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='ClearAssignedSerial' poeCycling='disabled'");
                 this.LogDebug($"Camera Manager {Key} PoE cycling disabled — skipping PoE-off for camera '{migration.CameraKey}' on port '{migration.Port}', clearing assigned serial and advancing to VLAN switch");
                 sourceCodec?.ClearCameraAssignedSerialNumber(migration.SourceCameraId);
+                lock (activeMigrationsLock)
+                {
+                    if (activeMigrations.TryGetValue(migration.CameraKey, out var current) && ReferenceEquals(current, migration))
+                    {
+                        migration.AssignmentClearDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AssignmentClearTimeoutMs);
+                    }
+                }
 
                 CameraMigrationState migrationForVlanSwitch = null;
                 lock (activeMigrationsLock)
@@ -627,6 +643,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             this.LogDebug($"Camera Manager {Key} clearing assigned serial number for camera '{migration.CameraKey}' on source codec '{migration.SourceCodecKey}'");
             sourceCodec?.ClearCameraAssignedSerialNumber(migration.SourceCameraId);
+            lock (activeMigrationsLock)
+            {
+                if (activeMigrations.TryGetValue(migration.CameraKey, out var current) && ReferenceEquals(current, migration))
+                {
+                    migration.AssignmentClearDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AssignmentClearTimeoutMs);
+                }
+            }
         }
 
         private void AttachVerificationTimer_Elapsed(object sender, ElapsedEventArgs e)
@@ -644,6 +667,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
                 List<string> pendingDisconnectWaitKeys;
+                List<string> pendingAssignmentClearTimeoutKeys;
                 var now = DateTime.UtcNow;
                 lock (activeMigrationsLock)
                 {
@@ -676,6 +700,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             && m.DisconnectWaitDeadlineUtc <= now)
                         .Select(m => m.CameraKey)
                         .ToList();
+
+                    pendingAssignmentClearTimeoutKeys = activeMigrations.Values
+                        .Where(m => !m.AssignmentClearedConfirmed
+                            && m.AssignmentClearDeadlineUtc != DateTime.MinValue
+                            && m.AssignmentClearDeadlineUtc <= now)
+                        .Select(m => m.CameraKey)
+                        .ToList();
                 }
 
                 foreach (var migrationKey in pendingDisconnectWaitKeys)
@@ -701,6 +732,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     this.LogWarning($"Camera Manager {Key} did not receive a source-codec disconnect for camera '{migrationForCascade.CameraKey}' within {FactoryResetDisconnectTimeoutMs}ms of the factory reset — starting the PoE/VLAN cascade anyway");
                     var sourceCodecForCascade = managedCodecs.TryGetValue(sourceCodecKey, out var sourceDevice) ? sourceDevice as CiscoCodec : null;
                     BeginMigrationPoeOffAndClearSerial(migrationForCascade, sourceCodecForCascade);
+                }
+
+                foreach (var migrationKey in pendingAssignmentClearTimeoutKeys)
+                {
+                    CameraMigrationState migrationForFallback = null;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!activeMigrations.TryGetValue(migrationKey, out var migration)
+                            || migration.AssignmentClearedConfirmed
+                            || migration.AssignmentClearDeadlineUtc == DateTime.MinValue
+                            || migration.AssignmentClearDeadlineUtc > now)
+                        {
+                            continue;
+                        }
+
+                        migration.AssignmentClearedConfirmed = true;
+                        migration.AssignmentClearDeadlineUtc = DateTime.MinValue;
+                        migrationForFallback = migration;
+                    }
+
+                    this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_TIMEOUT camera='{migrationForFallback.CameraKey}' sourceCodec='{migrationForFallback.SourceCodecKey}' sourceCameraId='{migrationForFallback.SourceCameraId}' targetCodec='{migrationForFallback.TargetCodecKey}' port='{migrationForFallback.Port}' timeoutMs='{AssignmentClearTimeoutMs}' action='forceVlanSwitchAnyway'");
+                    this.LogWarning($"Camera Manager {Key} did not receive assigned-serial clear feedback for camera '{migrationForFallback.CameraKey}' within {AssignmentClearTimeoutMs}ms of clearing the source codec serial — forcing the VLAN switch to avoid a stuck migration");
+                    TryIssueVlanSwitch(migrationForFallback);
                 }
 
                 foreach (var migrationKey in pendingPoeReenableRetryKeys)
@@ -887,10 +941,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     // Correctly placed = confirmed online on the target codec with a matching serial.
                     if (IsCameraOnlineOnCodec(targetCodecKey, camera))
                     {
-                        lock (activeMigrationsLock)
-                        {
-                            reconcileNextActionUtc.Remove(cameraKey);
-                        }
+                        ClearFloatingRecoveryState(cameraKey);
                         continue;
                     }
 
@@ -913,6 +964,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         if (managedCodecs.TryGetValue(currentCodecKey, out var sourceCodecDevice)
                             && sourceCodecDevice is CiscoCodec sourceCiscoCodec)
                         {
+                            ClearFloatingRecoveryState(cameraKey);
                             lock (activeMigrationsLock)
                             {
                                 reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
@@ -936,18 +988,49 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    int floatingCount;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!floatingRecoveryCounts.TryGetValue(cameraKey, out var priorCount))
+                        {
+                            priorCount = 0;
+                        }
+
+                        floatingCount = priorCount + 1;
+                        floatingRecoveryCounts[cameraKey] = floatingCount;
+                    }
+
+                    if (floatingCount > FloatingRecoveryAttemptLimit)
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = DateTime.MaxValue;
+                        }
+
+                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='attemptLimitReached' attempts='{floatingCount - 1}' limit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        continue;
+                    }
+
                     lock (activeMigrationsLock)
                     {
                         reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
                     }
 
-                    if (disablePoeCycling)
+                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
+                    if (string.IsNullOrWhiteSpace(probeCodecKey))
                     {
-                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='poeCyclingDisabled' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
                         continue;
                     }
 
-                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='bouncePoe' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    if (!managedCodecs.TryGetValue(probeCodecKey, out var probeCodecDevice))
+                    {
+                        this.LogError($"Camera Manager {Key} cannot run floating recovery for camera '{cameraKey}': probe codec '{probeCodecKey}' is not managed");
+                        continue;
+                    }
+
+                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    networkSwitch.SetPortVlan(port, probeCodecDevice.VLanId);
                     networkSwitch.SetPortPoeState(port, false);
                     ScheduleDelayed(MigrationPoeOffDelayMs, () =>
                     {
@@ -955,6 +1038,116 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         networkSwitch.SetPortPoeState(port, true);
                     });
                 }
+            }
+        }
+
+        private string GetFloatingRecoveryProbeCodecKey(
+            string cameraKey,
+            string targetCodecKey,
+            CameraManagerCombineScenarioConfig scenarioConfig,
+            int attempt,
+            out int probeIndex,
+            out int probeTotal)
+        {
+            probeIndex = 0;
+            probeTotal = 0;
+
+            if (scenarioConfig?.CodecConfigs == null || attempt <= 0)
+            {
+                return null;
+            }
+
+            var probeCodecKeys = new List<string>();
+            if (!string.IsNullOrWhiteSpace(targetCodecKey))
+            {
+                probeCodecKeys.Add(targetCodecKey);
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                if (!string.IsNullOrWhiteSpace(codecConfig?.CodecKey)
+                    && !probeCodecKeys.Any(k => string.Equals(k, codecConfig.CodecKey, StringComparison.OrdinalIgnoreCase)))
+                {
+                    probeCodecKeys.Add(codecConfig.CodecKey);
+                }
+            }
+
+            // Add codecs that own this camera in any configured scenario. This keeps probing
+            // focused to relevant codec candidates and enables deterministic alternation like
+            // A -> B -> A -> B when a camera is only mapped to A/B.
+            if (!string.IsNullOrWhiteSpace(cameraKey) && config?.RoomCombinerConfig?.CombineScenarios != null)
+            {
+                foreach (var combineScenario in config.RoomCombinerConfig.CombineScenarios.Values)
+                {
+                    if (combineScenario?.CodecConfigs == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var codecConfig in combineScenario.CodecConfigs)
+                    {
+                        if (codecConfig?.CameraKeys == null)
+                        {
+                            continue;
+                        }
+
+                        if (!codecConfig.CameraKeys.Any(k => string.Equals(k, cameraKey, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(codecConfig.CodecKey)
+                            && !probeCodecKeys.Any(k => string.Equals(k, codecConfig.CodecKey, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            probeCodecKeys.Add(codecConfig.CodecKey);
+                        }
+                    }
+                }
+            }
+
+            // Always include every managed codec in the tail of the probe list. This ensures
+            // floating recovery can sweep all possible codec pairings (including 3-way rooms),
+            // while still preferring target and scenario-specific codecs first.
+            foreach (var managedCodecKey in managedCodecs.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(managedCodecKey)
+                    && !probeCodecKeys.Any(k => string.Equals(k, managedCodecKey, StringComparison.OrdinalIgnoreCase)))
+                {
+                    probeCodecKeys.Add(managedCodecKey);
+                }
+            }
+
+            if (probeCodecKeys.Count == 0)
+            {
+                return null;
+            }
+
+            var selectedIndex = (attempt - 1) % probeCodecKeys.Count;
+            probeIndex = selectedIndex + 1;
+            probeTotal = probeCodecKeys.Count;
+            return probeCodecKeys[selectedIndex];
+        }
+
+        private void ClearFloatingRecoveryState(string cameraKey)
+        {
+            if (string.IsNullOrWhiteSpace(cameraKey))
+            {
+                return;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                floatingRecoveryCounts.Remove(cameraKey);
+                reconcileNextActionUtc.Remove(cameraKey);
+            }
+        }
+
+        private void ClearAllFloatingRecoveryState()
+        {
+            lock (activeMigrationsLock)
+            {
+                floatingRecoveryCounts.Clear();
+                reconcileNextActionUtc.Clear();
             }
         }
 
@@ -1015,6 +1208,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             // A scenario-changed event covers the startup case too, so any pending deferred
             // reconciliation is now satisfied by this run.
             System.Threading.Interlocked.Exchange(ref startupReconciliationPending, 0);
+
+            ClearAllFloatingRecoveryState();
 
             this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
 
@@ -1238,6 +1433,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             migration.AssignmentClearedConfirmed = true;
+            migration.AssignmentClearDeadlineUtc = DateTime.MinValue;
             this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{migration.CameraKey}' on codec '{migration.SourceCodecKey}', camera ID {migration.SourceCameraId}");
             TryIssueVlanSwitch(migration);
         }
@@ -1338,6 +1534,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     if (!existingMigration.AssignmentClearedConfirmed && string.IsNullOrEmpty(duplicateSerial))
                     {
                         existingMigration.AssignmentClearedConfirmed = true;
+                        existingMigration.AssignmentClearDeadlineUtc = DateTime.MinValue;
                         this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' sourceCameraId='{existingMigration.SourceCameraId}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='duplicateDisconnectEmptySerial'");
                         this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{camera.Key}' by duplicate disconnect fallback with empty serial");
                         TryIssueVlanSwitch(existingMigration);
@@ -1376,6 +1573,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            // Any managed camera coming online is a good moment to re-apply the current room
+            // combination intent. This makes post-recovery behavior deterministic even when the
+            // camera surfaced on a stale/wrong codec path outside the normal migration event flow.
+            TryReconcileCurrentScenarioAfterCameraOnline(camera.Key, codec?.Key);
+
             CameraMigrationState activeMigration;
             lock (activeMigrationsLock)
             {
@@ -1389,8 +1591,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     attachFailureCounts.TryGetValue(camera.Key, out priorFailedAttempts);
                     attachFailureCounts.Remove(camera.Key);
-                    reconcileNextActionUtc.Remove(camera.Key);
                 }
+                ClearFloatingRecoveryState(camera.Key);
 
                 this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' failedAttempts='{priorFailedAttempts}'");
                 lock (activeMigrationsLock)
@@ -1499,6 +1701,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
         }
 
+        private void TryReconcileCurrentScenarioAfterCameraOnline(string cameraKey, string codecKey)
+        {
+            var scenarioKey = roomCombiner?.CurrentScenario?.Key;
+            if (string.IsNullOrWhiteSpace(scenarioKey))
+            {
+                return;
+            }
+
+            this.LogDebug($"Camera Manager {Key} running immediate scenario reconciliation after camera '{cameraKey}' came online on codec '{codecKey}' (scenario='{scenarioKey}')");
+            RunScenarioReconciliation(scenarioKey);
+        }
+
         private void TryIssueVlanSwitch(CameraMigrationState migration)
         {
             if (migration == null || migration.VlanSwitchIssued)
@@ -1552,6 +1766,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             if (sourceCodecCamera == null || string.IsNullOrWhiteSpace(sourceCodecCamera.SerialNumber))
             {
                 migration.AssignmentClearedConfirmed = true;
+                migration.AssignmentClearDeadlineUtc = DateTime.MinValue;
                 this.LogDebug($"CAMERA_SWITCHOVER_ASSIGNED_CLEARED_FALLBACK camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' reason='sourceCodecCameraMissingOrEmptySerial'");
                 this.LogDebug($"Camera Manager {Key} confirmed AssignedSerialNumber cleared for camera '{migration.CameraKey}' by source codec camera state fallback");
             }
@@ -1657,6 +1872,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public string TargetCodecKey { get; set; }
             public bool PoeDisabledConfirmed { get; set; }
             public bool AssignmentClearedConfirmed { get; set; }
+            public DateTime AssignmentClearDeadlineUtc { get; set; }
             public bool VlanSwitchIssued { get; set; }
             public bool VlanChangedConfirmed { get; set; }
             public bool PoeEnableIssued { get; set; }
