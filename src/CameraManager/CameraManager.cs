@@ -119,6 +119,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// True when all cameras for the active combiner scenario are confirmed online on their
         /// target codecs and no migration is active.
         /// </summary>
+        public string RoomCombinerKey
+        {
+            get { return config?.RoomCombinerConfig?.RoomCombinerKey; }
+        }
+
+        /// <summary>
+        /// True when all cameras for the active combiner scenario are confirmed online on their
+        /// target codecs and no migration is active.
+        /// </summary>
         public bool ScenarioReconciled
         {
             get { return scenarioReconciled; }
