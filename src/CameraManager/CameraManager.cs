@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Timers;
+using PepperDash.Core;
 using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
 using PepperDash.Essentials.Core.DeviceTypeInterfaces;
@@ -67,6 +68,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // deferred run executes or when a scenario-changed event runs reconciliation instead.
         private int startupReconciliationPending;
 
+        private bool scenarioReconciled;
+        private string scenarioReconciledScenarioKey;
+
         private const int AttachWaitTimeoutMs = 120000;
         private const int MaxPoeOffDurationMs = 60000;
         private const int MigrationPoeOffDelayMs = 500;
@@ -111,10 +115,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
 
+        /// <summary>
+        /// True when all cameras for the active combiner scenario are confirmed online on their
+        /// target codecs and no migration is active.
+        /// </summary>
+        public bool ScenarioReconciled
+        {
+            get { return scenarioReconciled; }
+            private set { scenarioReconciled = value; }
+        }
+
+        /// <summary>
+        /// The scenario key used for the current <see cref="ScenarioReconciled"/> evaluation.
+        /// </summary>
+        public string ScenarioReconciledScenarioKey
+        {
+            get { return scenarioReconciledScenarioKey; }
+            private set { scenarioReconciledScenarioKey = value; }
+        }
+
+        /// <summary>
+        /// Feedback for <see cref="ScenarioReconciled"/>.
+        /// </summary>
+        public BoolFeedback ScenarioReconciledFeedback { get; private set; }
+
+        /// <summary>
+        /// Raised whenever <see cref="ScenarioReconciled"/> changes state.
+        /// </summary>
+        public event EventHandler<EventArgs> ScenarioReconciledChanged;
+
         public CameraManager(string key, string name, CameraManagerPropertiesConfig config)
             : base(key, name)
         {
             this.config = config;
+            ScenarioReconciledFeedback = new BoolFeedback($"{Key}-ScenarioReconciled", () => ScenarioReconciled);
             factoryResetSettleMs = config != null && config.FactoryResetSettleMs > 0
                 ? config.FactoryResetSettleMs
                 : DefaultFactoryResetSettleMs;
@@ -376,6 +410,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 System.Threading.Interlocked.Exchange(ref startupReconciliationPending, 1);
                 this.LogWarning($"Camera Manager {Key} deferring startup reconciliation: current room scenario not resolved yet — will run once the room combiner reports a scenario");
             }
+
+            UpdateScenarioReconciledStatus();
 
             return base.CustomActivate();
         }
@@ -714,6 +750,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogVerbose($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {factoryResetSettleMs}ms");
                 ScheduleDelayed(factoryResetSettleMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
             }
+
+            UpdateScenarioReconciledStatus();
             return true;
         }
 
@@ -1053,6 +1091,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     nextReconcileSweepUtc = DateTime.UtcNow.AddMilliseconds(ReconcileSweepIntervalMs);
                     TryReconcileFloatingCameras(now);
                 }
+
+                UpdateScenarioReconciledStatus();
             }
             finally
             {
@@ -1424,6 +1464,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         {
             TryExecuteScenarioCameraResets(scenarioKey);
             TryEnsureScenarioCameraPortStates(scenarioKey);
+            UpdateScenarioReconciledStatus();
         }
 
         /// <summary>
@@ -1873,6 +1914,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 networkSwitch.SetPortPoeState(activeMigration.Port, true);
             }
 
+            UpdateScenarioReconciledStatus();
+
             // Check if this camera is on the correct codec per the current scenario
             var currentScenario = roomCombiner.CurrentScenario;
             if (currentScenario != null && config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var scenarioConfig))
@@ -1987,6 +2030,72 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             this.LogVerbose($"Camera Manager {Key} running immediate scenario reconciliation after camera '{cameraKey}' came online on codec '{codecKey}' (scenario='{scenarioKey}')");
             RunScenarioReconciliation(scenarioKey);
+        }
+
+        private bool EvaluateScenarioReconciled(string scenarioKey)
+        {
+            if (string.IsNullOrWhiteSpace(scenarioKey)
+                || config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return false;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                if (activeMigrations.Count > 0)
+                {
+                    return false;
+                }
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                if (codecConfig?.CameraKeys == null)
+                {
+                    return false;
+                }
+
+                foreach (var cameraKey in codecConfig.CameraKeys)
+                {
+                    if (!managedCameras.TryGetValue(cameraKey, out var camera)
+                        || !IsCameraOnlineOnCodec(codecConfig.CodecKey, camera))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private void UpdateScenarioReconciledStatus()
+        {
+            var scenarioKey = roomCombiner?.CurrentScenario?.Key;
+            var reconciled = EvaluateScenarioReconciled(scenarioKey);
+
+            var changed = reconciled != ScenarioReconciled
+                || !string.Equals(ScenarioReconciledScenarioKey, scenarioKey, StringComparison.OrdinalIgnoreCase);
+
+            if (!changed)
+            {
+                return;
+            }
+
+            ScenarioReconciled = reconciled;
+            ScenarioReconciledScenarioKey = scenarioKey;
+
+            var activeMigrationCount = 0;
+            lock (activeMigrationsLock)
+            {
+                activeMigrationCount = activeMigrations.Count;
+            }
+
+            this.LogDebug($"CAMERA_SCENARIO_RECONCILED scenario='{scenarioKey ?? "none"}' reconciled='{reconciled}' activeMigrations='{activeMigrationCount}'");
+
+            ScenarioReconciledFeedback.FireUpdate();
+            ScenarioReconciledChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void TryIssueVlanSwitch(CameraMigrationState migration)
