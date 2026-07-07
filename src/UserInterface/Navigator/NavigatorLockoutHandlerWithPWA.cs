@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Timers;
 using Crestron.SimplSharp.Net;
@@ -58,6 +59,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private readonly Dictionary<string, (BoolFeedback Feedback, EventHandler<FeedbackEventArgs> Handler)> _lockoutFeedbackHandlers =
             new Dictionary<string, (BoolFeedback, EventHandler<FeedbackEventArgs>)>();
+
+        private EventHandler _combinationOperationStatusChangedHandler;
 
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
@@ -136,6 +139,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 //subscribe to events for routing buttons from codec ui to mobile control
                 combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
+                TrySubscribeToCombinationOperationStatusChanged(combinerHandler.EssentialsRoomCombiner);
             }
 
             extensionsHandler.UiExtensionsClickedEvent +=
@@ -309,6 +313,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
+                if (IsCombinationOperationInProgress())
+                {
+                    this.LogDebug("Combination operation is in progress; forcing lockout for panel with default room key {DefaultRoomKey}", defaultRoomKey);
+                    currentLockout = props?.Lockout;
+                    StartLockout();
+                    return;
+                }
+
                 if (currentScenarioRoomKey != LOCKOUT_SCENARIO_KEY)
                 {
                     CancelLockout();
@@ -328,6 +340,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 this.LogDebug("Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", ex);
             }
+        }
+
+        private void HandleCombinationOperationStatusChanged(object sender, EventArgs e)
+        {
+            HandleRoomCombineScenarioChanged();
+        }
+
+        private void TrySubscribeToCombinationOperationStatusChanged(object combiner)
+        {
+            var eventInfo = combiner?.GetType().GetEvent("CombinationOperationStatusChanged", BindingFlags.Instance | BindingFlags.Public);
+            if (eventInfo == null)
+            {
+                return;
+            }
+
+            _combinationOperationStatusChangedHandler = HandleCombinationOperationStatusChanged;
+            eventInfo.AddEventHandler(combiner, _combinationOperationStatusChangedHandler);
+        }
+
+        private bool IsCombinationOperationInProgress()
+        {
+            var combiner = combinerHandler?.EssentialsRoomCombiner;
+            if (combiner == null)
+            {
+                return false;
+            }
+
+            var operationStatus = combiner.GetType().GetProperty("CombinationOperation", BindingFlags.Instance | BindingFlags.Public)?.GetValue(combiner, null);
+            if (operationStatus == null)
+            {
+                return false;
+            }
+
+            var stateValue = operationStatus.GetType().GetProperty("State", BindingFlags.Instance | BindingFlags.Public)?.GetValue(operationStatus, null);
+            if (stateValue == null)
+            {
+                return false;
+            }
+
+            var stateText = stateValue.ToString();
+            return string.Equals(stateText, "InProgress", StringComparison.OrdinalIgnoreCase) || string.Equals(stateText, "1", StringComparison.OrdinalIgnoreCase);
         }
 
         private void StartLockout(bool isCombinationLockout = true)
