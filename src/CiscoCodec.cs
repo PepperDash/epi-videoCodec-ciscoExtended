@@ -2130,6 +2130,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
+
+				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
+				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
+				// being accumulated. If one of these echoes lands in the middle of the JSON stream,
+				// it corrupts the buffered message and causes a JSON parse error. Rather than trying
+				// to enumerate every possible echoed command prefix, only accept lines that actually
+				// look like JSON content (i.e. start with an object/array delimiter or quoted
+				// property/string) and drop anything else as stray echoed text.
+				var trimmedLine = response.Trim();
+				if (
+					trimmedLine.Length > 0
+					&& trimmedLine[0] != '{'
+					&& trimmedLine[0] != '}'
+					&& trimmedLine[0] != '['
+					&& trimmedLine[0] != ']'
+					&& trimmedLine[0] != '"'
+				)
+				{
+					this.LogDebug("Ignoring non-JSON line embedded in JSON stream: {line}", response);
+					return;
+				}
+
 				_jsonMessage.Append(response);
 			}
 			catch (Exception ex)
