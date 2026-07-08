@@ -644,6 +644,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private bool _jsonFeedbackMessageIsIncoming;
 
+		/// <summary>
+		/// True while a JSON response from the codec is currently being accumulated. Used to hold
+		/// off sending queued commands, since sending a command while a response is mid-stream can
+		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
+		/// </summary>
+		public bool IsReceivingJsonMessage
+		{
+			get { return _jsonFeedbackMessageIsIncoming; }
+		}
+
 		public bool CommDebuggingIsOn;
 
 		internal const string Delimiter = "\r\n";
