@@ -4180,7 +4180,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				"CallHistoryRecentsResult",
 				codecCallHistory
 			);
-			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
+
+			if (string.Equals(codecCallHistory.status, "Error", StringComparison.OrdinalIgnoreCase))
+			{
+				var reasonToken = callHistoryResponseToken.SelectToken(
+					"CallHistoryRecentsResult.Reason.Value"
+				);
+				this.LogError(
+					"Error in CallHistoryRecentsResult response: {reason}",
+					reasonToken != null ? reasonToken.ToString() : "Unknown"
+				);
+				return;
+			}
+
+			CallHistory.ConvertCiscoCallHistoryToGeneric(
+				codecCallHistory.Entry ?? new List<CiscoCallHistory.Entry>()
+			);
 		}
 
 		private void ParsePhonebookSearchResultResponse(
