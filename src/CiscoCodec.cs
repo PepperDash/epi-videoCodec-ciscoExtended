@@ -558,6 +558,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+		// "ghost": "True" to indicate that item has been removed/is no longer available. Ghost
+		// entries only carry an "id" (and the ghost flag) - none of the item's normal data - so
+		// callers should skip/remove them rather than treat them as incomplete data.
+		private static bool IsGhostItem(JObject item)
+		{
+			var ghostToken = CheckJTokenInObject(item, "ghost");
+			return ghostToken != null && bool.Parse(ghostToken.ToString());
+		}
+
 		private bool FirmwareCompare(Version ver)
 		{
 			if (CodecFirmware == null)
@@ -2260,9 +2270,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (!(layout is JArray layoutArray))
 				return;
+
+			// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+			// "ghost": "True" to indicate that item has been removed/is no longer available -
+			// these entries only carry an "id" (and the ghost flag), with none of the item's
+			// normal data, so they must be skipped rather than treated as incomplete data.
 			var layoutData = (
 				from o in layoutArray.Children<JObject>()
-				select o.SelectToken("LayoutName.Value").ToString() into name
+				where !IsGhostItem(o)
+				select o.SelectToken("LayoutName.Value")?.ToString() into name
 				where !string.IsNullOrEmpty(name)
 				select new CodecCommandWithLabel(name, name)
 			).ToList();
@@ -2951,8 +2967,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var callId = callIdToken.ToString();
 
-					var callGhostToken = CheckJTokenInObject(item, "ghost");
-					var callGhost = callGhostToken != null && bool.Parse(callGhostToken.ToString());
+					var callGhost = IsGhostItem(item);
 
 					if (!callGhost)
 					{
