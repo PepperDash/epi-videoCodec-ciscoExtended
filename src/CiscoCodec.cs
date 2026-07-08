@@ -2133,32 +2133,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
 				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
-				// being accumulated. If one of these echoes lands in the middle of the JSON stream,
-				// it corrupts the buffered message and causes a JSON parse error. Rather than trying
-				// to enumerate every possible echoed command prefix, only accept lines that actually
-				// look like JSON content (i.e. start with an object/array delimiter or quoted
-				// property/string) and drop anything else as stray echoed text.
-				var trimmedLine = response.Trim();
-				if (
-					trimmedLine.Length > 0
-					&& trimmedLine[0] != '{'
-					&& trimmedLine[0] != '}'
-					&& trimmedLine[0] != '['
-					&& trimmedLine[0] != ']'
-					&& trimmedLine[0] != '"'
-				)
+				// being accumulated. These echoes can appear anywhere within a received line - before,
+				// after, or straddling legitimate JSON content on the same line (e.g. the terminal can
+				// wrap a long JSON line so an echo ends up prepended or appended to real JSON text on
+				// what the transport treats as a single "line") - so rather than accepting or rejecting
+				// the whole line, strip out just the echoed command substring(s) and keep any
+				// legitimate JSON content that surrounds them.
+				var sanitizedResponse = EchoedCommandPattern.Replace(response, string.Empty);
+				if (sanitizedResponse != response)
 				{
-					this.LogDebug("Ignoring non-JSON line embedded in JSON stream: {line}", response);
-					return;
+					this.LogDebug("Stripped echoed command text embedded in JSON stream: {line}", response);
 				}
 
-				_jsonMessage.Append(response);
+				_jsonMessage.Append(sanitizedResponse);
 			}
 			catch (Exception ex)
 			{
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
 			}
 		}
+
+		// Matches an echoed xAPI command keyword and any following text up to the next JSON
+		// structural character ({, }, [, ], "), so only the echoed command text is stripped and
+		// any legitimate JSON content before/after it on the same line is preserved.
+		private static readonly Regex EchoedCommandPattern = new Regex(
+			@"x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*",
+			RegexOptions.IgnoreCase
+		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
 
