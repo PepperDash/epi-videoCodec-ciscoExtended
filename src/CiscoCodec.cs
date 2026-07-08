@@ -2085,7 +2085,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						//SendText("echo off");
+						// Disable the SSH console's command echo so in-flight commands are no longer
+						// echoed back into the response stream, which was corrupting JSON messages
+						// that happened to be accumulating at the same time.
+						SendTextWithoutQueue("echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
@@ -2101,10 +2104,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							// SendText("xStatus Call");
 							SendTextWithoutQueue("xStatus");
 						}
-					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
 					}
 				}
 
@@ -3847,6 +3846,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+
+			// With console echo disabled, the codec no longer echoes the feedback registration
+			// commands back on the session, so there's no echoed text left to detect completion
+			// with. Mark registration complete immediately after sending instead.
+			SyncState.FeedbackRegistered();
 		}
 
 		private void ParseMainSourceToken(JToken mainSourceToken)
