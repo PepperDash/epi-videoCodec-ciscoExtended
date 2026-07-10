@@ -27,6 +27,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private readonly Dictionary<string, CameraMigrationState> activeMigrations = new Dictionary<string, CameraMigrationState>();
         private readonly object activeMigrationsLock = new object();
 
+        // In-flight dynamic camera ID reservations. Between the moment we issue an
+        // AssignedSerialNumber to a codec and the moment the codec reports it back in its Cameras
+        // collection, the confirmed state does not yet reflect the assignment. Without tracking
+        // these pending allocations, two dynamic cameras assigned to the same codec in quick
+        // succession could both be handed the same free id — a duplicate write. On a Cisco codec
+        // AssignedSerialNumber is a single-value-per-slot config, so a duplicate write overwrites
+        // the first serial, orphaning that camera and letting the codec auto-detect it onto an
+        // arbitrary slot (possibly outside the [7,8,9] pool). These reservations close that window.
+        // Keyed by codec key -> (camera key -> reservation). Guarded by activeMigrationsLock.
+        private readonly Dictionary<string, Dictionary<string, CameraIdReservation>> pendingCameraIdReservations = new Dictionary<string, Dictionary<string, CameraIdReservation>>();
+        private static readonly TimeSpan CameraIdReservationTtl = TimeSpan.FromSeconds(30);
+
         // Cumulative attach-timeout count per camera, preserved across the reseed→fresh-cascade
         // retry loop (the migration state is recreated each cycle, so the count must live here).
         // Used for log visibility only; it does not change recovery behavior. Cleared on a
@@ -300,6 +312,51 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 managedCameras.Add(cameraKey, cameraDevice);
             }
 
+            // Late validation (needs resolved camera devices for DefaultCameraId). For each scenario:
+            //  - a single camera must not appear under more than one codec (a physical camera can
+            //    only attach to one codec at a time);
+            //  - within a codec, effective ids (explicit scenario id ?? camera.DefaultCameraId) must
+            //    be unique so two cameras never collide on the same slot;
+            //  - an explicit scenario id must be non-zero.
+            foreach (var scenario in config.RoomCombinerConfig.CombineScenarios)
+            {
+                var cameraToCodec = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var codecConfig in scenario.Value.CodecConfigs)
+                {
+                    var effectiveIdOwners = new Dictionary<uint, string>();
+                    foreach (var assignment in codecConfig.CameraAssignments)
+                    {
+                        var cameraKey = assignment.CameraKey;
+
+                        if (assignment.CameraId.HasValue && assignment.CameraId.Value == 0)
+                        {
+                            this.LogError($"Camera Manager {Key} failed to activate: scenario '{scenario.Key}' codec '{codecConfig.CodecKey}' camera '{cameraKey}' has an invalid cameraId of 0");
+                            return false;
+                        }
+
+                        if (cameraToCodec.TryGetValue(cameraKey, out var otherCodecKey))
+                        {
+                            this.LogError($"Camera Manager {Key} failed to activate: scenario '{scenario.Key}' assigns camera '{cameraKey}' to both codec '{otherCodecKey}' and codec '{codecConfig.CodecKey}'. A camera can only be assigned to one codec per scenario.");
+                            return false;
+                        }
+                        cameraToCodec[cameraKey] = codecConfig.CodecKey;
+
+                        if (!managedCameras.TryGetValue(cameraKey, out var cam))
+                        {
+                            continue;
+                        }
+
+                        var effectiveId = assignment.CameraId ?? cam.DefaultCameraId;
+                        if (effectiveIdOwners.TryGetValue(effectiveId, out var otherCameraKey))
+                        {
+                            this.LogError($"Camera Manager {Key} failed to activate: scenario '{scenario.Key}' codec '{codecConfig.CodecKey}' assigns effective cameraId {effectiveId} to both '{otherCameraKey}' and '{cameraKey}' (explicit id or defaultCameraId collision).");
+                            return false;
+                        }
+                        effectiveIdOwners[effectiveId] = cameraKey;
+                    }
+                }
+            }
+
             foreach (var kvp in managedCodecs)
             {
                 var codec = kvp.Value;
@@ -491,7 +548,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SERIAL_ASSIGN camera='{cameraKey}' targetCodec='{targetCodecKey}' slot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' port='{port}' reason='{reason}'");
-            targetCodec.SetCameraAssignedSerialNumber(camera.DefaultCameraId, camera.SerialNumber);
+            var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
+            camera.SetScenarioCameraId(explicitSlot);
+            var targetSlot = explicitSlot ?? camera.DefaultCameraId;
+            targetCodec.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
         }
 
         /// <summary>
@@ -1346,6 +1406,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             continue;
                         }
 
+                        // Apply the per-scenario camera id (pin on explicit id, reset to default on
+                        // none) so no pin leaks between scenarios and self-heal targets the same slot.
+                        camera.SetScenarioCameraId(codecConfig.GetConfiguredCameraId(cameraKey));
+
                         var currentParentCodecKey = camera.ParentCodec?.Key;
                         if (string.IsNullOrEmpty(currentParentCodecKey))
                         {
@@ -1648,7 +1712,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             // Camera is on the correct codec — proceed with normal setup.
-            // Clear stale serial assignments on any slot that isn't the configured DefaultCameraId.
+            // Resolve the slot this camera should occupy on this codec for the current scenario: an
+            // explicit per-scenario cameraId wins; otherwise fall back to the existing effective-id
+            // logic. Pin/reset the camera object first so self-heal enforces the SAME slot (single
+            // source of truth, loop-safe) and SourceId is mirrored when an explicit id is present.
+            var explicitScenarioId = GetScenarioConfiguredCameraId(currentScenario?.Key, codec?.Key, camera.Key);
+            camera.SetScenarioCameraId(explicitScenarioId);
+            var targetSlot = explicitScenarioId ?? GetEffectiveCameraId(camera, codec);
+
+            // Clear stale serial assignments on any slot that isn't the resolved target slot.
             // Two sources of stale slots:
             //   1. matchingCameras: the codec's local CiscoCamera collection (synced via Path B)
             //   2. e.CameraId from the event itself, when the codec attached the camera at a slot
@@ -1671,29 +1743,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
                 foreach (var matchingCamera in matchingCameras)
                 {
-                    if (matchingCamera.CameraId != camera.DefaultCameraId)
+                    if (matchingCamera.CameraId != targetSlot)
                     {
                         slotsToClear.Add(matchingCamera.CameraId);
                     }
                 }
             }
-            if (e.CameraId != camera.DefaultCameraId)
+            if (e.CameraId != targetSlot)
             {
                 slotsToClear.Add(e.CameraId);
             }
             foreach (var staleSlot in slotsToClear)
             {
-                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_CLEAR camera='{camera.Key}' codec='{codec?.Key}' staleSlot='{staleSlot}' configuredSlot='{camera.DefaultCameraId}' serial='{e.SerialNumber}'");
+                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_CLEAR camera='{camera.Key}' codec='{codec?.Key}' staleSlot='{staleSlot}' configuredSlot='{targetSlot}' serial='{e.SerialNumber}'");
                 codec.ClearCameraAssignedSerialNumber(staleSlot);
-                this.LogDebug($"Camera Manager {Key} clearing stale serial assignment for camera '{camera.Key}' on codec '{codec?.Key}' slot {staleSlot} (configured slot is {camera.DefaultCameraId})");
+                this.LogDebug($"Camera Manager {Key} clearing stale serial assignment for camera '{camera.Key}' on codec '{codec?.Key}' slot {staleSlot} (configured slot is {targetSlot})");
             }
 
             var codecCameraReset = sender as ICiscoCodecCameraFactoryReset;
             if (codecCameraReset != null)
             {
-                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_ASSIGN camera='{camera.Key}' codec='{codec?.Key}' configuredSlot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' attachedSlot='{e.CameraId}'");
-                this.LogDebug($"Camera Manager {Key} assigning serial '{camera.SerialNumber}' to configured slot {camera.DefaultCameraId} on codec '{codec?.Key}' for camera '{camera.Key}'");
-                codecCameraReset.SetCameraAssignedSerialNumber(camera.DefaultCameraId, camera.SerialNumber);
+                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_ASSIGN camera='{camera.Key}' codec='{codec?.Key}' effectiveSlot='{targetSlot}' configuredSlot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' attachedSlot='{e.CameraId}'");
+                this.LogDebug($"Camera Manager {Key} assigning serial '{camera.SerialNumber}' to slot {targetSlot} on codec '{codec?.Key}' for camera '{camera.Key}'");
+                codecCameraReset.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
             }
             else
             {
@@ -1819,6 +1891,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             return codecConfig?.CodecKey;
         }
 
+        /// <summary>
+        /// Returns the explicitly configured camera id (slot) for a camera on a given codec in a
+        /// given scenario, or null when the camera was declared without an explicit id (string form)
+        /// or is not present under that codec in that scenario. Null means "use the camera's
+        /// defaultCameraId / existing effective-id logic" (today's behavior).
+        /// </summary>
+        private uint? GetScenarioConfiguredCameraId(string scenarioKey, string targetCodecKey, string cameraKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey) || string.IsNullOrEmpty(targetCodecKey) || string.IsNullOrEmpty(cameraKey))
+            {
+                return null;
+            }
+
+            if (config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return null;
+            }
+
+            var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CodecKey == targetCodecKey);
+            return codecConfig?.GetConfiguredCameraId(cameraKey);
+        }
+
         private string BuildManagedCameraSnapshot(string cameraKey)
         {
             if (!managedCameras.TryGetValue(cameraKey, out var camera))
@@ -1861,6 +1957,81 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 var serial = string.IsNullOrWhiteSpace(c.SerialNumber) ? "empty" : c.SerialNumber;
                 return $"{c.CameraId}:{serial}";
             }));
+        }
+
+        private uint GetEffectiveCameraId(CiscoCamera camera, CiscoCodec targetCodec)
+        {
+            if (camera == null || targetCodec == null)
+            {
+                return camera?.DefaultCameraId ?? 7;
+            }
+
+            // If camera requires maintaining its configured ID, use it directly
+            if (camera.MaintainConfiguredCameraId)
+            {
+                return camera.DefaultCameraId;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                var now = DateTime.UtcNow;
+
+                // Confirmed assignments the codec has already reported back in its Cameras collection.
+                var usedIds = new HashSet<uint>(
+                    targetCodec.Cameras?.OfType<CiscoCamera>()
+                        .Where(c => !string.IsNullOrEmpty(c.SerialNumber))
+                        .Select(c => c.CameraId) ?? Enumerable.Empty<uint>());
+
+                // This camera can only occupy one codec at a time, so drop any reservation it holds
+                // anywhere (a re-decision on this codec, or a leftover from a codec it left). Also
+                // expire stale reservations so migrations/missed feedback can never leak an id.
+                foreach (var codecReservations in pendingCameraIdReservations.Values)
+                {
+                    codecReservations.Remove(camera.Key);
+                    var expired = codecReservations
+                        .Where(kv => (now - kv.Value.ReservedUtc) > CameraIdReservationTtl)
+                        .Select(kv => kv.Key)
+                        .ToList();
+                    foreach (var staleKey in expired)
+                    {
+                        codecReservations.Remove(staleKey);
+                    }
+                }
+
+                if (!pendingCameraIdReservations.TryGetValue(targetCodec.Key, out var reservations))
+                {
+                    reservations = new Dictionary<string, CameraIdReservation>();
+                    pendingCameraIdReservations[targetCodec.Key] = reservations;
+                }
+
+                // Include still-outstanding reservations from OTHER cameras targeting this codec so
+                // two in-flight allocations can never collide on the same id.
+                foreach (var reservation in reservations.Values)
+                {
+                    usedIds.Add(reservation.CameraId);
+                }
+
+                // Try to find an available ID from the pool [7, 8, 9]
+                foreach (var id in new[] { 7u, 8u, 9u })
+                {
+                    if (!usedIds.Contains(id))
+                    {
+                        reservations[camera.Key] = new CameraIdReservation { CameraId = id, ReservedUtc = now };
+                        this.LogDebug($"Camera Manager {Key} allocating dynamic camera ID {id} to camera '{camera.Key}' on codec '{targetCodec.Key}' (pool=[7,8,9], in-use={string.Join(",", usedIds.OrderBy(x => x))})");
+                        return id;
+                    }
+                }
+
+                // All IDs in pool are in use; fall back to default (and log a warning)
+                this.LogWarning($"Camera Manager {Key} could not find available ID in pool [7,8,9] for camera '{camera.Key}' on codec '{targetCodec.Key}' (all in use: {string.Join(",", usedIds.OrderBy(x => x))}), falling back to default {camera.DefaultCameraId}");
+                return camera.DefaultCameraId;
+            }
+        }
+
+        private class CameraIdReservation
+        {
+            public uint CameraId { get; set; }
+            public DateTime ReservedUtc { get; set; }
         }
 
         private class CameraMigrationState

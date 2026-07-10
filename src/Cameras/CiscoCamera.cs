@@ -29,7 +29,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         public uint DefaultCameraId { get; private set; }
 
-        private bool maintainConfiguredCameraId = false;
+        /// <summary>
+        /// The maintain-configured-camera-id value as declared in config. Immutable after
+        /// construction. <see cref="effectiveMaintain"/> is what the self-heal logic actually reads;
+        /// it starts equal to this value and is temporarily forced on while a scenario pins an
+        /// explicit camera id, then restored to this baseline when no scenario id applies.
+        /// </summary>
+        private readonly bool configMaintainCameraId = false;
+
+        /// <summary>
+        /// Whether this camera maintains its configured camera id (slot) as declared in config.
+        /// Read by the CameraManager's effective-id fallback. Reflects the immutable config value;
+        /// per-scenario pinning is handled separately via <see cref="SetScenarioCameraId"/>.
+        /// </summary>
+        public bool MaintainConfiguredCameraId => configMaintainCameraId;
+
+        /// <summary>
+        /// The live maintain flag used by <see cref="SetCameraId"/> self-heal. Equals
+        /// <see cref="configMaintainCameraId"/> unless a scenario is currently pinning an explicit
+        /// camera id (in which case it is forced true so the manager-chosen slot is enforced).
+        /// </summary>
+        private bool effectiveMaintain = false;
+
+        /// <summary>
+        /// The <see cref="SourceId"/> captured at construction. Restored when a scenario no longer
+        /// pins an explicit camera id, so a prior scenario's mirrored source id never leaks forward.
+        /// </summary>
+        private uint baselineSourceId;
 
         /// <summary>
         /// Optional property to specify the network switch port the camera is connected to.
@@ -86,6 +112,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             CameraId = id;
             DefaultCameraId = id;
             SourceId = id;
+            baselineSourceId = id;
 
             // Set default speeds
             PanSpeed = 7;
@@ -99,6 +126,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             : this(key, name, codec, id)
         {
             SourceId = sourceId;
+            baselineSourceId = sourceId;
         }
 
 
@@ -114,13 +142,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             SerialNumber = props.SerialNumber;
             MacAddress = props.MacAddress;
             NetworkSwitchPort = props.NetworkSwitchPort;
-            maintainConfiguredCameraId = props.MaintainConfiguredCameraId ?? false;
+            configMaintainCameraId = props.MaintainConfiguredCameraId ?? false;
+            effectiveMaintain = configMaintainCameraId;
 
             // Default to all capabilties
             Capabilities = eCameraCapabilities.Pan | eCameraCapabilities.Tilt | eCameraCapabilities.Zoom | eCameraCapabilities.Focus;
 
             CameraId = props.DefaultCameraId;
             DefaultCameraId = props.DefaultCameraId;
+            baselineSourceId = SourceId;
 
             SetupOutputPort();
 
@@ -145,7 +175,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         public void SetCameraId(uint id)
         {
-            if (!maintainConfiguredCameraId)
+            if (!effectiveMaintain)
             {
                 CameraId = id;
                 return;
@@ -179,6 +209,53 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
             ParentCodec.ClearCameraAssignedSerialNumber(id);
             ParentCodec.SetCameraAssignedSerialNumber(CameraId, SerialNumber);
+        }
+
+        /// <summary>
+        /// Applies (or clears) a per-scenario camera id override. Called by the CameraManager on
+        /// every scenario apply so state never leaks between scenarios:
+        /// <list type="bullet">
+        /// <item>When <paramref name="id"/> has a value, the camera is pinned to that slot
+        /// (<see cref="CameraId"/> = id), self-heal enforcement is forced on, and
+        /// <see cref="SourceId"/> is mirrored to the same id.</item>
+        /// <item>When <paramref name="id"/> is null, the camera is reset to its configured baseline
+        /// (<see cref="CameraId"/> = <see cref="DefaultCameraId"/>, maintain flag restored to the
+        /// config value, and <see cref="SourceId"/> restored to its construction-time value). This
+        /// makes a no-id scenario behave byte-for-byte like today.</item>
+        /// </list>
+        /// </summary>
+        /// <param name="id">Explicit scenario camera id, or null to use the configured default.</param>
+        public void SetScenarioCameraId(uint? id)
+        {
+            if (id.HasValue)
+            {
+                if (CameraId != id.Value)
+                {
+                    this.LogDebug("Camera {Key}: scenario pins camera id {scenarioId} (default {defaultId})", Key, id.Value, DefaultCameraId);
+                }
+                CameraId = id.Value;
+                effectiveMaintain = true;
+                SourceId = id.Value;
+            }
+            else
+            {
+                if (CameraId != DefaultCameraId)
+                {
+                    this.LogDebug("Camera {Key}: scenario has no camera id, resetting to default {defaultId}", Key, DefaultCameraId);
+                }
+                CameraId = DefaultCameraId;
+                effectiveMaintain = configMaintainCameraId;
+                SourceId = baselineSourceId;
+            }
+        }
+
+        /// <summary>
+        /// Sets the camera's video input source id (the codec video-input connector used by
+        /// SetMainVideoSource). Set-only; never used to determine camera placement.
+        /// </summary>
+        public void SetSourceId(uint sourceId)
+        {
+            SourceId = sourceId;
         }
 
         public void SetParentCodec(CiscoCodec codec)

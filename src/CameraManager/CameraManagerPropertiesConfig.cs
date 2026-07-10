@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
@@ -32,7 +35,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     ///           },
     ///           "abCombined": {
     ///             "codecConfigs": [
-    ///               { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"] },
+    ///               { "codecKey": "codecB", "cameraKeys": [{ "cameraKey": "cameraA", "cameraId": 7 }, { "cameraKey": "cameraB", "cameraId": 8 }] },
     ///               { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
     ///             ]
     ///           },
@@ -47,6 +50,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     ///     }
     ///   }
     /// </example>
+    /// <remarks>
+    /// Each element in a <c>cameraKeys</c> array may be either a plain string (camera key; the
+    /// camera's configured <c>defaultCameraId</c> is used) or an object
+    /// <c>{ "cameraKey": "...", "cameraId": N }</c> to pin that camera to a specific slot for that
+    /// scenario. The two forms may be mixed in the same array. Omitting a camera from a scenario
+    /// leaves that camera unmanaged for that scenario.
+    /// </remarks>
     public class CameraManagerPropertiesConfig
     {
 
@@ -163,9 +173,137 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public string CodecKey { get; set; }
 
         /// <summary>
-        /// Keys of the cameras that should be assigned to the codec in this combine scenario
+        /// Camera assignments for the codec in this combine scenario. Each element in the
+        /// <c>cameraKeys</c> JSON array may be either a plain string (camera key, use the camera's
+        /// configured <c>defaultCameraId</c>) or an object of the form
+        /// <c>{ "cameraKey": "cameraA", "cameraId": 7 }</c> to pin that camera to a specific slot
+        /// for this scenario. String and object forms may be mixed in the same array.
         /// </summary>
         [JsonProperty("cameraKeys")]
-        public List<string> CameraKeys { get; set; }
+        [JsonConverter(typeof(CameraAssignmentListConverter))]
+        public List<CameraManagerCameraAssignment> CameraAssignments { get; set; }
+
+        /// <summary>
+        /// Convenience view of the camera keys for this codec config (order preserved). Kept so
+        /// existing consumers that only need the keys continue to work unchanged.
+        /// </summary>
+        [JsonIgnore]
+        public List<string> CameraKeys
+        {
+            get
+            {
+                return CameraAssignments == null
+                    ? new List<string>()
+                    : CameraAssignments.Select(a => a.CameraKey).ToList();
+            }
+        }
+
+        /// <summary>
+        /// Returns the explicitly configured camera id (slot) for the given camera key in this
+        /// scenario, or null when the camera was declared without an explicit id (string form) or
+        /// is not present in this codec config. A null result means "use the camera's
+        /// defaultCameraId" (today's behavior).
+        /// </summary>
+        /// <param name="cameraKey">Camera device key (case-insensitive).</param>
+        public uint? GetConfiguredCameraId(string cameraKey)
+        {
+            if (CameraAssignments == null || string.IsNullOrEmpty(cameraKey))
+            {
+                return null;
+            }
+
+            var assignment = CameraAssignments.FirstOrDefault(a =>
+                a != null && string.Equals(a.CameraKey, cameraKey, StringComparison.OrdinalIgnoreCase));
+            return assignment?.CameraId;
+        }
+    }
+
+    /// <summary>
+    /// A single camera assignment within a codec config. Deserialized from either a plain string
+    /// (camera key only) or an object <c>{ "cameraKey": "...", "cameraId": N }</c> via
+    /// <see cref="CameraAssignmentConverter"/>.
+    /// </summary>
+    public class CameraManagerCameraAssignment
+    {
+        /// <summary>
+        /// Key of the camera to assign to the codec in this scenario.
+        /// </summary>
+        [JsonProperty("cameraKey")]
+        public string CameraKey { get; set; }
+
+        /// <summary>
+        /// Optional explicit camera id (slot) to pin this camera to for this scenario. When null,
+        /// the camera's configured <c>defaultCameraId</c> is used.
+        /// </summary>
+        [JsonProperty("cameraId")]
+        public uint? CameraId { get; set; }
+    }
+
+    /// <summary>
+    /// Converter for a <c>cameraKeys</c> array whose elements may be a mix of plain strings and
+    /// objects. A string element becomes a <see cref="CameraManagerCameraAssignment"/> with a null
+    /// <see cref="CameraManagerCameraAssignment.CameraId"/>; an object element
+    /// (<c>{ "cameraKey": "...", "cameraId": N }</c>) is parsed in full. Read-only
+    /// (serialization is not supported).
+    /// </summary>
+    public class CameraAssignmentListConverter : JsonConverter
+    {
+        /// <inheritdoc />
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType == typeof(List<CameraManagerCameraAssignment>);
+        }
+
+        /// <inheritdoc />
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Null)
+            {
+                return null;
+            }
+
+            if (reader.TokenType != JsonToken.StartArray)
+            {
+                throw new JsonSerializationException(
+                    $"Unexpected token {reader.TokenType} when parsing cameraKeys. Expected an array.");
+            }
+
+            var array = JArray.Load(reader);
+            var result = new List<CameraManagerCameraAssignment>();
+            foreach (var element in array)
+            {
+                switch (element.Type)
+                {
+                    case JTokenType.Null:
+                        break;
+                    case JTokenType.String:
+                        result.Add(new CameraManagerCameraAssignment { CameraKey = (string)element });
+                        break;
+                    case JTokenType.Object:
+                        var jo = (JObject)element;
+                        result.Add(new CameraManagerCameraAssignment
+                        {
+                            CameraKey = (string)jo["cameraKey"],
+                            CameraId = jo["cameraId"] != null && jo["cameraId"].Type != JTokenType.Null
+                                ? (uint?)jo["cameraId"].Value<uint>()
+                                : null
+                        });
+                        break;
+                    default:
+                        throw new JsonSerializationException(
+                            $"Unexpected token {element.Type} in cameraKeys. Expected a string or an object with 'cameraKey'.");
+                }
+            }
+            return result;
+        }
+
+        /// <inheritdoc />
+        public override bool CanWrite => false;
+
+        /// <inheritdoc />
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            throw new NotSupportedException("CameraAssignmentListConverter is read-only.");
+        }
     }
 }
