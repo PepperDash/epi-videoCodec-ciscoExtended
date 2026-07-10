@@ -439,6 +439,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         {
                             migration.PoeEnableIssued = true;
                             migration.AttachWaitStarted = true;
+                            migration.TargetSerialAssigned = false;
+                            migration.WaitingForTargetSlotClear = false;
+                            migration.ExpectedTargetSlot = 0;
                             migration.AttachWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
                             shouldStartAttachWait = true;
                             cameraKey = migration.CameraKey;
@@ -467,7 +470,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='True' poeEnabled='disabled'");
                     this.LogDebug($"Camera Manager {Key} PoE cycling disabled — VLAN changed for camera '{cameraKey}', advancing straight to attach wait without a PoE cycle on port '{e.Port}'");
-                    TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachWaitStartNoPoe");
+                    var assignResult = TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachWaitStartNoPoe", out var targetSlot, out var blockingCameraKey);
+                    lock (activeMigrationsLock)
+                    {
+                        if (activeMigrations.TryGetValue(cameraKey, out var migration) && migration.AttachWaitStarted)
+                        {
+                            migration.TargetSerialAssigned = assignResult == TargetSerialAssignResult.Assigned;
+                            migration.WaitingForTargetSlotClear = assignResult == TargetSerialAssignResult.SlotBusy;
+                            migration.ExpectedTargetSlot = targetSlot;
+                            migration.BlockedByCameraKey = blockingCameraKey;
+                        }
+                    }
                 }
             }
             else if (e.EventType == NetworkSwitchPortEventType.PoEEnabled)
@@ -501,6 +514,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     }
 
                     migration.AttachWaitStarted = true;
+                    migration.TargetSerialAssigned = false;
+                    migration.WaitingForTargetSlotClear = false;
+                    migration.ExpectedTargetSlot = 0;
                     migration.AttachWaitDeadlineUtc = DateTime.UtcNow.AddMilliseconds(AttachWaitTimeoutMs);
                     cameraKey = migration.CameraKey;
                     sourceCodecKey = migration.SourceCodecKey;
@@ -513,7 +529,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_WAITING camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' vlanChanged='{vlanChangedConfirmed}' poeEnabled='True'");
                 this.LogDebug($"Camera Manager {Key} confirmed migration sequence complete for camera '{cameraKey}' on port '{port}'");
 
-                TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachWaitStart");
+                var assignResult = TryAssignSerialToTargetCodec(cameraKey, targetCodecKey, port, "attachWaitStart", out var targetSlot, out var blockingCameraKey);
+                lock (activeMigrationsLock)
+                {
+                    if (activeMigrations.TryGetValue(cameraKey, out var migration) && migration.AttachWaitStarted)
+                    {
+                        migration.TargetSerialAssigned = assignResult == TargetSerialAssignResult.Assigned;
+                        migration.WaitingForTargetSlotClear = assignResult == TargetSerialAssignResult.SlotBusy;
+                        migration.ExpectedTargetSlot = targetSlot;
+                        migration.BlockedByCameraKey = blockingCameraKey;
+                    }
+                }
             }
         }
 
@@ -522,36 +548,112 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// target codec claims the camera as soon as it boots on the target VLAN. Without this, the
         /// camera reaches the target codec's network but the codec never reports it as connected.
         /// </summary>
-        private void TryAssignSerialToTargetCodec(string cameraKey, string targetCodecKey, string port, string reason)
+        private enum TargetSerialAssignResult
         {
+            Failed,
+            SlotBusy,
+            Assigned
+        }
+
+        private TargetSerialAssignResult TryAssignSerialToTargetCodec(string cameraKey, string targetCodecKey, string port, string reason, out uint targetSlot, out string blockingCameraKey)
+        {
+            targetSlot = 0;
+            blockingCameraKey = null;
+
             if (string.IsNullOrEmpty(cameraKey) || string.IsNullOrEmpty(targetCodecKey))
             {
-                return;
+                return TargetSerialAssignResult.Failed;
             }
 
             if (!managedCameras.TryGetValue(cameraKey, out var camera))
             {
                 this.LogDebug($"Camera Manager {Key} cannot assign serial to target codec '{targetCodecKey}' for camera '{cameraKey}': camera not found");
-                return;
+                return TargetSerialAssignResult.Failed;
             }
 
             if (string.IsNullOrWhiteSpace(camera.SerialNumber))
             {
                 this.LogDebug($"Camera Manager {Key} cannot assign serial to target codec '{targetCodecKey}' for camera '{cameraKey}': camera has no serial number");
-                return;
+                return TargetSerialAssignResult.Failed;
             }
 
             if (!managedCodecs.TryGetValue(targetCodecKey, out var targetCodec))
             {
                 this.LogError($"Camera Manager {Key} cannot assign serial to target codec for camera '{cameraKey}': target codec '{targetCodecKey}' not found");
+                return TargetSerialAssignResult.Failed;
+            }
+
+            var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
+            camera.SetScenarioCameraId(explicitSlot);
+            targetSlot = explicitSlot ?? camera.DefaultCameraId;
+            var resolvedTargetSlot = targetSlot;
+
+            var targetCodecAsCisco = targetCodec as CiscoCodec;
+            var conflictingCamera = targetCodecAsCisco?.Cameras?.OfType<CiscoCamera>()
+                .FirstOrDefault(c => c.CameraId == resolvedTargetSlot
+                    && !string.IsNullOrWhiteSpace(c.SerialNumber)
+                    && !string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase));
+
+            if (conflictingCamera != null)
+            {
+                blockingCameraKey = managedCameras.Values
+                    .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.SerialNumber)
+                        && string.Equals(c.SerialNumber, conflictingCamera.SerialNumber, StringComparison.OrdinalIgnoreCase))?.Key;
+                this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_BUSY camera='{cameraKey}' targetCodec='{targetCodecKey}' targetSlot='{targetSlot}' occupyingSerial='{conflictingCamera.SerialNumber}' reason='{reason}' action='waitForSlotClear' port='{port}'");
+                this.LogDebug($"Camera Manager {Key} delaying target serial assignment for camera '{cameraKey}' on codec '{targetCodecKey}' slot {targetSlot}: waiting for blocker camera activity to clear naturally (blockingCameraKey='{blockingCameraKey ?? "unknown"}')");
+                return TargetSerialAssignResult.SlotBusy;
+            }
+
+            this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SERIAL_ASSIGN camera='{cameraKey}' targetCodec='{targetCodecKey}' slot='{targetSlot}' serial='{camera.SerialNumber}' port='{port}' reason='{reason}'");
+            targetCodec.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
+            return TargetSerialAssignResult.Assigned;
+        }
+
+        private void TryAdvanceMigrationsWaitingForTargetSlotClear(string codecKey, string reason, string changedCameraKey = null)
+        {
+            if (string.IsNullOrWhiteSpace(codecKey))
+            {
                 return;
             }
 
-            this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SERIAL_ASSIGN camera='{cameraKey}' targetCodec='{targetCodecKey}' slot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' port='{port}' reason='{reason}'");
-            var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
-            camera.SetScenarioCameraId(explicitSlot);
-            var targetSlot = explicitSlot ?? camera.DefaultCameraId;
-            targetCodec.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
+            List<CameraMigrationState> waiting;
+            lock (activeMigrationsLock)
+            {
+                waiting = activeMigrations.Values
+                    .Where(m => m.AttachWaitStarted
+                        && !m.TargetSerialAssigned
+                        && m.WaitingForTargetSlotClear
+                        && string.Equals(m.TargetCodecKey, codecKey, StringComparison.OrdinalIgnoreCase)
+                        && (string.IsNullOrWhiteSpace(changedCameraKey)
+                            || string.Equals(m.BlockedByCameraKey, changedCameraKey, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            foreach (var migration in waiting)
+            {
+                var assignResult = TryAssignSerialToTargetCodec(
+                    migration.CameraKey,
+                    migration.TargetCodecKey,
+                    migration.Port,
+                    reason,
+                    out var targetSlot,
+                    out var blockingCameraKey);
+
+                lock (activeMigrationsLock)
+                {
+                    if (!activeMigrations.TryGetValue(migration.CameraKey, out var current)
+                        || !ReferenceEquals(current, migration)
+                        || !current.AttachWaitStarted)
+                    {
+                        continue;
+                    }
+
+                    current.TargetSerialAssigned = assignResult == TargetSerialAssignResult.Assigned;
+                    current.WaitingForTargetSlotClear = assignResult == TargetSerialAssignResult.SlotBusy;
+                    current.ExpectedTargetSlot = targetSlot;
+                    current.BlockedByCameraKey = blockingCameraKey;
+                }
+            }
         }
 
         /// <summary>
@@ -1029,7 +1131,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             {
                                 reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
                             }
-                            TryStartMigration(camera, sourceCiscoCodec, camera.CameraId, targetCodecKey, currentScenario.Key);
+                            // Resolve the live source slot by serial so the reset/clear hit the
+                            // physical slot, and align the camera pin to it (never the target) while
+                            // it is still on the source codec.
+                            if (TryResolveOnlineSourceSlot(sourceCiscoCodec, camera, out var actualSourceSlot))
+                            {
+                                camera.SetScenarioCameraId(actualSourceSlot);
+                                TryStartMigration(camera, sourceCiscoCodec, actualSourceSlot, targetCodecKey, currentScenario.Key);
+                            }
+                            else
+                            {
+                                this.LogDebug($"Camera Manager {Key} reconcile deferring migration for camera '{cameraKey}': could not resolve live source slot on codec '{currentCodecKey}'");
+                            }
                         }
                         else
                         {
@@ -1261,6 +1374,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             return null;
         }
 
+        /// <summary>
+        /// Resolves the live slot (CameraId) that the given managed camera currently occupies on the
+        /// specified source codec, matched by serial number and confirmed online. Returns false when
+        /// the camera cannot be found online on that codec, so callers never issue a factory reset or
+        /// serial clear against a guessed/stale slot.
+        /// </summary>
+        private bool TryResolveOnlineSourceSlot(CiscoCodec sourceCodec, CiscoCamera camera, out uint sourceSlot)
+        {
+            sourceSlot = 0;
+            if (sourceCodec == null || camera == null || string.IsNullOrWhiteSpace(camera.SerialNumber))
+            {
+                return false;
+            }
+
+            var match = sourceCodec.Cameras?.OfType<CiscoCamera>()
+                .FirstOrDefault(c => c.IsOnline
+                    && !string.IsNullOrEmpty(c.SerialNumber)
+                    && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase));
+            if (match == null)
+            {
+                return false;
+            }
+
+            sourceSlot = match.CameraId;
+            return true;
+        }
+
         private void RoomCombiner_RoomCombinationScenarioChanged(object sender, EventArgs e)
         {
             var currentScenario = roomCombiner.CurrentScenario;
@@ -1406,10 +1546,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             continue;
                         }
 
-                        // Apply the per-scenario camera id (pin on explicit id, reset to default on
-                        // none) so no pin leaks between scenarios and self-heal targets the same slot.
-                        camera.SetScenarioCameraId(codecConfig.GetConfiguredCameraId(cameraKey));
-
                         var currentParentCodecKey = camera.ParentCodec?.Key;
                         if (string.IsNullOrEmpty(currentParentCodecKey))
                         {
@@ -1419,6 +1555,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                         if (string.Equals(currentParentCodecKey, codecConfig.CodecKey, StringComparison.Ordinal))
                         {
+                            // Already on the target codec: safe to pin the target slot now so
+                            // self-heal enforces exactly the slot the manager wants. Pinning is only
+                            // ever applied once the camera is physically on the codec that owns the slot.
+                            camera.SetScenarioCameraId(codecConfig.GetConfiguredCameraId(cameraKey));
                             this.LogDebug($"Camera Manager {Key} skipping factory reset for camera '{cameraKey}' because it is already assigned to target codec '{codecConfig.CodecKey}' for scenario '{scenarioKey}'");
                             continue;
                         }
@@ -1442,11 +1582,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             continue;
                         }
 
+                        // Resolve the REAL slot the camera occupies on the source codec (by serial),
+                        // so the factory reset + serial clear target the physical source slot and
+                        // never a stale or target-pinned CameraId. Do NOT pin the target slot here:
+                        // pinning the target while the camera is still on the source makes self-heal
+                        // rewrite the source codec and corrupts the migration. The target slot is
+                        // pinned only when the camera attaches to the target codec.
+                        if (!TryResolveOnlineSourceSlot(sourceCiscoCodec, camera, out var actualSourceSlot))
+                        {
+                            this.LogDebug($"Camera Manager {Key} skipping factory reset for camera '{cameraKey}': could not resolve its live source slot on codec '{currentParentCodecKey}' — deferring");
+                            continue;
+                        }
+
+                        // Keep the camera object aligned to its actual source slot so source-side
+                        // self-heal stays a no-op for the duration of the migration.
+                        camera.SetScenarioCameraId(actualSourceSlot);
+
                         // Camera is confirmed online on the wrong (source) codec. Start the full
                         // migration cascade: factory reset → (500ms) → PoE off → clear serial → VLAN →
                         // PoE on → attach wait + auto-recovery + target-serial-assign.
-                        this.LogDebug($"Camera Manager {Key} confirmed camera '{cameraKey}' online on source codec '{currentParentCodecKey}' — starting migration to '{codecConfig.CodecKey}' for scenario '{scenarioKey}'");
-                        TryStartMigration(camera, sourceCiscoCodec, camera.CameraId, codecConfig.CodecKey, scenarioKey);
+                        this.LogDebug($"Camera Manager {Key} confirmed camera '{cameraKey}' online on source codec '{currentParentCodecKey}' slot {actualSourceSlot} — starting migration to '{codecConfig.CodecKey}' for scenario '{scenarioKey}'");
+                        TryStartMigration(camera, sourceCiscoCodec, actualSourceSlot, codecConfig.CodecKey, scenarioKey);
                     }
                 }
             }
@@ -1465,6 +1621,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             var codec = sender as CiscoCodec;
+
+            // Confirmation-driven target slot gating: when a codec confirms a slot's assigned serial
+            // has been cleared, any migration waiting for that exact target slot may proceed.
+            List<CameraMigrationState> waitingForTargetSlotClear;
+            lock (activeMigrationsLock)
+            {
+                waitingForTargetSlotClear = activeMigrations.Values
+                    .Where(m => m.AttachWaitStarted
+                        && !m.TargetSerialAssigned
+                        && m.WaitingForTargetSlotClear
+                        && string.Equals(m.TargetCodecKey, codec?.Key, StringComparison.OrdinalIgnoreCase)
+                        && m.ExpectedTargetSlot == e.CameraId)
+                    .ToList();
+            }
+
+            foreach (var pendingMigration in waitingForTargetSlotClear)
+            {
+                var assignResult = TryAssignSerialToTargetCodec(
+                    pendingMigration.CameraKey,
+                    pendingMigration.TargetCodecKey,
+                    pendingMigration.Port,
+                    "targetSlotClearConfirmed",
+                    out var targetSlot,
+                    out var blockingCameraKey);
+
+                lock (activeMigrationsLock)
+                {
+                    if (!activeMigrations.TryGetValue(pendingMigration.CameraKey, out var current)
+                        || !ReferenceEquals(current, pendingMigration)
+                        || !current.AttachWaitStarted)
+                    {
+                        continue;
+                    }
+
+                    current.TargetSerialAssigned = assignResult == TargetSerialAssignResult.Assigned;
+                    current.WaitingForTargetSlotClear = assignResult == TargetSerialAssignResult.SlotBusy;
+                    current.ExpectedTargetSlot = targetSlot;
+                    current.BlockedByCameraKey = blockingCameraKey;
+                }
+            }
+
             CameraMigrationState migration;
             lock (activeMigrationsLock)
             {
@@ -1512,6 +1709,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogDebug($"Camera Manager {Key} received CameraDisconnected event from codec {codec?.Key} for camera ID {e.CameraId} / serial {e.SerialNumber} but no managed camera was resolved");
                 return;
             }
+
+            // A disconnect from a blocker camera can unblock a waiting target-slot assignment.
+            TryAdvanceMigrationsWaitingForTargetSlotClear(codec?.Key, "blockerCameraDisconnected", camera.Key);
 
             // Factory-reset settle via disconnect feedback: if a migration for this camera is
             // waiting for the source codec to report it dropped (the factory reset taking effect),
@@ -1636,6 +1836,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogDebug($"Camera Manager {Key} received CameraConnected event from codec {codec?.Key} for camera ID {e.CameraId} / serial {e.SerialNumber} but no managed camera was resolved");
                 return;
             }
+
+            // A connect from a blocker camera often means its migration progressed and target slot
+            // ownership changed. Re-check any migrations blocked on this camera's prior slot.
+            TryAdvanceMigrationsWaitingForTargetSlotClear(codec?.Key, "blockerCameraConnected", camera.Key);
 
             // Any managed camera coming online is a good moment to re-apply the current room
             // combination intent. This makes post-recovery behavior deterministic even when the
@@ -2050,6 +2254,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public DateTime PoeOffDeadlineUtc { get; set; }
             public bool PoeOffSafeguardTriggered { get; set; }
             public bool AttachWaitStarted { get; set; }
+            public bool TargetSerialAssigned { get; set; }
+            public bool WaitingForTargetSlotClear { get; set; }
+            public uint ExpectedTargetSlot { get; set; }
+            public string BlockedByCameraKey { get; set; }
             public DateTime AttachWaitDeadlineUtc { get; set; }
             public DateTime PoeReenableDeadlineUtc { get; set; }
             public bool WaitingForSourceDisconnect { get; set; }
