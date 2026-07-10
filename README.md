@@ -501,6 +501,31 @@ In order for this functionality to work, each codec config must specify a `vlanI
 
 ```
 
+### Per-scenario camera IDs
+
+Each entry in a `cameraKeys` array may be either a plain **string** (the camera key) or an **object** that pins the camera to a specific codec slot for that scenario:
+
+```json
+{
+  "codecKey": "codecB",
+  "cameraKeys": [
+    { "cameraKey": "cameraA", "cameraId": 7 },
+    { "cameraKey": "cameraB", "cameraId": 8 },
+    "cameraC"
+  ]
+}
+```
+
+- A **string** entry uses the camera's configured `defaultCameraId` (existing behavior — fully backward compatible; string-only configs behave exactly as before).
+- An **object** entry (`{ "cameraKey": "...", "cameraId": N }`) pins that camera to slot `N` on the codec for that scenario. The scenario id takes precedence over the camera's `defaultCameraId`.
+- The two forms may be mixed freely in the same array. A camera omitted from a scenario is left unmanaged for that scenario.
+
+This makes it possible to give a camera different slots in different scenarios — for example, "parking" a camera that isn't in use on an idle codec at a spare slot while it is combined, then returning it to its normal slot when divided.
+
+Activation validation rejects configurations that would collide: a camera assigned to two codecs in the same scenario, two cameras resolving to the same effective slot on one codec (explicit id or `defaultCameraId`), or an explicit `cameraId` of 0.
+
+When a scenario change requires a camera to move to a codec **and** land on a different slot than it currently occupies, the manager first migrates it to a neutral staging slot (15) on the target codec, then switches it to the expected slot once it is confirmed stable there. This avoids briefly binding the camera to its target slot while it is still on the source codec, which could collide with another camera that legitimately owns that slot on the source and stall the migration.
+
 ### Migration behavior and recovery
 
 When the room combination scenario changes, the `CameraManager` moves each affected camera to the codec that owns it in the new scenario. A migration is only ever started after the camera is **confirmed online** on its current (wrong) codec, then runs a feedback-driven cascade: factory-reset the camera on the source codec → disable PoE and clear the source codec's assigned serial → switch the switch port to the target codec's VLAN → re-enable PoE → wait for the target codec to report the camera attached.

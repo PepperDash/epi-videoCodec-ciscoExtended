@@ -111,6 +111,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
 
+        // Neutral "staging" camera slot used during a migration when the camera's expected slot on
+        // the target codec differs from the slot it currently occupies. The camera is first moved to
+        // this slot on the target (no real camera uses it, so it never collides on either codec),
+        // then switched to its expected slot once it is confirmed stable on the target. This avoids
+        // pinning the expected slot while the camera is still on the source codec, which can make the
+        // source codec bind this camera to a slot another camera legitimately owns there and stall
+        // the migration.
+        private const uint StagingCameraId = 15;
+
         public CameraManager(string key, string name, CameraManagerPropertiesConfig config)
             : base(key, name)
         {
@@ -548,9 +557,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SERIAL_ASSIGN camera='{cameraKey}' targetCodec='{targetCodecKey}' slot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' port='{port}' reason='{reason}'");
-            var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
-            camera.SetScenarioCameraId(explicitSlot);
-            var targetSlot = explicitSlot ?? camera.DefaultCameraId;
+            // If this migration is staging the camera, assign the serial to the neutral staging slot
+            // (the camera is already pinned to it); the arrival "correct codec" path re-slots it to
+            // the expected id once stable. Otherwise assign to the resolved scenario/default slot.
+            bool migrationStaged;
+            lock (activeMigrationsLock)
+            {
+                migrationStaged = activeMigrations.TryGetValue(cameraKey, out var activeMigration) && activeMigration.UsesStaging;
+            }
+            uint targetSlot;
+            if (migrationStaged)
+            {
+                targetSlot = StagingCameraId;
+            }
+            else
+            {
+                var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
+                camera.SetScenarioCameraId(explicitSlot);
+                targetSlot = explicitSlot ?? camera.DefaultCameraId;
+            }
             targetCodec.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
         }
 
@@ -590,6 +615,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             lock (activeMigrationsLock)
             {
                 activeMigrations[camera.Key] = migration;
+            }
+
+            // Staging decision: if the camera's expected slot on the target differs from the slot it
+            // currently occupies, move it to the neutral StagingCameraId first. The arrival
+            // "correct codec" path re-slots it to the expected id once it is stable on the target.
+            // We pin the staging slot here (rather than the expected slot) so the source codec never
+            // binds this camera to a slot another camera legitimately owns there during transit.
+            var expectedTargetId = GetScenarioConfiguredCameraId(scenarioKey, targetCodecKey, camera.Key) ?? camera.DefaultCameraId;
+            migration.ExpectedCameraId = expectedTargetId;
+            if (expectedTargetId != camera.CameraId)
+            {
+                migration.UsesStaging = true;
+                this.LogDebug($"CAMERA_SWITCHOVER_STAGING camera='{camera.Key}' targetCodec='{targetCodecKey}' stagingSlot='{StagingCameraId}' expectedSlot='{expectedTargetId}' currentSlot='{camera.CameraId}'");
+                camera.SetScenarioCameraId(StagingCameraId);
             }
 
             this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}'");
@@ -1406,10 +1445,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             continue;
                         }
 
-                        // Apply the per-scenario camera id (pin on explicit id, reset to default on
-                        // none) so no pin leaks between scenarios and self-heal targets the same slot.
-                        camera.SetScenarioCameraId(codecConfig.GetConfiguredCameraId(cameraKey));
-
                         var currentParentCodecKey = camera.ParentCodec?.Key;
                         if (string.IsNullOrEmpty(currentParentCodecKey))
                         {
@@ -1419,6 +1454,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                         if (string.Equals(currentParentCodecKey, codecConfig.CodecKey, StringComparison.Ordinal))
                         {
+                            // Camera is already on its target codec — pin/reset the per-scenario id here.
+                            // For a camera that must migrate we do NOT pin the id here; the staging slot
+                            // is applied at migration start and the expected id on arrival, so the
+                            // source codec is never told to bind this camera to its target slot.
+                            camera.SetScenarioCameraId(codecConfig.GetConfiguredCameraId(cameraKey));
                             this.LogDebug($"Camera Manager {Key} skipping factory reset for camera '{cameraKey}' because it is already assigned to target codec '{codecConfig.CodecKey}' for scenario '{scenarioKey}'");
                             continue;
                         }
@@ -2041,6 +2081,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public string SourceCodecKey { get; set; }
             public uint SourceCameraId { get; set; }
             public string TargetCodecKey { get; set; }
+            public bool UsesStaging { get; set; }
+            public uint ExpectedCameraId { get; set; }
             public bool PoeDisabledConfirmed { get; set; }
             public bool AssignmentClearedConfirmed { get; set; }
             public DateTime AssignmentClearDeadlineUtc { get; set; }
