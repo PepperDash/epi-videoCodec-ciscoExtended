@@ -2072,6 +2072,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     return bySerial;
                 }
             }
+            else
+            {
+                // Empty-serial event. The codec often fires late/duplicate connect+disconnect
+                // callbacks with a blank serial while a camera is mid-migration off a source
+                // codec. Serial-based lookup cannot help here, so match the in-flight migration
+                // by its source codec + source camera id — that pairing is unambiguous while the
+                // migration is active and lets us attribute the event to the right managed camera
+                // instead of logging "no managed camera was resolved".
+                lock (activeMigrationsLock)
+                {
+                    var byMigration = activeMigrations.Values.FirstOrDefault(m =>
+                        string.Equals(m.SourceCodecKey, codec?.Key, StringComparison.OrdinalIgnoreCase)
+                        && m.SourceCameraId == e.CameraId);
+                    if (byMigration != null
+                        && managedCameras.TryGetValue(byMigration.CameraKey, out var migrationCamera))
+                    {
+                        return migrationCamera;
+                    }
+                }
+            }
 
             var byCodecAndId = managedCameras.Values.FirstOrDefault(c => c.ParentCodec?.Key == codec?.Key && c.CameraId == e.CameraId);
             if (byCodecAndId != null)
