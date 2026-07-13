@@ -592,6 +592,16 @@ Floating recovery state is scoped to the active room-combiner scenario and is cl
 
 When any managed camera reports connected, the manager immediately re-runs reconciliation for the current scenario. This ensures post-recovery cases where a camera reappears on the wrong codec are corrected right away instead of waiting for the next periodic sweep.
 
+### Migration logging verbosity
+
+Migration logging is split by level so the **Debug** stream reads as a clean per-camera sequence of state transitions, while the high-frequency and redundant detail is kept at **Verbose** for deep troubleshooting.
+
+At **Debug**, the manager emits the structured `CAMERA_SWITCHOVER_*` state markers: `FACTORY_RESET_ISSUED`, `FACTORY_RESET_DISCONNECT_CONFIRMED`/`_TIMEOUT`, `MIGRATION_STARTED`, `READY`, `ATTACH_WAITING`, `TARGET_SERIAL_ASSIGN`, `TARGET_SLOT_BUSY`/`_CLEAR`/`_ASSIGN`, `ATTACH_CONFIRMED`, `ATTACH_FAILED`, `ASSIGNED_CLEARED_FALLBACK`/`_TIMEOUT`, `POE_REENABLE_RETRY`, `POE_SAFEGUARD_TRIGGERED`, `PHANTOM_DISCONNECT`, `RECONCILE_WRONG_CODEC`, and `RECONCILE_FLOATING`, plus dynamic camera-ID allocation and all real warnings/errors.
+
+At **Verbose**, the manager emits the routine/high-frequency detail: the per-camera scenario-reconciliation pass that runs on every camera connect (including `CAMERA_PORT_ENSURE` and its `action='skipped' reason='notOnlineOnTargetCodec'` form, `skipping factory reset … already assigned`, and `skipping port-state ensure … active migration`), no-op notifications (port VLAN/PoE events with no active migration, disconnect/connect events that resolve no managed camera), the `CAMERA_SWITCHOVER_WAITING`/`_DUPLICATE_DISCONNECT`/`_POE_GUARD_ENSURE_ON`/`_POE_ON_AFTER_VLAN` guards, and the prose companions that restate a structured marker.
+
+Note that the reconciliation warning `cannot reset camera … parent codec is not available` is logged at **Verbose** and is expected/benign: during a reconnect the codec fires its `CameraConnected` event (which triggers reconciliation) a moment before it repopulates the camera's parent-codec reference, so a camera that is actively completing its migration can transiently read as having no parent codec. The migration completes normally (`CAMERA_SWITCHOVER_ATTACH_CONFIRMED`) immediately afterward.
+
 ### Codec diagnostics logging
 
 The codec subscribes to `/Status/Diagnostics` and logs each diagnostics message the codec reports (`Type`, `Level`, `Description`, `References`). `Error`/`Critical` messages are logged as errors, `Warning` as warnings, and others as information; cleared (ghosted) messages are logged at debug level. This surfaces camera-related conditions such as `CameraAuthentication`, `CameraPairing`, and `CameraSerial` failures (for example, a camera that requires a physical pinhole factory reset) that the migration logic cannot resolve on its own.
