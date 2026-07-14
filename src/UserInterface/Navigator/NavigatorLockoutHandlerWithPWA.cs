@@ -68,6 +68,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private System.Timers.Timer inProgressFailureCloseTimer;
 
+        private const int InProgressPollIntervalMs = 5000;
+        private System.Timers.Timer inProgressPollTimer;
+
         private readonly Dictionary<string, (BoolFeedback Feedback, EventHandler<FeedbackEventArgs> Handler)> _lockoutFeedbackHandlers =
             new Dictionary<string, (BoolFeedback, EventHandler<FeedbackEventArgs>)>();
 
@@ -397,6 +400,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             inProgressFailureCloseTimer.Start();
         }
 
+        private void StartInProgressPollTimer()
+        {
+            StopInProgressPollTimer();
+            inProgressPollTimer = new System.Timers.Timer(InProgressPollIntervalMs) { AutoReset = true };
+            inProgressPollTimer.Elapsed += (s, a) =>
+            {
+                if (!IsCombinationOperationInProgress())
+                {
+                    StopInProgressPollTimer();
+                    return;
+                }
+                this.LogVerbose("In-progress poll: re-asserting webview for {DefaultRoomKey}", defaultRoomKey);
+                OpenInProgressWebView(reassert: true);
+            };
+            inProgressPollTimer.Start();
+        }
+
+        private void StopInProgressPollTimer()
+        {
+            if (inProgressPollTimer == null) return;
+            inProgressPollTimer.Stop();
+            inProgressPollTimer.Dispose();
+            inProgressPollTimer = null;
+        }
+
         private void CancelInProgressFailureCloseTimer()
         {
             if (inProgressFailureCloseTimer == null)
@@ -515,6 +543,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             SetPersistentWebAppUrl(uriBuilder.ToString());
             SetPeripheralMode(ePeripheralMode.PersistentWebApp);
+
+            StartInProgressPollTimer();
         }
 
         private void CloseInProgressWebView()
@@ -525,6 +555,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
 
             inProgressWebViewActive = false;
+
+            StopInProgressPollTimer();
 
             if (mcTpController.LockedOut || inManualPwaMode)
             {
@@ -573,6 +605,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             inProgressWebViewActive = false;
 
             CancelInProgressFailureCloseTimer();
+
+            StopInProgressPollTimer();
 
             if (inManualPwaMode)
             {
