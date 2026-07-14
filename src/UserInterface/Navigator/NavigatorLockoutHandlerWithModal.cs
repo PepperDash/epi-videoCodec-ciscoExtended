@@ -347,6 +347,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private void StartInProgressPollTimer()
         {
             StopInProgressPollTimer();
+            extensionsHandler.UiWebViewChangedEvent += InProgressWebViewChanged;
             inProgressPollTimer = new Timer(InProgressPollIntervalMs) { AutoReset = true };
             inProgressPollTimer.Elapsed += (s, a) =>
             {
@@ -355,18 +356,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     StopInProgressPollTimer();
                     return;
                 }
-                this.LogVerbose("In-progress poll: re-asserting webview for {DefaultRoomKey}", defaultRoomKey);
-                OpenInProgressWebView(reassert: true);
+
+                // Do NOT blindly re-send the webview (that forces a full reload and makes the
+                // page flash/cycle). Instead ask the codec whether a webview is currently shown;
+                // the response fires UiWebViewChangedEvent -> InProgressWebViewChanged, which
+                // re-opens ONLY if none is displayed (e.g. the user X'd out).
+                mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
             };
             inProgressPollTimer.Start();
         }
 
         private void StopInProgressPollTimer()
         {
+            extensionsHandler.UiWebViewChangedEvent -= InProgressWebViewChanged;
             if (inProgressPollTimer == null) return;
             inProgressPollTimer.Stop();
             inProgressPollTimer.Dispose();
             inProgressPollTimer = null;
+        }
+
+        private void InProgressWebViewChanged(object sender, WebViewChangedEventArgs args)
+        {
+            // Only act while we own the in-progress webview and are not in a real lockout.
+            if (!inProgressWebViewActive || mcTpController.LockedOut)
+            {
+                return;
+            }
+
+            if (!IsCombinationOperationInProgress())
+            {
+                return;
+            }
+
+            // IsError == the codec reports NO webview currently displayed. If a webview IS up
+            // (no error) we do nothing so a visible page is never reloaded.
+            if (!args.UiWebViewStatus.IsError)
+            {
+                return;
+            }
+
+            this.LogVerbose("In-progress webview not shown; re-opening for {DefaultRoomKey}", defaultRoomKey);
+            OpenInProgressWebView(reassert: true);
         }
 
         private void CancelInProgressFailureCloseTimer()
