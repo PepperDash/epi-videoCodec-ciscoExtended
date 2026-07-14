@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 
 using System.Linq;
+using System.Reflection;
 using System.Timers;
 using Crestron.SimplSharp.Net;
 using PepperDash.Core;
@@ -43,6 +44,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private Lockout currentLockout;
 
         private bool combinationLockout;
+
+        private bool inProgressWebViewActive;
+
+        private EventHandler<EventArgs> _combinationOperationStatusChangedHandler;
+
+        // How long to keep the in-progress webview open after a Failed/TimedOut result so the
+        // React app can display its failure/timeout message. Matches the React app default
+        // (combinationOperationFailureDisplayMs).
+        private const int CombinationFailureDisplayHoldMs = 4000;
+
+        private Timer inProgressFailureCloseTimer;
 
         private readonly WebViewDisplayConfig defaultUiWebViewDisplayConfig = new WebViewDisplayConfig()
         {
@@ -118,17 +130,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 HandleRoomCombineScenarioChanged();
             };
 
-            if (combinerHandler.EssentialsRoomCombiner != null)
-            {
-                //subscribe to events for routing buttons from codec ui to mobile control
-                combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
-            }
-
             extensionsHandler.UiExtensionsClickedEvent +=
                 VideoCodecUiExtensionsClickedMcEventHandler;
 
             defaultRoomKey = mcTpController?.DefaultRoomKey;
 
+            if (combinerHandler.EssentialsRoomCombiner != null)
+            {
+                //subscribe to events for routing buttons from codec ui to mobile control
+                combinerHandler.EssentialsRoomCombiner.RoomCombinationScenarioChanged += HandleRoomCombineScenarioChanged;
+                TrySubscribeToCombinationOperationStatusChanged(combinerHandler.EssentialsRoomCombiner);
+            }
         }
 
         private void SetupCustomLockouts()
@@ -252,6 +264,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("Primary room key not found in UiMap for scenario: {ScenarioKey}", currentScenario.Key);
                 }
 
+                // While a combination operation is in progress, do not change lockout state.
+                // Instead (re)assert the in-progress webview so the React "combination in
+                // progress" overlay stays visible. This event fires AFTER the combiner runs the
+                // outgoing scenario's deactivation actions (e.g. CloseWebViewController) which
+                // clear the Controller webview, so re-opening here keeps the overlay in place.
+                if (IsCombinationOperationInProgress())
+                {
+                    this.LogDebug("Combination operation in progress; (re)asserting in-progress webview for {DefaultRoomKey}", defaultRoomKey);
+                    OpenInProgressWebView(reassert: true);
+                    return;
+                }
+
                 if (currentScenarioRoomKey != LOCKOUT_SCENARIO_KEY)
                 {
                     CancelLockoutTimer();
@@ -271,6 +295,180 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 this.LogDebug("Error in Combiner_RoomCombinationScenarioChanged_Lockout_EventHandler", ex);
             }
+        }
+
+        private void HandleCombinationOperationStatusChanged(object sender, EventArgs e)
+        {
+            if (IsCombinationOperationInProgress())
+            {
+                // Combination change is underway: just open the webview so the React
+                // "in progress" overlay is visible. Do NOT force lockout on this panel.
+                CancelInProgressFailureCloseTimer();
+                OpenInProgressWebView();
+                return;
+            }
+
+            if (IsCombinationOperationFailedOrTimedOut())
+            {
+                // Keep the webview open long enough for the React app to display its
+                // failure/timeout message for the full duration, then close and apply the
+                // normal scenario-driven UI.
+                this.LogDebug("Combination operation failed/timed out; holding in-progress webview {HoldMs}ms so the message displays for {DefaultRoomKey}", CombinationFailureDisplayHoldMs, defaultRoomKey);
+                ScheduleInProgressFailureClose();
+                return;
+            }
+
+            // Completed / Idle: close the in-progress webview if we opened it, then apply
+            // the normal, scenario-driven lockout state (unchanged behavior).
+            CancelInProgressFailureCloseTimer();
+            CloseInProgressWebView();
+            HandleRoomCombineScenarioChanged();
+        }
+
+        private void ScheduleInProgressFailureClose()
+        {
+            CancelInProgressFailureCloseTimer();
+
+            inProgressFailureCloseTimer = new Timer(CombinationFailureDisplayHoldMs) { AutoReset = false };
+            inProgressFailureCloseTimer.Elapsed += (s, a) =>
+            {
+                CancelInProgressFailureCloseTimer();
+                CloseInProgressWebView();
+                HandleRoomCombineScenarioChanged();
+            };
+            inProgressFailureCloseTimer.Start();
+        }
+
+        private void CancelInProgressFailureCloseTimer()
+        {
+            if (inProgressFailureCloseTimer == null)
+            {
+                return;
+            }
+
+            inProgressFailureCloseTimer.Stop();
+            inProgressFailureCloseTimer.Dispose();
+            inProgressFailureCloseTimer = null;
+        }
+
+        private void TrySubscribeToCombinationOperationStatusChanged(object combiner)
+        {
+            try
+            {
+                var eventInfo = combiner?.GetType().GetEvent("CombinationOperationStatusChanged", BindingFlags.Instance | BindingFlags.Public);
+                if (eventInfo == null || eventInfo.EventHandlerType != typeof(EventHandler<EventArgs>))
+                {
+                    this.LogDebug("CombinationOperationStatusChanged event not available for subscription");
+                    return;
+                }
+
+                _combinationOperationStatusChangedHandler = HandleCombinationOperationStatusChanged;
+                eventInfo.AddEventHandler(combiner, _combinationOperationStatusChangedHandler);
+                this.LogDebug("Subscribed to CombinationOperationStatusChanged");
+            }
+            catch (Exception ex)
+            {
+                this.LogDebug("Failed to subscribe to CombinationOperationStatusChanged: {message}", ex.Message);
+            }
+        }
+
+        private bool IsCombinationOperationInProgress()
+        {
+            var combiner = combinerHandler?.EssentialsRoomCombiner;
+            if (combiner == null)
+            {
+                return false;
+            }
+
+            var operationStatus = combiner.GetType().GetProperty("CombinationOperation", BindingFlags.Instance | BindingFlags.Public)?.GetValue(combiner, null);
+            if (operationStatus == null)
+            {
+                return false;
+            }
+
+            var stateValue = operationStatus.GetType().GetProperty("State", BindingFlags.Instance | BindingFlags.Public)?.GetValue(operationStatus, null);
+            if (stateValue == null)
+            {
+                return false;
+            }
+
+            var stateText = stateValue.ToString();
+            return string.Equals(stateText, "InProgress", StringComparison.OrdinalIgnoreCase) || string.Equals(stateText, "1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsCombinationOperationFailedOrTimedOut()
+        {
+            var combiner = combinerHandler?.EssentialsRoomCombiner;
+            if (combiner == null)
+            {
+                return false;
+            }
+
+            var operationStatus = combiner.GetType().GetProperty("CombinationOperation", BindingFlags.Instance | BindingFlags.Public)?.GetValue(combiner, null);
+            if (operationStatus == null)
+            {
+                return false;
+            }
+
+            var stateValue = operationStatus.GetType().GetProperty("State", BindingFlags.Instance | BindingFlags.Public)?.GetValue(operationStatus, null);
+            if (stateValue == null)
+            {
+                return false;
+            }
+
+            var stateText = stateValue.ToString();
+            return string.Equals(stateText, "Failed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stateText, "TimedOut", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stateText, "3", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(stateText, "4", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void OpenInProgressWebView(bool reassert = false)
+        {
+            if (mcTpController.LockedOut)
+            {
+                // A real lockout already owns the webview; nothing to do.
+                return;
+            }
+
+            if (inProgressWebViewActive && !reassert)
+            {
+                return;
+            }
+
+            inProgressWebViewActive = true;
+            this.LogDebug("Opening in-progress webview (/lockout route) for {DefaultRoomKey}", defaultRoomKey);
+
+            // Open the mobile control app at the /lockout route (NOT "/"). "/" redirects to
+            // the Tech PIN gate, so a churn/flicker leaves the Tech PIN page showing. /lockout
+            // is a defined, static route; the React "combination in progress" overlay still
+            // renders on top of it while the combiner operation state is InProgress.
+            var inProgressConfig = new WebViewDisplayConfig
+            {
+                Title = "Room Combining",
+                Mode = "Fullscreen",
+                Target = "Controller"
+            };
+            SendWebViewMcUrl("/lockout", inProgressConfig, true);
+        }
+
+        private void CloseInProgressWebView()
+        {
+            if (!inProgressWebViewActive)
+            {
+                return;
+            }
+
+            inProgressWebViewActive = false;
+
+            if (mcTpController.LockedOut)
+            {
+                // Real lockout owns the webview now; leave it in place.
+                return;
+            }
+
+            this.LogDebug("Closing in-progress webview (app root) for {DefaultRoomKey}", defaultRoomKey);
+            ClearWebView();
         }
 
         private void StartLockout(bool isCombinationLockout = true)
@@ -303,6 +501,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             mcTpController.LockedOut = false;
 
             combinationLockout = false;
+
+            inProgressWebViewActive = false;
+
+            CancelInProgressFailureCloseTimer();
 
             ClearWebView();
 
