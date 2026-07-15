@@ -437,10 +437,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 _combinationOperationStatusChangedSource = combiner;
                 this.LogDebug("Subscribed to CombinationOperationStatusChanged");
             }
-            catch (Exception ex)
-            {
-                this.LogDebug("Failed to subscribe to CombinationOperationStatusChanged: {message}", ex.Message);
-            }
+catch (Exception ex)
+{
+    this.LogDebug("Failed to subscribe to CombinationOperationStatusChanged: {message}", ex.Message);
+    this.LogVerbose(ex, "Failed to subscribe to CombinationOperationStatusChanged");
+}
         }
 
         private bool IsCombinationOperationInProgress()
