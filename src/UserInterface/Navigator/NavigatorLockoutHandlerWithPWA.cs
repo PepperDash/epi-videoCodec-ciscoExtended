@@ -60,6 +60,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         private bool inProgressWebViewActive;
 
         private EventHandler<EventArgs> _combinationOperationStatusChangedHandler;
+        private object _combinationOperationStatusChangedSource;
 
         // How long to keep the in-progress webview open after a Failed/TimedOut result so the
         // React app can display its failure/timeout message. Matches the React app default
@@ -420,8 +421,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     return;
                 }
 
+                if (_combinationOperationStatusChangedHandler != null && _combinationOperationStatusChangedSource != null)
+                {
+                    var previousEventInfo = _combinationOperationStatusChangedSource.GetType().GetEvent("CombinationOperationStatusChanged", BindingFlags.Instance | BindingFlags.Public);
+                    if (previousEventInfo != null)
+                    {
+                        previousEventInfo.RemoveEventHandler(_combinationOperationStatusChangedSource, _combinationOperationStatusChangedHandler);
+                    }
+                }
+
                 _combinationOperationStatusChangedHandler = HandleCombinationOperationStatusChanged;
                 eventInfo.AddEventHandler(combiner, _combinationOperationStatusChangedHandler);
+                _combinationOperationStatusChangedSource = combiner;
                 this.LogDebug("Subscribed to CombinationOperationStatusChanged");
             }
             catch (Exception ex)

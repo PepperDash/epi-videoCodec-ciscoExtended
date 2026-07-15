@@ -116,8 +116,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private const int AssignmentClearTimeoutMs = 5000;
 
         /// <summary>
-        /// True when all cameras for the active combiner scenario are confirmed online on their
-        /// target codecs and no migration is active.
+        /// Device key of the configured room combiner used by this CameraManager.
         /// </summary>
         public string RoomCombinerKey
         {
@@ -629,7 +628,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             var explicitSlot = GetScenarioConfiguredCameraId(roomCombiner?.CurrentScenario?.Key, targetCodecKey, cameraKey);
-            camera.SetScenarioCameraId(explicitSlot);
             targetSlot = explicitSlot ?? camera.DefaultCameraId;
             var resolvedTargetSlot = targetSlot;
 
