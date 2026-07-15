@@ -129,14 +129,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("usePersistentWebAppForLockout")]
         public bool UsePersistentWebAppForLockout { get; set; }
 
-
-        /// <summary>
-        /// These are key-value pairs, uint id, string type
-        /// They are used to pass back UI Extension Widget events
-        /// </summary>
-        [JsonProperty("Widgets")]
-        public Dictionary<string, WidgetConfig> WidgetBlocks { get; set; }
-
         [JsonProperty("extensions")]
         public UiExtensions Extensions { get; set; }
 
@@ -145,6 +137,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         [JsonProperty("defaultProvisioningMode", NullValueHandling = NullValueHandling.Ignore)]
         public string DefaultProvisioningMode { get; set; }
+
+        /// <summary>
+        /// Optional property to specify the VLAN ID for the camera network. This is used by the CameraManager to set the correct VLAN when switching cameras between codecs.
+        /// </summary>
+        [JsonProperty("vlanId", NullValueHandling = NullValueHandling.Ignore)]
+        public uint? VLanId { get; set; }
 
         public CiscoCodecConfig()
         {

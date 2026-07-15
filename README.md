@@ -14,13 +14,13 @@ Additionally, every component implements `IKeyed` and all devices are added to t
 
 As of [v1.6.0](https://github.com/PepperDash/epi-videoCodec-ciscoExtended/tree/v1.6.0), this plugin requires Essentials 2.1.0 or later. See table below for plugin/Essentials version mapping:
 
-| Plugin version | Minimum Essentials Version | 
-| -------------- | ------------------ |
-| 2.0.x | 2.7.0 |
-| 1.11.x, 1.10.x, 1.9.x | 2.7.0 | 
-| 1.8.x, 1.7.x | 2.3.0 |
-| 1.6.x | 2.1.0 |
-| 1.5.x & below | 1.16.x |
+| Plugin version        | Minimum Essentials Version |
+| --------------------- | -------------------------- |
+| 2.0.x                 | 2.7.0                      |
+| 1.11.x, 1.10.x, 1.9.x | 2.7.0                      |
+| 1.8.x, 1.7.x          | 2.3.0                      |
+| 1.6.x                 | 2.1.0                      |
+| 1.5.x & below         | 1.16.x                     |
 
 ## License
 
@@ -225,7 +225,7 @@ Provided under MIT license
 
 # Configuration
 
-## Device
+## Codec Device
 
 ```json
 {
@@ -268,12 +268,14 @@ Provided under MIT license
         "CameraNumber": 2,
         "Name": "Presenter"
       }
-    ]
+    ],
+    "vlanId": 1 // optional property to specify the VLAN ID for the camera network on a managed switch. Used by the CameraManager
   }
 }
 ```
 
 ## Navigator
+
 Place your custom icon .png files in the /user/programX/navigatorIcons/ folder.
 This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
@@ -283,16 +285,39 @@ which contains the Base64-encoded "customIconContent" for each icon.
 
 There are two different methods supported to show a lockout screen on a Navigator panel for use in combined room systems where there is a desire to lockout navigator panels that are attached to a codec not being used as the primary codec in a room combination scenario.
 
-* Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
-  * Preffered as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, usually a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
-  * If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
-  * Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
-  each panel in PWA or controller mode require the MAC address.
-  * To get the mac addresses of the Navigator panels, the command `xcommand Peripherals list Type: touchpanel` can be sent to the codec or you can use the codec's web interface and view the paired peripherals.
-  * Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration.  The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
-* WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
-  * This mode will display a modal webview on the navigator with any URL supplied.  However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
-  * Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
+- Persistent Web App (PWA) Mode (Use for codecs in Webex mode):
+  - Preferred as it switches the Navigator to a full screen web app mode that can't be cancelled by the user and can show any webpage, usually a route in a mobile control app displaying information to the user that the room is locked out or there is an emergency message.
+  - If using this method, the `usePersistentWebAppForLockout` config property must be defined on the codec and set to true.
+  - Additionally, each instance of the `ciscoRoomOsMobileControl` device needs to have the `macAddress` property defined and populated (MAC Address value is case sensitive!) as the commands to put
+    each panel in PWA or controller mode require the MAC address.
+  - To get the mac addresses of the Navigator panels, the command `xcommand Peripherals list Type: touchpanel` can be sent to the codec or you can use the codec's web interface and view the paired peripherals.
+  - Limitation: This method currently DOES NOT work if the codec is in MTR (Microsoft Teams Mode) configuration. The panels will enter PWA mode but will not return to controller mode without the panels being rebooted.
+- WebView Modal Mode with Polling and Timer (Use for codecs in MTR mode):
+  - This mode will display a modal webview on the navigator with any URL supplied. However, the modal has a built in X button in the top right corner that the user can use to dismiss the modal. As a result, the plugin logic will poll the codec to determine if the navigator is displaying the modal and if it has been cancelled by the user a command will be re-sent to display the lockout modal again.
+  - Limitation: This method DOES NOT work properly if there are more than one navigator panel paired to a codec as we cannot determine whether both panels are displaying the lockout modal if only one panel has dismissed the modal
+
+### RoomOS Firmware Compatibility
+
+#### RoomOS ce26+ Breaking Change
+
+RoomOS ce26 introduced a breaking schema change to WebView Display events:
+
+**Pre-ce26 firmware:**
+```json
+"Url": "http://10.11.50.169:50002/mc/app/techPin?token=..."
+```
+
+**ce26+ firmware:**
+```json
+"Url": {
+  "Value": "http://10.11.50.169:50002/mc/app/techPin?token=...",
+  "id": "1"
+}
+```
+
+Cisco normalized their event property schema to wrap values in objects with `Value` and `id` properties. This change affected WebView URL handling. The plugin includes a custom converter (`UrlConverter` in `xEvent.cs`) that handles both formats transparently for backwards compatibility with older RoomOS versions.
+
+**No action required** – the plugin automatically detects and handles both payload formats.
 
 ### Available default icons
 
@@ -323,77 +348,209 @@ Sliders
 
 ```json
 {
-        "key": "navigator",
-        "name": "Rm Navigator",
-        "type": "ciscoRoomOsMobileControl",
-        "group": "videoCodecTouchpanel",
-        "properties": {
-          "defaultRoomKey": "room",
-          "macAddress": "a0:b1:c2:d3:e4:f5", // CASE SENSITIVE VALUE!!!!
-          "useDirectServer": true,
-          "videoCodecKey": "Codec-1",
-          "enableLockoutPoll": true,
-          "lockout": {
-            "mobileControlPath": "/lockout",
-            "uiWebViewDisplays": {
-              "title": "Room Lockout",
-              "mode": "Fullscreen",
+  "key": "navigator",
+  "name": "Rm Navigator",
+  "type": "ciscoRoomOsMobileControl",
+  "group": "videoCodecTouchpanel",
+  "properties": {
+    "defaultRoomKey": "room",
+    "macAddress": "a0:b1:c2:d3:e4:f5", // CASE SENSITIVE VALUE!!!!
+    "useDirectServer": true,
+    "videoCodecKey": "Codec-1",
+    "enableLockoutPoll": true,
+    "lockout": {
+      "mobileControlPath": "/lockout",
+      "uiWebViewDisplays": {
+        "title": "Room Lockout",
+        "mode": "Fullscreen",
+        "target": "Controller"
+      }
+    },
+    "extensions": {
+      "configId": 1,
+      "panels": [
+        {
+          "order": 2,
+          "panelId": "audio",
+          "location": "ControlPanel",
+          "icon": "Sliders",
+          "name": "Volume",
+          "mobileControlPath": "/audio",
+          "uiWebViewDisplays": [
+            {
+              "title": "Audio Volume",
+              "mode": "Modal",
               "target": "Controller"
             }
-          },
-          "extensions": {
-            "configId": 1,
-            "panels": [
-              {
-                "order": 2,
-                "panelId": "audio",
-                "location": "ControlPanel",
-                "icon": "Sliders",
-                "name": "Volume",
-                "mobileControlPath": "/audio",
-                "uiWebViewDisplays": [
-                  {
-                  "title": "Audio Volume",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              },
-              {
-                "order": 3,
-                "panelId": "roomCombine",
-                "location": "ControlPanel",
-                "icon": "Custom",
-                "iconId": "1234",
-                "customIconContent":"iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAYAAAA6/NlyAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAABS8AAAUvAVpwdGYAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAw4MAAOgDAADDgwAA6AMAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACJB7xjFmMTpAAAAepJREFUaEPtmuFRwjAUx/91AjYQJxAnECeQEXQC2EDdQCaADagTiBOIG+AEssHzS9JL/7xYEbw2r/nd5UNf2pLfpS85Lq8QEfSJMw5YJwtbJwtbp3fCRcO2NAAwAXANYMidHWML4A1ACWDHnRUiorWBiCwkXRbOgb3UGR4BeHWzmzI7ADcANmGQc9iKLJzDq3OqCGd4COA9IrsDsAbwwR1/5IGun+j6UC4BjH8Y+5XL8VoOrzgRRORLRGacB0e2R/4RF+OBVijviLU7N2Zm5e/xn/TQrcYhPgeeKd5llm7MvEpP/C7jhaf1fgDAPSd8Imzc2JkpAuFaYruHSoqlRKlM1giB8Ljehxe6ThF2GEPZlsyTha2Tha2ThbtIURQHtxhJCJ+SLGydNoTPORCJHYv6zjaEPzkQiVX4/7K/IbhXfWcbwq2ShVOni/uwtphosYomiUNoQ1hbTLTYv9CGcKtkYetk4S6inDA0thhJCJ+SLGydLGwdL7ym+C1dpwg7rBEIaydtfF6cEpPIiWglPK/3AQAWykMpMHJjZ+YIhLfKebAvCplRvMvMIkU5pa/x6F1RC9dpWSpbglarxdvSJlIUkiJ7slCE4W64cBUxqbJ0Drz77H3SjLni0iZhc2iftGmysHWysHV6J/wNJ9Ukf3MotnsAAAAASUVORK5CYII=",
-                "name": "Room Setup",
-                "mobileControlPath": "/roomCombine",
-                "uiWebViewDisplays": [{
-                  "title": "Room Setup",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              },
-              {
-                "order": 1,
-                "panelId": "techPin",
-                "location": "ControlPanel",
-                "icon": "Language",
-                "name": "Technician",
-                "mobileControlPath": "/techPin",
-                "uiWebViewDisplays": [{
-                  "title": "Technician",
-                  "mode": "Modal",
-                  "target": "Controller"
-                }]
-              }]
-              }
-            ]
-          }
+          ]
+        },
+        {
+          "order": 3,
+          "panelId": "roomCombine",
+          "location": "ControlPanel",
+          "icon": "Custom",
+          "iconId": "1234",
+          "customIconContent": "iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAYAAAA6/NlyAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAABS8AAAUvAVpwdGYAAAAYdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuNBLfpoMAAAC2ZVhJZklJKgAIAAAABQAaAQUAAQAAAEoAAAAbAQUAAQAAAFIAAAAoAQMAAQAAAAIAAAAxAQIAEAAAAFoAAABphwQAAQAAAGoAAAAAAAAAw4MAAOgDAADDgwAA6AMAAFBhaW50Lk5FVCA1LjEuNAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlAAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAACJB7xjFmMTpAAAAepJREFUaEPtmuFRwjAUx/91AjYQJxAnECeQEXQC2EDdQCaADagTiBOIG+AEssHzS9JL/7xYEbw2r/nd5UNf2pLfpS85Lq8QEfSJMw5YJwtbJwtbp3fCRcO2NAAwAXANYMidHWML4A1ACWDHnRUiorWBiCwkXRbOgb3UGR4BeHWzmzI7ADcANmGQc9iKLJzDq3OqCGd4COA9IrsDsAbwwR1/5IGun+j6UC4BjH8Y+5XL8VoOrzgRRORLRGacB0e2R/4RF+OBVijviLU7N2Zm5e/xn/TQrcYhPgeeKd5llm7MvEpP/C7jhaf1fgDAPSd8Imzc2JkpAuFaYruHSoqlRKlM1giB8Ljehxe6ThF2GEPZlsyTha2Tha2ThbtIURQHtxhJCJ+SLGydNoTPORCJHYv6zjaEPzkQiVX4/7K/IbhXfWcbwq2ShVOni/uwtphosYomiUNoQ1hbTLTYv9CGcKtkYetk4S6inDA0thhJCJ+SLGydLGwdL7ym+C1dpwg7rBEIaydtfF6cEpPIiWglPK/3AQAWykMpMHJjZ+YIhLfKebAvCplRvMvMIkU5pa/x6F1RC9dpWSpbglarxdvSJlIUkiJ7slCE4W64cBUxqbJ0Drz77H3SjLni0iZhc2iftGmysHWysHV6J/wNJ9Ukf3MotnsAAAAASUVORK5CYII=",
+          "name": "Room Setup",
+          "mobileControlPath": "/roomCombine",
+          "uiWebViewDisplays": [
+            {
+              "title": "Room Setup",
+              "mode": "Modal",
+              "target": "Controller"
+            }
+          ]
+        },
+        {
+          "order": 1,
+          "panelId": "techPin",
+          "location": "ControlPanel",
+          "icon": "Language",
+          "name": "Technician",
+          "mobileControlPath": "/techPin",
+          "uiWebViewDisplays": [
+            {
+              "title": "Technician",
+              "mode": "Modal",
+              "target": "Controller"
+            }
+          ]
         }
-      },
+      ]
+    }
+  }
+}
 ```
 
 > Note: Not all configuration properties are currently shown
+
+## Camera
+
+The typename `ciscocamera` will create a device that represents a Cisco camera attached to a Cisco codec
+
+```json
+{
+  "key": "camera1",
+  "name": "Camera 1",
+  "type": "ciscocamera",
+  "properties": {
+    "defaultParentCodecKey": "codec1",
+    "defaultCameraId": 1,
+    "serialNumber": "123456789",
+    "macAddress": "00:1A:2B:3C:4D:5E",
+    "flipImage": false,
+    "sourceId": 1,
+    "networkSwitchPort": "Gi/0/1" // used by the CameraManager to setup network port as needed for switching cameras between codecs
+  }
+}
+```
+
+## CameraManager
+
+the typename `ciscocameramanager` will create a device that manages cameras that can switch between different codecs based on room combination scenarios.
+
+The `CameraManager` device interacts with a managed network switch that must implement `INetworkSwitchPoeVlanManager` as well as instances of `CiscoCodec` that implement `ICiscoCodecCameraFactoryReset` and `CiscoCamera`.
+
+Based on the configuration specified, this device will monitor the current room combination scenario and automatically execute the necessary actions on the codec and the network switch to be able to assign a Cisco Vision camera to a different codec at runtime.
+
+The CameraManager config should ONLY list the cameras that need to be moved between codecs.  Any cameras that will be statically assigned to a single codec and not change at runtime should not be included in the `cameraKeys` arrays for any of the `codecConfig` arrays.
+
+In order for this functionality to work, each codec config must specify a `vlanId` property, and each camera config must specify a `networkSwitchPort` property as well as `defaultParentCodecKey`, `defaultCameraId`, `serialNumber` and `sourceId`.
+
+```json
+{
+  "key": "cameraManager1",
+  "name": "Camera Manager",
+  "type": "cameramanager",
+  "properties": {
+    "networkSwitchKey": "networkSwitch1",
+    "factoryResetSettleMs": 2000, // optional; ms to wait after the source-codec factory reset before moving the camera. Defaults to 2000 when omitted or <= 0. Increase if the target codec reports "pinhole factory reset required" on the first attach attempt.
+    "useCameraFactoryResetDisconnectFeedback": false, // optional; when true, wait for the source codec to report the camera disconnected (the reset taking effect) before moving it, instead of the fixed factoryResetSettleMs timer. Falls back to starting the cascade if no disconnect is reported within 25s. Defaults to false.
+    "disablePoeCycling": false, // optional; when true, migrations and recovery move cameras by VLAN change + serial reassignment only and never power-cycle (PoE off/on) the switch port. Defaults to false (normal PoE cycling).
+    "roomCombinerConfig": {
+      "roomCombinerKey": "roomCombiner1",
+      "combineScenarios": {
+        "divided": {
+          "codecConfigs": [
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] },
+            { "codecKey": "codecB", "cameraKeys": ["cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "combined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB", "cameraC"] }
+          ]
+        },
+        "abCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraA", "cameraB"] },
+            { "codecKey": "codecC", "cameraKeys": ["cameraC"] }
+          ]
+        },
+        "bcCombined": {
+          "codecConfigs": [
+            { "codecKey": "codecB", "cameraKeys": ["cameraB", "cameraC"] },
+            { "codecKey": "codecA", "cameraKeys": ["cameraA"] }
+          ]
+        }
+      }
+    }
+  }
+}
+
+```
+
+### Per-scenario camera IDs
+
+Each entry in a `cameraKeys` array may be either a plain **string** (the camera key) or an **object** that pins the camera to a specific codec slot for that scenario:
+
+```json
+{
+  "codecKey": "codecB",
+  "cameraKeys": [
+    { "cameraKey": "cameraA", "cameraId": 7 },
+    { "cameraKey": "cameraB", "cameraId": 8 },
+    "cameraC"
+  ]
+}
+```
+
+- A **string** entry uses the camera's configured `defaultCameraId` (existing behavior — fully backward compatible; string-only configs behave exactly as before).
+- An **object** entry (`{ "cameraKey": "...", "cameraId": N }`) pins that camera to slot `N` on the codec for that scenario. The scenario id takes precedence over the camera's `defaultCameraId`.
+- The two forms may be mixed freely in the same array. A camera omitted from a scenario is left unmanaged for that scenario.
+
+This makes it possible to give a camera different slots in different scenarios — for example, "parking" a camera that isn't in use on an idle codec at a spare slot while it is combined, then returning it to its normal slot when divided.
+
+Activation validation rejects configurations that would collide: a camera assigned to two codecs in the same scenario, two cameras resolving to the same effective slot on one codec (explicit id or `defaultCameraId`), or an explicit `cameraId` of 0.
+
+When a scenario change requires a camera to move to a codec **and** land on a different slot than it currently occupies, the manager first migrates it to a neutral staging slot (15) on the target codec, then switches it to the expected slot once it is confirmed stable there. This avoids briefly binding the camera to its target slot while it is still on the source codec, which could collide with another camera that legitimately owns that slot on the source and stall the migration.
+
+### Migration behavior and recovery
+
+When the room combination scenario changes, the `CameraManager` moves each affected camera to the codec that owns it in the new scenario. A migration is only ever started after the camera is **confirmed online** on its current (wrong) codec, then runs a feedback-driven cascade: factory-reset the camera on the source codec → disable PoE and clear the source codec's assigned serial → switch the switch port to the target codec's VLAN → re-enable PoE → wait for the target codec to report the camera attached.
+
+After the factory reset is issued, the manager waits `factoryResetSettleMs` (default 2000 ms) before tearing down PoE and moving the camera. The reset clears the camera's pairing/authentication to the source codec, and that takes time to take effect; if the camera is moved too soon it arrives at the target codec still carrying the source codec's credentials, and the target reports `authentication failed, pinhole factory reset required`. Note that the source codec's connected feedback is not a reliable signal for this — the codec keeps reporting the camera connected until it actually reboots — so a fixed settle delay is used instead. If you still see the pinhole diagnostic on the first attach attempt, increase `factoryResetSettleMs`.
+
+Alternatively, set `useCameraFactoryResetDisconnectFeedback` to `true` to gate the move on the source codec's **disconnect** feedback instead of the fixed timer. In this mode the manager waits for the source codec to report the camera disconnected — the moment the factory reset actually takes effect and the camera drops/reboots — and then starts the PoE/VLAN cascade immediately, rather than waiting out `factoryResetSettleMs`. This adapts to how long a given camera actually takes to reset instead of guessing. A bounded fallback still starts the cascade if no disconnect is reported within 25 seconds, so a missed event cannot stall the migration.
+
+By default the cascade power-cycles (PoE off → VLAN → PoE on) the switch port to force the camera to reboot onto the new VLAN. Set `disablePoeCycling` to `true` to suppress every PoE off/on step: migrations then move the camera by VLAN change and serial reassignment only, the attach-failure reseed re-asserts the source VLAN without re-powering, and the safety-net sweep skips its PoE bounce. Use this when the port's PoE must stay on (for example when the camera is powered/managed elsewhere, or the switch performs the power cycle itself on a VLAN change). The state machine is advanced internally at the points the PoE feedback events would normally drive it.
+
+Alongside the migration cascade, the manager runs a **port-state reconciliation** pass that re-asserts the switch port VLAN (and PoE, unless `disablePoeCycling` is set) to keep already-placed cameras aligned with the active scenario. This pass is intentionally conservative: it only re-asserts the port for a camera that is **confirmed online on its target codec**. A camera that is not yet on its target codec is left on its current VLAN (logged as `CAMERA_PORT_ENSURE ... action='skipped' reason='notOnlineOnTargetCodec'`) so that it stays visible to its source codec and the normal confirmed-online migration cascade can move it. This avoids stranding a camera on the target VLAN before the migration has run — which would hide it from the source codec, prevent the migration from ever starting, and (with `disablePoeCycling` set) leave it floating with no PoE bounce available to recover it.
+
+If the target codec does not report the camera attached within the attach-wait window, the manager performs an **automatic recovery**: it reseeds the camera back onto the source codec's VLAN with PoE on. The source codec then rediscovers the camera, which triggers a fresh migration cascade from scratch. This reseed-and-retry is the only action proven to recover a stuck attach; it repeats until the camera attaches. The retry loop is scoped to the single affected camera's switch port and does not disturb other cameras or codecs.
+
+The number of failed attach attempts is tracked per camera and reported in the logs (`failedAttempts`) on `CAMERA_SWITCHOVER_ATTACH_FAILED`, `CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED`, and `CAMERA_SWITCHOVER_ATTACH_CONFIRMED`, so it is visible how many retries a recovery required.
+
+A periodic **safety-net reconciliation sweep** guards against the case where a reseed never recovers — for example, a camera that, after being pushed back to the source codec, never re-registers (firmware hang, dead NIC, or a cable/PoE fault), leaving it floating with no active migration to retry. The sweep runs on a fixed interval and, for each scenario camera that is not confirmed online on its target codec and has no active migration, takes one of two actions after a per-camera backoff: if the camera is found online on the wrong codec it starts a migration (`CAMERA_SWITCHOVER_RECONCILE_WRONG_CODEC`); if it is online nowhere it applies a bounded floating-recovery policy (`CAMERA_SWITCHOVER_RECONCILE_FLOATING`) that cycles the camera port VLAN across probe codecs (target codec first, then other scenario codecs, then remaining managed codecs) and performs PoE bounce on each attempt (`action='probeAndBouncePoe'`). After **12 total attempts**, the watchdog stops retrying that camera (`reason='attemptLimitReached'`).
+
+Floating recovery state is scoped to the active room-combiner scenario and is cleared on scenario change, so retries from a previous combination do not leak into a new one.
+
+When any managed camera reports connected, the manager immediately re-runs reconciliation for the current scenario. This ensures post-recovery cases where a camera reappears on the wrong codec are corrected right away instead of waiting for the next periodic sweep.
+
+### Codec diagnostics logging
+
+The codec subscribes to `/Status/Diagnostics` and logs each diagnostics message the codec reports (`Type`, `Level`, `Description`, `References`). `Error`/`Critical` messages are logged as errors, `Warning` as warnings, and others as information; cleared (ghosted) messages are logged at debug level. This surfaces camera-related conditions such as `CameraAuthentication`, `CameraPairing`, and `CameraSerial` failures (for example, a camera that requires a physical pinhole factory reset) that the migration logic cannot resolve on its own.
 
 ## Bridge
 
@@ -441,5 +598,3 @@ Sliders
 - `setcodeccommdebug {1 | 0}`
   - Turn on device-level communications debugging. In order to see thes messages, the `appdebug 1` command must be sent
   - {1 | 0} - 1 turns debuggging on, 0 turns it off
-
-

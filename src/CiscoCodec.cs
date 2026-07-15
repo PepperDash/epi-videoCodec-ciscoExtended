@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Crestron.SimplSharp;
 using Crestron.SimplSharp.CrestronIO;
 using Crestron.SimplSharpPro.DeviceSupport;
+using Crestron.SimplSharpPro.DM.Cards;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PepperDash.Core;
@@ -83,6 +84,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IPresenterTrack,
 			IEmergencyOSD,
 			IHasWebViewWithPwaMode
+
 	{
 		private RoutingInputPort currentInputPort;
 
@@ -162,6 +164,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public readonly DoNotDisturbHandler DoNotDisturbHandler;
 		public readonly UIExtensionsHandler UIExtensionsHandler;
 
+		private Dictionary<string, PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent> WebViewEvents = new Dictionary<string, PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+
 		private Meeting _currentMeeting;
 
 		private StandbyState _standbyState;
@@ -237,6 +241,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public bool PresenterTrackStatus { get; private set; }
 
 		public bool WebviewIsVisible { get; private set; }
+
+		/// <summary>
+		/// True when the codec reports any active call (native SIP/H.323, MTR, Webex, Zoom, WebRTC, etc.).
+		/// Derived from xStatus SystemUnit State NumberOfActiveCalls.
+		/// </summary>
+		public bool IsAnyCallActive
+		{
+			get
+			{
+				var raw = CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value;
+				return int.TryParse(raw, out var n) && n > 0;
+			}
+		}
 
 		private bool _isInPwaMode;
 
@@ -696,6 +713,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public ExtensionsHandler UiExtensionsHandler { get; set; }
 
+		public uint VLanId { get; private set; }
+
 		// Constructor for IBasicCommunication
 		public CiscoCodec(DeviceConfig config, IBasicCommunication comm)
 			: base(config)
@@ -729,6 +748,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				config.Properties.ToString()
 			);
 
+			VLanId = props.VLanId ?? 0u;
+
 			UiExtensions = props.Extensions;
 			if (props?.Extensions?.ConfigId > 0)
 			{
@@ -736,6 +757,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this,
 					EnqueueCommand
 				);
+				
+				// Subscribe to webview cleared event to fire WebViewStatusChanged
+				// (codec doesn't always send feedback when we command it to clear)
+				UiExtensionsHandler.WebViewClearedByCommand += HandleWebViewClearedByCommand;
 			}
 
 			_scheduleCheckTimer = new CTimer(ScheduleTimeCheck, null, 0, 15000);
@@ -892,19 +917,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (props.CommunicationMonitorProperties != null)
 			{
+				// Ensure the poll string ends with the codec delimiter (\r\n).
+				// GenericCommunicationMonitor sends the poll string verbatim with no terminator,
+				// so without one the bytes buffer and merge with the next command on the wire.
+				var monitorConfig = props.CommunicationMonitorProperties;
+				if (!string.IsNullOrEmpty(monitorConfig.PollString))
+				{
+					monitorConfig.PollString = monitorConfig.PollString.TrimEnd('\r', '\n') + Delimiter;
+				}
+
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
 					Communication,
-					props.CommunicationMonitorProperties
+					monitorConfig
 				);
 			}
 			else
 			{
 				const string pollString =
-					"xstatus systemunit\r"
-					+ "xstatus cameras\r"
-					+ "xstatus sip/registration\r"
-					+ "xStatus Audio Volume\r";
+					"xstatus systemunit"
+					+ Delimiter
+					+ "xstatus cameras"
+					+ Delimiter
+					+ "xstatus sip/registration"
+					+ Delimiter
+					+ "xStatus Audio Volume";
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
@@ -1768,6 +1805,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ "/Status/Call"
 				+ Delimiter
 				+ prefix
+				+ "/Status/SystemUnit/State"
+				+ Delimiter
+				+ prefix
 				+ "/Status/Conference/Presentation"
 				+ Delimiter
 				+ prefix
@@ -1775,6 +1815,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Status/Conference/DoNotDisturb"
+				+ Delimiter
+				+ prefix
+				+ "/Status/Diagnostics"
 				+ Delimiter
 				+ prefix
 				+ "/Status/Cameras/Camera"
@@ -1944,6 +1987,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 			}
 
+			// Poll for full camera status including serial numbers to ensure cameras are properly matched
+			// to CiscoCamera devices. The initial xStatus response may not include serial numbers.
+			EnqueueCommand("xStatus Cameras Camera");
+
 			GetCallHistory();
 
 			if (config.GetPhonebookOnStartup)
@@ -2085,7 +2132,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						//SendText("echo off");
+						SendText("Echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
@@ -2145,11 +2192,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogDebug("Checking feedbacks... last feedback unregistration: {lastFeedbackFail}", _lastFeedbackFail);
 			this.LogVerbose("Feedback List:\r\n{data}", data);
 
-			if (
-					data.Split('\n').Count()
-					>= BuildFeedbackRegistrationExpression().Split('\n').Count()
-			)
+			var receivedCount = data.Split('\n').Count();
+			var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+			this.LogDebug(
+				"ProcessFeedbackList: receivedCount={received}, expectedCount={expected}",
+				receivedCount, expectedCount);
+
+			if (receivedCount >= expectedCount)
+			{
+				if (!SyncState.FeedbackWasRegistered)
+					SyncState.FeedbackRegistered();
 				return;
+			}
 
 			var now = DateTime.Now;
 			var timeSinceLastFail = now - _lastFeedbackFail;
@@ -2182,7 +2236,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (Communication == null)
 				return;
-			Communication.SendText(command + Delimiter);
+
+			if (string.IsNullOrEmpty(command))
+				return;
+
+			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
+			// concatenating multiple commands into a single malformed expression.
+			var normalized = command
+				.Replace("\r\n", "\n")
+				.Replace("\r", "\n")
+				.Replace("\n", Delimiter)
+				.TrimEnd('\r', '\n');
+
+			Communication.SendText(normalized + Delimiter);
 		}
 
 		public void SendText(string command)
@@ -2630,6 +2696,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						CodecRoomPreset
 					>();
 				}
+
+				if (Cameras == null || Cameras.Count == 0 || SelectedCamera == null)
+				{
+					this.LogDebug("Deferring camera preset change notification until cameras are initialized.");
+					return;
+				}
+
 				CodecRoomPresetsListHasChanged?.Invoke(this, new EventArgs());
 			};
 		}
@@ -3563,15 +3636,124 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (userInterfaceObject.WebView != null)
 			{
+				// Build Core WebViewEvent using JSON with only the properties Core expects
+				// Core types expect simple strings for Url, not complex objects
+				
+				string displayUrl = null;
+				string displayTitle = null;
+				string clearedUrl = null;
+				
 				if (userInterfaceObject.WebView.Display != null)
 				{
-					var display = JsonConvert.DeserializeObject<CiscoCodecEvents.WebViewDisplay>(
-						JsonConvert.SerializeObject(userInterfaceObject.WebView.Display)
-					);
+					var localDisplay = userInterfaceObject.WebView.Display;
+					displayUrl = localDisplay.Url?.Value;
+					displayTitle = localDisplay.Title?.Value;
 
-					IsInPwaMode = display.Target.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					IsInPwaMode = localDisplay.Target?.WebViewTarget == CiscoCodecEvents.eWebViewTarget.PersistentWebApp;
+					WebviewIsVisible = true;
+
+					this.LogDebug("WebView Display parsed: Url={url}, Title={title}", displayUrl, displayTitle);
 				}
+
+				if (userInterfaceObject.WebView.Cleared != null)
+				{
+					var localCleared = userInterfaceObject.WebView.Cleared;
+					
+					WebviewIsVisible = false;
+					
+					// Get the URL from tracked event if available
+					if (WebViewEvents.TryGetValue(localCleared.Id, out var trackedEvent) && trackedEvent?.Display != null)
+					{
+						clearedUrl = trackedEvent.Display.Url;
+					}
+					
+					WebViewEvents.Remove(localCleared.Id);
+					
+					this.LogDebug("WebView Cleared parsed: Id={id}, Url={url}", localCleared.Id, clearedUrl);
+				}
+				
+				// Build JSON for Core WebViewEvent with only string properties
+				var jsonBuilder = new System.Text.StringBuilder("{");
+				jsonBuilder.Append($"\"Id\":\"{userInterfaceObject.WebView.Id ?? "0"}\"");
+				
+				if (displayUrl != null || displayTitle != null)
+				{
+					jsonBuilder.Append(",\"Display\":{");
+					if (displayUrl != null) jsonBuilder.Append($"\"Url\":\"{EscapeJsonString(displayUrl)}\"");
+					if (displayTitle != null)
+					{
+						if (displayUrl != null) jsonBuilder.Append(",");
+						jsonBuilder.Append($"\"Title\":\"{EscapeJsonString(displayTitle)}\"");
+					}
+					jsonBuilder.Append("}");
+					
+					// Store for later cleared events
+					var tempJson = $"{{\"Id\":\"{userInterfaceObject.WebView.Id}\",\"Display\":{{\"Url\":\"{EscapeJsonString(displayUrl ?? "")}\"}}}}";
+					var storeEvent = JObject.Parse(tempJson).ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+					WebViewEvents[storeEvent.Id] = storeEvent;
+				}
+				
+				if (clearedUrl != null)
+				{
+					jsonBuilder.Append($",\"Cleared\":{{\"Url\":\"{EscapeJsonString(clearedUrl)}\"}}");
+				}
+				
+				jsonBuilder.Append("}");
+				
+				var coreWebView = JObject.Parse(jsonBuilder.ToString()).ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+				
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs(WebviewIsVisible ? "visible": "notvisible", coreWebView));
 			}
+		}
+		
+		private string EscapeJsonString(string s)
+		{
+			if (string.IsNullOrEmpty(s)) return s;
+			return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+		}
+		
+		/// <summary>
+		/// Handles webview cleared by command (not from codec feedback).
+		/// Fires WebViewStatusChanged so subscribers can handle the close.
+		/// </summary>
+		private void HandleWebViewClearedByCommand(object sender, PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplayClearActionArgs args)
+		{
+			try
+			{
+				this.LogDebug("WebView cleared by command, Target={target}", args?.Target ?? "Controller");
+				WebviewIsVisible = false;
+				
+				// Get the URL from any tracked webview event
+				string trackedUrl = null;
+				if (WebViewEvents.Count > 0)
+				{
+					var trackedEvent = WebViewEvents.Values.GetEnumerator();
+					if (trackedEvent.MoveNext() && trackedEvent.Current?.Display != null)
+					{
+						trackedUrl = trackedEvent.Current.Display.Url;
+						this.LogDebug("Using tracked URL for cleared event: {url}", trackedUrl);
+					}
+					WebViewEvents.Clear();
+				}
+				
+				// Create a WebViewEvent with Cleared info via JSON deserialization
+				var webViewJson = JObject.Parse($"{{\"Cleared\": {{\"Url\": \"{EscapeJsonString(trackedUrl ?? string.Empty)}\"}}}}");
+				var webview = webViewJson.ToObject<PepperDash.Essentials.Core.DeviceTypeInterfaces.WebViewEvent>();
+				
+				WebViewStatusChanged?.Invoke(this, new WebViewStatusChangedEventArgs("notvisible", webview));
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Exception in HandleWebViewClearedByCommand: {message}", ex.Message);
+			}
+		}
+		
+		/// <summary>
+		/// Called from CiscoCodecUserInterface when webview is cleared (Navigator uses a separate ExtensionsHandler)
+		/// </summary>
+		public void OnWebViewClearedFromUi(PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplayClearActionArgs args)
+		{
+			HandleWebViewClearedByCommand(this, args);
 		}
 
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
@@ -3592,6 +3774,65 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
 				this.LogError("Token String: {tokenString}", tokenString);
 				this.LogVerbose(e, "Exception");
+			}
+		}
+
+		private bool AddCamera(uint cameraId, JObject cam, CiscoCamera existingCameraDevice, string serialNumber)
+		{
+			if (cam == null)
+			{
+				this.LogWarning("Camera {camId} payload was null. Skipping AddCamera.", cameraId);
+				return false;
+			}
+
+			this.LogDebug("Camera {camId} is connected.", cameraId);
+			var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
+			CodecStatus.Status.Cameras.CameraList.Add(newCam);
+
+			CameraConnected?.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
+
+			// if we have a cameras with a matching serial number, set it's parent codec and add it.
+			if (existingCameraDevice != null)
+			{
+				existingCameraDevice.SetParentCodec(this);
+				Cameras.Add(existingCameraDevice);
+				return true;
+			}
+			return false;
+		}
+
+
+		private bool RemoveCamera(uint cameraId, CiscoCamera existingCameraDevice)
+		{
+			try
+			{
+				this.LogDebug("Camera {camId} is disconnected. existingCameraDevice={device} serial={serial}",
+					cameraId,
+					existingCameraDevice != null ? existingCameraDevice.Key : "null",
+					existingCameraDevice?.SerialNumber ?? "null");
+
+				this.LogDebug("Camera {camId}: RemoveCamera step 1 - removing from CameraList", cameraId);
+				CodecStatus.Status.Cameras.CameraList.RemoveAll(c => c.CameraId == cameraId.ToString());
+
+				this.LogDebug("Camera {camId}: RemoveCamera step 2 - Cameras collection is {state}", cameraId, Cameras != null ? $"initialized ({Cameras.Count} items)" : "NULL");
+				if (Cameras != null)
+				{
+					var camerasList = Cameras.OfType<CiscoCamera>().ToList();
+					var cameraToRemove = camerasList.FirstOrDefault(c => c.CameraId == cameraId);
+					cameraToRemove?.SetParentCodec(null);
+					Cameras.Remove(cameraToRemove);
+				}
+
+				this.LogDebug("Camera {camId}: firing CameraDisconnected event with serial={serial}", cameraId, existingCameraDevice?.SerialNumber ?? "null");
+				CameraDisconnected?.Invoke(this, new CameraEventArgs(cameraId, existingCameraDevice?.SerialNumber));
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Camera {camId}: RemoveCamera failed: {error}", cameraId, ex.Message);
+				this.LogDebug("Camera {camId}: RemoveCamera stack trace: {stack}", cameraId, ex.StackTrace);
+				return false;
 			}
 		}
 
@@ -3617,17 +3858,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
+			var systemUnitStateToken = statusToken.SelectToken("SystemUnit.State");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 			var provisioningToken = statusToken.SelectToken("Provisioning");
+			var diagnosticsToken = statusToken.SelectToken("Diagnostics");
 
 			var serializedToken = statusToken.ToString();
 
 			if (errorToken != null)
 			{
-				UiExtensionsHandler?.ParseErrorStatus(statusToken);
-				//This is an Error - Deal with it somehow?
+				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
+				var isWebViewError = xPath != null && xPath.StartsWith(UserInterface.WebView.WebViewDisplay.xStatusPath);
 
-				this.LogError("Error in Status Response: {error}", statusToken.ToString());
+				UiExtensionsHandler?.ParseErrorStatus(statusToken);
+
+				if (isWebViewError)
+					this.LogDebug("WebView Status Error (expected when no WebView active): {error}", statusToken.ToString());
+				else
+					this.LogError("Error in Status Response: {error}", statusToken.ToString());
+
 				return;
 			}
 
@@ -3693,33 +3942,127 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				var listWasUpdated = false;
 				var cameraInfo = cameraToken.ToObject<List<JObject>>();
+				var removedCameraIds = new HashSet<uint>();
 
 				foreach (var cam in cameraInfo)
 				{
 					var modernId = cam.SelectToken("CameraId")?.ToString();
 					var legacyId = cam.SelectToken("id")?.ToString();
 					var camId = string.IsNullOrEmpty(modernId) ? legacyId : modernId;
+					var serialNumber = cam.SelectToken("SerialNumber.Value")?.ToString();
+					var connected = cam.SelectToken("Connected.Value")?.ToString();
 
 					if (string.IsNullOrEmpty(camId))
 					{
-						this.LogDebug("CameraId and id are null or empty. Skipping camera.");
 						continue;
 					}
 
-					var existingCam =
+					UInt16.TryParse(camId, out UInt16 camIdInt);
+
+					var existingCamStatus =
 						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
 
-					if (existingCam == null)
+					if (string.IsNullOrEmpty(serialNumber))
+						serialNumber = existingCamStatus?.SerialNumber?.Value ?? "Unknown";
+
+					var existingCameraDevice = DeviceManager.GetDevices()
+						.OfType<CiscoCamera>()
+						.FirstOrDefault(c => c.SerialNumber == serialNumber);
+
+					if (existingCameraDevice == null)
 					{
-						var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-						CodecStatus.Status.Cameras.CameraList.Add(newCam);
-						listWasUpdated = true;
+						existingCameraDevice = DeviceManager.GetDevices()
+							.OfType<CiscoCamera>()
+							.FirstOrDefault(c => c.CameraId == camIdInt && c.ParentCodec?.Key == Key);
+
+						if (existingCameraDevice != null)
+						{
+							serialNumber = existingCameraDevice.SerialNumber ?? serialNumber;
+							this.LogDebug("Camera {camId}: resolved device by camera ID: {device} serial={serial}", camId, existingCameraDevice.Key, serialNumber);
+						}
+					}
+
+					var lenses = cam.SelectToken("Lenses");
+					if (lenses != null)
+					{
+						foreach (var lens in lenses.Children<JObject>())
+						{
+							var ghost = lens.SelectToken("ghost")?.ToString();
+							if (ghost != null && bool.TryParse(ghost, out bool isGhost) && isGhost)
+							{
+								this.LogDebug("Camera {camId} is ghosted.  Removing from Codec.", camId);
+								existingCameraDevice?.SetOnlineStatus(false);
+								RemoveCamera(camIdInt, existingCameraDevice);
+								removedCameraIds.Add(camIdInt);
+							}
+						}
+					}
+
+					if (!removedCameraIds.Contains(camIdInt) && connected != null && connected.Equals("false", StringComparison.OrdinalIgnoreCase))
+					{
+						this.LogDebug("Camera {camId}: connected=false, calling RemoveCamera with serial={serial} device={device}",
+							camId, serialNumber, existingCameraDevice != null ? existingCameraDevice.Key : "null");
+						existingCameraDevice?.SetOnlineStatus(false);
+						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
+						removedCameraIds.Add(camIdInt);
+					}
+					else if (connected != null && connected.Equals("true", StringComparison.OrdinalIgnoreCase))
+					{
+						existingCameraDevice?.SetOnlineStatus(true);
+						if (existingCamStatus == null)
+						{
+							this.LogDebug("Camera {camId}: connected=true and new, calling AddCamera with serial={serial}", camId, serialNumber);
+							listWasUpdated = AddCamera(camIdInt, cam, existingCameraDevice, serialNumber);
+						}
+						else
+						{
+							this.LogDebug("Camera {camId}: connected=true (reconnected), serial={serial} device={device}",
+								camId, serialNumber, existingCameraDevice != null ? existingCameraDevice.Key : "null");
+
+							CameraConnected?.Invoke(this, new CameraEventArgs(camIdInt, serialNumber));
+
+							if (existingCameraDevice != null)
+							{
+								existingCameraDevice.SetParentCodec(this);
+
+								if (Cameras != null && !Cameras.Contains(existingCameraDevice))
+									Cameras.Add(existingCameraDevice);
+							}
+
+							listWasUpdated = true;
+						}
+					}
+
+
+					if (existingCamStatus == null)
+					{
+						// Add only if the status list still does not contain this camera ID.
+						var currentCamStatus =
+							CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+
+						if (currentCamStatus == null)
+						{
+							var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
+							CodecStatus.Status.Cameras.CameraList.Add(newCam);
+							listWasUpdated = true;
+						}
+						else
+						{
+							JsonConvert.PopulateObject(
+								cam.ToString(),
+								currentCamStatus,
+								new JsonSerializerSettings
+								{
+									NullValueHandling = NullValueHandling.Ignore,
+									MissingMemberHandling = MissingMemberHandling.Ignore,
+								});
+						}
 					}
 					else
 					{
 						JsonConvert.PopulateObject(
 							cam.ToString(),
-							existingCam,
+							existingCamStatus,
 							new JsonSerializerSettings
 							{
 								NullValueHandling = NullValueHandling.Ignore,
@@ -3730,14 +4073,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (listWasUpdated)
 				{
-					this.LogDebug(
+					this.LogVerbose(
 							"Connected Cameras: {@cameras}",
 							CodecStatus.Status.Cameras.CameraList.Count(c =>
 								c.Connected?.Value.ToLower() == "true"));
 
 					foreach (var cam in CodecStatus.Status.Cameras.CameraList)
 					{
-						this.LogDebug(
+						this.LogVerbose(
 							"Camera: {cameraId} connected: {connected} serial: {serialNumber}",
 							cam.CameraId, cam.Connected?.Value ?? "false",
 							cam.SerialNumber?.Value ?? "--empty---");
@@ -3776,6 +4119,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseCallArrayToken(callToken);
 			}
+			if (systemUnitStateToken != null)
+			{
+				PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
+				this.LogVerbose("SystemUnit State updated: NumberOfActiveCalls={n} IsAnyCallActive={inCall}",
+					CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value,
+					IsAnyCallActive);
+			}
 			if (mediaChannelsToken != null)
 			{
 				ParseMediaChannelsTokenArray(mediaChannelsToken);
@@ -3799,6 +4149,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (provisioningToken != null)
 			{
 				ParseProvisioningToken(provisioningToken);
+			}
+			if (diagnosticsToken != null)
+			{
+				ParseDiagnosticsToken(diagnosticsToken);
 			}
 			if (mainSourceToken != null)
 			{
@@ -3824,12 +4178,71 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
+
+			this.LogDebug("Requesting xFeedback List to verify registration");
+			SendTextWithoutQueue("xFeedback List");
+		}
+
+		private void ParseDiagnosticsToken(JToken diagnosticsToken)
+		{
+			if (diagnosticsToken == null)
+				return;
+
+			try
+			{
+				var messagesToken = diagnosticsToken.SelectToken("Message");
+				if (messagesToken == null)
+					return;
+
+				var messages = messagesToken is JArray
+					? messagesToken.Children<JObject>()
+					: new[] { messagesToken as JObject }.Where(m => m != null);
+
+				foreach (var message in messages)
+				{
+					var ghost = message.SelectToken("ghost")?.ToString();
+					var isGhost = ghost != null && bool.TryParse(ghost, out var g) && g;
+
+					var type = message.SelectToken("Type.Value")?.ToString() ?? "Unknown";
+					var level = message.SelectToken("Level.Value")?.ToString() ?? "Unknown";
+					var description = message.SelectToken("Description.Value")?.ToString() ?? string.Empty;
+					var references = message.SelectToken("References.Value")?.ToString() ?? string.Empty;
+
+					if (isGhost)
+					{
+						this.LogDebug(
+							"Codec Diagnostic CLEARED - Type={type} Level={level} References='{references}'",
+							type, level, references);
+						continue;
+					}
+
+					var logMessage = "Codec Diagnostic - Type={type} Level={level} Description='{description}' References='{references}'";
+
+					if (level.Equals("Error", StringComparison.OrdinalIgnoreCase) ||
+						level.Equals("Critical", StringComparison.OrdinalIgnoreCase))
+						this.LogError(logMessage, type, level, description, references);
+					else if (level.Equals("Warning", StringComparison.OrdinalIgnoreCase))
+						this.LogWarning(logMessage, type, level, description, references);
+					else
+						this.LogInformation(logMessage, type, level, description, references);
+				}
+			}
+			catch (Exception ex)
+			{
+				this.LogDebug("Error parsing Diagnostics status: {message}", ex.Message);
+			}
 		}
 
 		private void ParseMainSourceToken(JToken mainSourceToken)
 		{
 			if (mainSourceToken == null)
 				return;
+
+			if (Cameras == null)
+			{
+				this.LogDebug("Skipping Main Video Source parse because Cameras collection is not initialized yet.");
+				return;
+			}
 
 			var mainSourceValueToken = mainSourceToken.SelectToken("Value");
 			if (mainSourceValueToken == null)
@@ -3940,6 +4353,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				if (configurationToken == null || (configurationToken.Type == JTokenType.Object && !configurationToken.HasValues))
 					return;
+
+				var cameraConfigurationToken = configurationToken.SelectToken("Cameras.Camera");
+				if (cameraConfigurationToken != null)
+				{
+					ParseCameraAssignedSerialFeedback(cameraConfigurationToken);
+				}
+
 				var configuration = new CiscoCodecConfiguration.Configuration();
 				try
 				{
@@ -3988,6 +4408,46 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogError("Exception in ParseConfigurationObject : {message}", e.Message);
 				this.LogVerbose(e, "Exception");
+			}
+		}
+
+		private void ParseCameraAssignedSerialFeedback(JToken cameraConfigurationToken)
+		{
+			try
+			{
+				IEnumerable<JToken> cameraTokens;
+				if (cameraConfigurationToken.Type == JTokenType.Array)
+				{
+					cameraTokens = cameraConfigurationToken.Children();
+				}
+				else
+				{
+					cameraTokens = new[] { cameraConfigurationToken };
+				}
+
+				foreach (var cameraToken in cameraTokens)
+				{
+					var cameraIdString = cameraToken.SelectToken("id")?.ToString()
+						?? cameraToken.SelectToken("CameraId")?.ToString();
+					if (!uint.TryParse(cameraIdString, out var cameraId))
+					{
+						continue;
+					}
+
+					var assignedSerial = cameraToken.SelectToken("AssignedSerialNumber.Value")?.ToString();
+					if (assignedSerial == null)
+					{
+						continue;
+					}
+
+					this.LogDebug("Camera {cameraId}: assigned serial feedback value '{assignedSerial}'", cameraId, assignedSerial);
+					CameraAssignedSerialNumberChanged?.Invoke(this, new CameraEventArgs(cameraId, assignedSerial));
+				}
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Exception parsing camera assigned serial feedback: {message}", ex.Message);
+				this.LogVerbose(ex, "Exception");
 			}
 		}
 
@@ -4146,12 +4606,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (callHistoryResponseToken == null)
 				return;
-			var codecCallHistory = new CiscoCallHistory.CallHistoryRecentsResult();
-			PopulateObjectWithToken(
-				callHistoryResponseToken,
-				"CallHistoryRecentsResult",
-				codecCallHistory
-			);
+
+			var recentsToken =
+				callHistoryResponseToken.SelectToken("CallHistoryRecentsResult")
+				?? callHistoryResponseToken;
+
+			var status = recentsToken.SelectToken("status")?.ToString();
+			if (!string.IsNullOrEmpty(status) && status.Equals("Error", StringComparison.OrdinalIgnoreCase))
+			{
+				var reason = recentsToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
+				var xpath = recentsToken.SelectToken("XPath.Value")?.ToString() ?? "Unknown";
+				this.LogVerbose(
+					"Call history unavailable in current codec state. Reason: {reason}, XPath: {xpath}",
+					reason,
+					xpath
+				);
+				return;
+			}
+
+			var entriesToken = recentsToken.SelectToken("Entry");
+			if (entriesToken == null || (entriesToken.Type == JTokenType.Array && !entriesToken.HasValues))
+			{
+				this.LogDebug("Call history response had no entries.");
+				return;
+			}
+
+			var codecCallHistory = recentsToken.ToObject<CiscoCallHistory.CallHistoryRecentsResult>();
+			if (codecCallHistory?.Entry == null)
+				return;
+
 			CallHistory.ConvertCiscoCallHistoryToGeneric(codecCallHistory.Entry);
 		}
 
@@ -5936,7 +6419,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				foreach (var item in CodecStatus.Status.Cameras.CameraList)
 				{
 					var cam = item;
-					if (cam.Connected.Value.ToLower() == "false")
+					var connectedValue = cam.Connected?.Value;
+					if (connectedValue != null && connectedValue.Equals("false", StringComparison.OrdinalIgnoreCase))
 					{
 						this.LogDebug("Camera {id} is Disconnected", cam.CameraId);
 						continue;
@@ -5955,7 +6439,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var existingCameras = DeviceManager.AllDevices.OfType<CiscoCamera>();
 
-					var existingCamera = existingCameras.FirstOrDefault(c => c.SerialNumber == item.SerialNumber.Value);
+					var itemSerial = item.SerialNumber?.Value;
+					var existingCamera = !string.IsNullOrEmpty(itemSerial)
+						? existingCameras.FirstOrDefault(c => c.SerialNumber == itemSerial)
+						: null;
+
+					// Fallback: match by camera ID if serial not available
+					if (existingCamera == null)
+					{
+						existingCamera = existingCameras.FirstOrDefault(c => c.CameraId == camId && c.ParentCodec?.Key == Key);
+					}
 
 					if (existingCamera != null)
 					{
@@ -5964,25 +6457,45 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						{
 							existingCamera.SetCameraId(Convert.ToUInt16(id));
 						}
-						Cameras.Add(existingCamera);
+
+						if (Cameras.Contains(existingCamera))
+						{
+							this.LogDebug("Camera {id} already exists in camera list, skipping add", existingCamera.CameraId);
+						}
+						else
+						{
+							this.LogDebug("Adding existing camera to camera list: {key}", existingCamera.Key);
+							Cameras.Add(existingCamera);
+						}
+
 						continue;
 					}
 
-					var key = string.Format("{0}-camera{1}", Key, camId);
-					var camera = new CiscoCamera(key, name, this, camId, sourceId);
-
-					if (cam.Capabilities != null)
+					// if there's a serial number in this response, but no existing camera with a matching serial number
+					// create a new camera and add it to the Cameras collection
+					if (!string.IsNullOrEmpty(itemSerial))
 					{
-						camera.SetCapabilites(cam.Capabilities.Options.Value);
+						this.LogInformation(
+							"Camera with Serial Number {serial} is connected but not found in existing devices. Adding new camera.",
+							item.SerialNumber.Value
+						);
+						var key = string.Format("{0}-camera{1}", Key, camId);
+						var camera = new CiscoCamera(key, name, this, camId, sourceId);
+
+						if (cam.Capabilities != null)
+						{
+							camera.SetCapabilites(cam.Capabilities.Options.Value);
+						}
+
+						this.LogDebug("Adding Camera {id}", camera.CameraId);
+						Cameras.Add(camera);
 					}
 
-					this.LogDebug("Adding Camera {id}", camera.CameraId);
-					Cameras.Add(camera);
-
-					if (existingCamera == null)
-					{
-						DeviceManager.AddDevice(camera);
-					}
+					// can't add devices to DeviceManager after activation. commenting out
+					// if (existingCamera == null)
+					// {
+					// 	DeviceManager.AddDevice(camera);
+					// }
 				}
 			}
 
@@ -6018,6 +6531,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		private void SetUpCamerasFromConfig(List<CameraInfo> cameraInfo)
@@ -6094,6 +6612,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SelectedCamera = Cameras.First();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
+
+			if (NearEndPresets != null)
+			{
+				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
 		}
 
 		public void SetCodecProvisionMode(string mode)
@@ -6105,11 +6628,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region ICiscoCodecCameraConfig Members
 
-		public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
-		{
-			this.LogDebug("Setting the serial number of camera {id} to {serialNumber}", cameraId, serialNumber);
-			EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: {serialNumber}");
-		}
+
 
 		public void SetCameraName(uint videoConnectorId, string name)
 		{
@@ -6117,11 +6636,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  Name: \"{name}\"");
 		}
 
-		public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
-		{
-			this.LogDebug("Setting the camera id of video connector {id} to {inputCameraId}", videoConnectorId, inputCameraId);
-			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}] CameraControl CameraId: {inputCameraId}");
-		}
+
 
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
@@ -6135,7 +6650,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
 
-		public List<CameraBase> Cameras { get; private set; }
+		public List<CameraBase> Cameras { get; private set; } = new List<CameraBase>();
 
 		public StringFeedback SelectedCameraFeedback { get; private set; }
 
@@ -6513,7 +7028,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					this.LogError("Invalid URL provided for WebView: {url}. Must be absolute URL, IE https://roomos.cisco.com", url);
 					return;
 				}
-				var uwvd = new WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
+				var uwvd = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay { Url = url, Mode = mode, Title = title, Target = target };
 				EnqueueCommand(uwvd.xCommand());
 
 				return;
@@ -6569,7 +7084,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			string title = config.Emergency.UiWebViewDisplay.Title;
 			string target = config.Emergency.UiWebViewDisplay.Target;
 			string urlPath = url + config.Emergency.MobileControlPath;
-			WebViewDisplay uwvd = new WebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
+			PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay uwvd = new PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplay { Url = urlPath, Mode = mode, Title = title, Target = target };
 			EnqueueCommand(uwvd.xCommand());
 		}
 

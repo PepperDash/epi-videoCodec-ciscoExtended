@@ -19,6 +19,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
 		public event EventHandler<UiExtensionsClickedEventArgs> UiExtensionsClickedEvent;
 		public event EventHandler<WebViewChangedEventArgs> UiWebViewChangedEvent;
+		
+		/// <summary>
+		/// Fired when a webview is cleared via command (not from codec feedback).
+		/// This allows subscribers to handle the close when codec doesn't send feedback.
+		/// </summary>
+		public event EventHandler<WebViewDisplayClearActionArgs> WebViewClearedByCommand;
 
 		public WebViewStatus CurrentUiWebViewStatus { get; private set; }
 
@@ -39,6 +45,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 				var target = string.IsNullOrEmpty(args.Target) ? "Controller" : args.Target;
 
 				EnqueueCommand($"xCommand UserInterface WebView Clear Target:{target}{CiscoCodec.Delimiter}");
+				
+				// Fire event so codec can notify subscribers that webview was cleared
+				// (codec doesn't always send feedback when we command it to clear)
+				WebViewClearedByCommand?.Invoke(this, args);
 			});
 
 			EnqueueCommand($"xFeedback Register Event/UserInterface/WebView/Display{CiscoCodec.Delimiter}");
@@ -63,7 +73,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 			UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(CurrentUiWebViewStatus));
 		}
 
-		public void ParseErrorStatus(JToken statusToken)
+		public bool ParseErrorStatus(JToken statusToken)
 		{
 			try
 			{
@@ -71,15 +81,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
 				if (status?.XPath?.Value != null && status?.XPath?.Value != WebViewDisplay.xStatusPath)
 				{
-					return;
+					return false;
 				}
 
 				UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(new WebViewStatus(status)));
+				return true;
 			}
 			catch (Exception e)
 			{
 				_parent.LogError("ParseErrorStatus Error: {message}", e.Message);
 				_parent.LogVerbose(e, "Exception");
+				return false;
 			}
 		}
 

@@ -7,6 +7,7 @@ using Crestron.SimplSharp.Net;
 using PepperDash.Core;
 using PepperDash.Core.Logging;
 using PepperDash.Essentials.Core;
+using PepperDash.Essentials.Devices.Common.VideoCodec;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombiner;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterfaceExtensions;
@@ -97,7 +98,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             mcTpController = parent;
 
-            extensionsHandler = parent.UiExtensionsHandler;
+            extensionsHandler = parent.Parent?.UiExtensionsHandler ?? parent.UiExtensionsHandler;
 
             combinerHandler = parent.RoomCombinerHandler;
 
@@ -398,6 +399,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     return;
                 }
 
+                if (string.Equals(panelId, "catv", StringComparison.OrdinalIgnoreCase) && CodecIsInCall())
+                {
+                    this.LogInformation("Ignoring CATV panel click - codec is in a call");
+                    return;
+                }
+
                 if (mcPanel.DeviceActions != null && mcPanel.DeviceActions.Count > 0)
                 {
                     foreach (DeviceActionWrapper action in mcPanel.DeviceActions)
@@ -409,11 +416,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                         }
 
                         var configDeviceKey = action.DeviceKey;
+                        var configParams = action.Params;
 
                         if (action.DeviceKey == defaultRoomKey && defaultRoomKey != currentScenarioRoomKey)
                         {
                             this.LogInformation("Sending action {ActionId} to primary room {PrimaryRoomId}", action.MethodName, currentScenarioRoomKey);
                             action.DeviceKey = currentScenarioRoomKey;
+                            action.Params = GetScenarioAwareActionParams(action);
                         }
 
                         this.LogDebug("Running DeviceAction {MethodName} on device {key}", action.MethodName, action.DeviceKey);
@@ -421,16 +430,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
                         this.LogInformation("Resetting action deviceKey to config value");
                         action.DeviceKey = configDeviceKey;
+                        action.Params = configParams;
                     }
                 }
-
                 if (!string.IsNullOrEmpty(mcPanel.Url))
                 {
                     this.LogDebug("Sending URL to WebView: {Url}", mcPanel.Url);
 
-                    foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                    if (mcPanel.UiWebViewDisplays == null || !mcPanel.UiWebViewDisplays.Any())
                     {
-                        SendWebViewUrl(mcPanel.Url, webView);
+                        this.LogDebug("[Warning] UiWebViewDisplays not found for {PanelName}; using default display config", mcPanel.Name);
+                        SendWebViewUrl(mcPanel.Url, defaultUiWebViewDisplayConfig);
+                    }
+                    else
+                    {
+                        foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
+                        {
+                            SendWebViewUrl(mcPanel.Url, webView);
+                        }
                     }
 
                     return;
@@ -441,9 +458,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                     this.LogDebug("MobileControlPath not found for {PanelName}", mcPanel.Name);
                     return;
                 }
-                if (mcPanel.UiWebViewDisplays == null)
+                if (mcPanel.UiWebViewDisplays == null || !mcPanel.UiWebViewDisplays.Any())
                 {
-                    this.LogDebug("[Warning] UiWebViewDisplay not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig.Target);
+                    this.LogDebug("[Warning] UiWebViewDisplays not found for {PanelName} using default Title: {Title}, Mode: {Mode}, Target: {Target}", mcPanel.Name, defaultUiWebViewDisplayConfig.Title, defaultUiWebViewDisplayConfig.Mode, defaultUiWebViewDisplayConfig.Target);
+                    SendWebViewMcUrl(mcPanel.MobileControlPath, defaultUiWebViewDisplayConfig);
+                    return;
                 }
 
                 foreach (WebViewDisplayConfig webView in mcPanel.UiWebViewDisplays)
@@ -456,6 +475,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 this.LogDebug("Error Sending Mc URL to Cisco Ui: {Message}", ex.Message);
                 this.LogVerbose(ex, "Error Sending Mc URL to Cisco Ui");
             }
+        }
+
+        private object[] GetScenarioAwareActionParams(DeviceActionWrapper action)
+        {
+            if (!string.Equals(action.MethodName, "RunRouteAction", StringComparison.OrdinalIgnoreCase)
+                || action.Params == null
+                || action.Params.Length < 2
+                || currentScenarioRoomKey == LOCKOUT_SCENARIO_KEY
+                || !(action.Params[1] is string sourceListKey)
+                || !string.Equals(sourceListKey, defaultRoomKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return action.Params;
+            }
+
+            var scenarioParams = (object[])action.Params.Clone();
+            scenarioParams[1] = currentScenarioRoomKey;
+
+            return scenarioParams;
+        }
+
+        private bool CodecIsInCall()
+        {
+            var ownCodec = mcTpController?.Parent;
+            var inCall = ownCodec?.IsAnyCallActive ?? false;
+
+            this.LogVerbose(
+                "CodecIsInCall check: ownCodec={ownCodecKey} IsAnyCallActive={inCall}",
+                ownCodec?.Key, inCall);
+
+            return inCall;
         }
 
         /// <summary>

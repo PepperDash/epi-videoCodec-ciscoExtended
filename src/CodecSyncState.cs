@@ -187,6 +187,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             _systemActions.Enqueue(() =>
             {
+                this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
                 LoginMessageWasReceived = false;
                 JsonResponseModeSet = false;
                 InitialConfigurationMessageWasReceived = false;
@@ -200,6 +201,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         void CheckSyncStatus()
         {
+            this.LogDebug(
+                "CheckSyncStatus: LoginMessageWasReceived={Login}, JsonResponseModeSet={Json}, InitialConfigurationMessageWasReceived={Config}, InitialStatusMessageWasReceived={Status}, FeedbackWasRegistered={Feedback}, InitialSoftwareVersionMessageWasReceived={Software}, InitialSyncComplete={Sync}",
+                LoginMessageWasReceived, JsonResponseModeSet, InitialConfigurationMessageWasReceived,
+                InitialStatusMessageWasReceived, FeedbackWasRegistered, InitialSoftwareVersionMessageWasReceived,
+                InitialSyncComplete);
+
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
                 InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
             {
