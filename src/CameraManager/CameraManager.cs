@@ -739,6 +739,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 activeMigrations[camera.Key] = migration;
             }
 
+            // Staging decision: if the camera's expected slot on the target differs from the slot it
+            // currently occupies, move it to the neutral StagingCameraId first. The arrival
+            // "correct codec" path re-slots it to the expected id once it is stable on the target.
+            // We pin the staging slot here (rather than the expected slot) so the source codec never
+            // binds this camera to a slot another camera legitimately owns there during transit.
+            var expectedTargetId = GetScenarioConfiguredCameraId(scenarioKey, targetCodecKey, camera.Key) ?? camera.DefaultCameraId;
+            migration.ExpectedCameraId = expectedTargetId;
+            if (expectedTargetId != camera.CameraId)
+            {
+                migration.UsesStaging = true;
+                this.LogDebug($"CAMERA_SWITCHOVER_STAGING camera='{camera.Key}' targetCodec='{targetCodecKey}' stagingSlot='{StagingCameraId}' expectedSlot='{expectedTargetId}' currentSlot='{camera.CameraId}'");
+                camera.SetScenarioCameraId(StagingCameraId);
+            }
+
             this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}'");
             sourceCodec.CameraFactoryReset(sourceCameraId);
 
@@ -2383,6 +2397,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             public string SourceCodecKey { get; set; }
             public uint SourceCameraId { get; set; }
             public string TargetCodecKey { get; set; }
+            public bool UsesStaging { get; set; }
+            public uint ExpectedCameraId { get; set; }
             public bool PoeDisabledConfirmed { get; set; }
             public bool AssignmentClearedConfirmed { get; set; }
             public DateTime AssignmentClearDeadlineUtc { get; set; }
