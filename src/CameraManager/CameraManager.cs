@@ -2057,13 +2057,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            foreach (var codecConfig in scenarioConfig.CodecConfigs)
-            {
-                if (codecConfig?.CameraKeys == null)
-                {
-                    return false;
-                }
-
+foreach (var codecConfig in scenarioConfig.CodecConfigs)
+{
+    if (codecConfig?.CameraKeys == null || !codecConfig.CameraKeys.Any())
+    {
+        return false;
+    }
                 foreach (var cameraKey in codecConfig.CameraKeys)
                 {
                     if (!managedCameras.TryGetValue(cameraKey, out var camera)
