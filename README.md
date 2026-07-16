@@ -449,15 +449,18 @@ The typename `ciscocamera` will create a device that represents a Cisco camera a
 
 the typename `ciscocameramanager` will create a device that manages cameras that can switch between different codecs based on room combination scenarios.
 
-The `CameraManager` device interacts with a managed network switch that must implement `INetworkSwitchPoeVlanManager` as well as instances of `CiscoCodec` that implement `ICiscoCodecCameraFactoryReset` and `CiscoCamera`.
+Use this section as a quick overview. For detailed behavior, migration flow, failure/recovery logic, and advanced troubleshooting, use `docs/CameraManager-Readme.md`.
 
-Based on the configuration specified, this device will monitor the current room combination scenario and automatically execute the necessary actions on the codec and the network switch to be able to assign a Cisco Vision camera to a different codec at runtime.
+The `CameraManager` device works with:
 
-The CameraManager config should ONLY list the cameras that need to be moved between codecs.  Any cameras that will be statically assigned to a single codec and not change at runtime should not be included in the `cameraKeys` arrays for any of the `codecConfig` arrays.
+- a managed network switch implementing `INetworkSwitchPoeVlanManager`
+- `CiscoCodec` devices implementing `ICiscoCodecCameraFactoryReset`
+- `CiscoCamera` devices that include required migration properties (`networkSwitchPort`, `serialNumber`, `defaultParentCodecKey`, `defaultCameraId`)
 
-In order for this functionality to work, each codec config must specify a `vlanId` property, and each camera config must specify a `networkSwitchPort` property as well as `defaultParentCodecKey`, `defaultCameraId`, and `serialNumber`.
+It monitors the active room-combiner scenario and moves only cameras listed in scenario `cameraKeys` as needed between codecs.
+This minimal example uses the simple string form for `cameraKeys`; for explicit per-codec target `cameraId` mappings and full behavior details, see `docs/CameraManager-Readme.md`.
 
-`sourceId` is still used for video-source routing (`SetMainVideoSource`) but is not required by CameraManager migration logic.
+Minimal CameraManager config example:
 
 ```json
 {
@@ -466,9 +469,6 @@ In order for this functionality to work, each codec config must specify a `vlanI
   "type": "cameramanager",
   "properties": {
     "networkSwitchKey": "ciscoSwitch-1",
-    "factoryResetSettleMs": 2000,
-    "disablePoeCycling": true,
-    "useCameraFactoryResetDisconnectFeedback": true,
     "roomCombinerConfig": {
       "roomCombinerKey": "essentialsroomcombiner",
       "combineScenarios": {
@@ -476,59 +476,7 @@ In order for this functionality to work, each codec config must specify a `vlanI
           "codecConfigs": [
             {
               "codecKey": "codecA",
-              "cameraKeys": [{ "cameraKey": "cameraA-front", "cameraId": 7 }, { "cameraKey": "cameraA-side", "cameraId": 9 }]
-            },
-            {
-              "codecKey": "codecB",
-              "cameraKeys": [{ "cameraKey": "cameraB-front", "cameraId": 7 }, { "cameraKey": "cameraB-rear", "cameraId": 8 }]
-            },
-            {
-              "codecKey": "codecC",
-              "cameraKeys": [{ "cameraKey": "cameraC-front", "cameraId": 7 }, { "cameraKey": "cameraC-side", "cameraId": 9 }]
-            }
-          ]
-        },
-        "abcCombined": {
-          "codecConfigs": [
-            {
-              "codecKey": "codecA",
-              "cameraKeys": [{ "cameraKey": "cameraB-front", "cameraId": 10 }]
-            },
-            {
-              "codecKey": "codecB",
-              "cameraKeys": [{ "cameraKey": "cameraC-front", "cameraId": 7 }, { "cameraKey": "cameraC-side", "cameraId": 9 }]
-            }
-          ]
-        },
-        "abCombined": {
-          "codecConfigs": [
-            {
-              "codecKey": "codecA",
-              "cameraKeys": [{ "cameraKey": "cameraB-front", "cameraId": 10 }]
-            },
-            {
-              "codecKey": "codecB",
-              "cameraKeys": [{ "cameraKey": "cameraA-front", "cameraId": 7 }, { "cameraKey": "cameraA-side", "cameraId": 9 }]
-            },
-            {
-              "codecKey": "codecC",
-              "cameraKeys": [{ "cameraKey": "cameraC-front", "cameraId": 7 }, { "cameraKey": "cameraC-side", "cameraId": 9 }]
-            }
-          ]
-        },
-        "bcCombined": {
-          "codecConfigs": [
-            {
-              "codecKey": "codecA",
-              "cameraKeys": [{ "cameraKey": "cameraA-front", "cameraId": 7 }, { "cameraKey": "cameraA-side", "cameraId": 9 }]
-            },
-            {
-              "codecKey": "codecB",
-              "cameraKeys": [{ "cameraKey": "cameraC-front", "cameraId": 7 }, { "cameraKey": "cameraC-side", "cameraId": 9 }]
-            },
-            {
-              "codecKey": "codecC",
-              "cameraKeys": [{ "cameraKey": "cameraB-front", "cameraId": 10 }]
+              "cameraKeys": ["cameraA-front"]
             }
           ]
         }
@@ -536,75 +484,7 @@ In order for this functionality to work, each codec config must specify a `vlanI
     }
   }
 }
-
 ```
-
-### Per-scenario camera IDs
-
-Each `cameraKeys` entry can be either:
-
-- a string camera key (legacy form), or
-- an object with explicit slot override: `{ "cameraKey": "cameraA", "cameraId": 8 }`
-
-Both forms can be mixed in the same `cameraKeys` array.
-
-Resolution order for the slot used on the target codec:
-
-1. If a scenario entry has an explicit `cameraId`, that value wins.
-2. If no explicit `cameraId` is present and `maintainConfiguredCameraId` is `true`, the camera uses `defaultCameraId`.
-3. If no explicit `cameraId` is present and `maintainConfiguredCameraId` is `false`, CameraManager allocates from the dynamic pool `[7,8,9]`.
-
-During dynamic allocation, CameraManager also tracks short-lived in-flight reservations per codec to avoid giving the same slot to two cameras before codec feedback catches up.
-
-Activation validation now fails fast when:
-
-- a scenario camera assignment sets `cameraId: 0`
-- a single camera key is assigned to multiple codecs in the same scenario
-- two cameras on the same codec resolve to the same effective slot (`explicit cameraId` or `defaultCameraId` fallback)
-
-Cameras omitted from a scenario remain unmanaged in that scenario.
-
-In the example above, `cameraId: 10` is used to park `cameraB-front` on a non-home codec during combined scenarios so it stays attached and reachable without colliding with the active in-room camera slots.
-
-### Migration behavior and recovery
-
-When the room combination scenario changes, the `CameraManager` moves each affected camera to the codec that owns it in the new scenario. A migration is only ever started after the camera is **confirmed online** on its current (wrong) codec, then runs a feedback-driven cascade: factory-reset the camera on the source codec → disable PoE and clear the source codec's assigned serial → switch the switch port to the target codec's VLAN → re-enable PoE → wait for the target codec to report the camera attached.
-
-The factory reset and source serial-clear always target the **actual live slot** the camera occupies on the source codec, resolved by serial number at migration start — never a stale or target slot. A moving camera is pinned to that live source slot for the duration of the migration, so source-side self-heal stays a no-op and never rewrites the source codec while the camera is still on it. The target slot is only pinned once the camera attaches to the target codec.
-
-Assigning the camera's serial to its target slot is **confirmation-driven**: if the target slot is still occupied by another camera (for example, the previous occupant is mid-migration out of that codec), the assignment is deferred and tracked against the blocking camera rather than overwriting the slot. The wait is released by real codec events (the blocker camera disconnecting/connecting, or its slot's assigned-serial clearing), so the manager never force-clears a slot that another camera's migration is still responsible for.
-
-After the factory reset is issued, the manager waits `factoryResetSettleMs` (default 2000 ms) before tearing down PoE and moving the camera. The reset clears the camera's pairing/authentication to the source codec, and that takes time to take effect; if the camera is moved too soon it arrives at the target codec still carrying the source codec's credentials, and the target reports `authentication failed, pinhole factory reset required`. Note that the source codec's connected feedback is not a reliable signal for this — the codec keeps reporting the camera connected until it actually reboots — so a fixed settle delay is used instead. If you still see the pinhole diagnostic on the first attach attempt, increase `factoryResetSettleMs`.
-
-Alternatively, set `useCameraFactoryResetDisconnectFeedback` to `true` to gate the move on the source codec's **disconnect** feedback instead of the fixed timer. In this mode the manager waits for the source codec to report the camera disconnected — the moment the factory reset actually takes effect and the camera drops/reboots — and then starts the PoE/VLAN cascade immediately, rather than waiting out `factoryResetSettleMs`. This adapts to how long a given camera actually takes to reset instead of guessing. A bounded fallback still starts the cascade if no disconnect is reported within 25 seconds, so a missed event cannot stall the migration.
-
-By default the cascade power-cycles (PoE off → VLAN → PoE on) the switch port to force the camera to reboot onto the new VLAN. Set `disablePoeCycling` to `true` to suppress PoE off/on in the main migration cascade and attach-failure reseed path; those flows then move cameras by VLAN change and serial reassignment only. The periodic floating-camera watchdog currently still uses `probeAndBouncePoe` attempts during recovery. Use `disablePoeCycling` when the normal migration path must keep PoE on (for example when the camera is powered/managed elsewhere, or the switch performs the power cycle itself on a VLAN change). The state machine is advanced internally at the points the PoE feedback events would normally drive it.
-
-Alongside the migration cascade, the manager runs a **port-state reconciliation** pass that re-asserts the switch port VLAN (and PoE, unless `disablePoeCycling` is set) to keep already-placed cameras aligned with the active scenario. This pass is intentionally conservative: it only re-asserts the port for a camera that is **confirmed online on its target codec**. A camera that is not yet on its target codec is left on its current VLAN (logged as `CAMERA_PORT_ENSURE ... action='skipped' reason='notOnlineOnTargetCodec'`) so that it stays visible to its source codec and the normal confirmed-online migration cascade can move it. This avoids stranding a camera on the target VLAN before the migration has run, which would hide it from the source codec and prevent the migration from starting.
-
-If the target codec does not report the camera attached within the attach-wait window, the manager performs an **automatic recovery**: it reseeds the camera back onto the source codec's VLAN with PoE on. The source codec then rediscovers the camera, which triggers a fresh migration cascade from scratch. This reseed-and-retry is the only action proven to recover a stuck attach; it repeats until the camera attaches. The retry loop is scoped to the single affected camera's switch port and does not disturb other cameras or codecs.
-
-The number of failed attach attempts is tracked per camera and reported in the logs (`failedAttempts`) on `CAMERA_SWITCHOVER_ATTACH_FAILED`, `CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED`, and `CAMERA_SWITCHOVER_ATTACH_CONFIRMED`, so it is visible how many retries a recovery required.
-
-A periodic **safety-net reconciliation sweep** guards against the case where a reseed never recovers — for example, a camera that, after being pushed back to the source codec, never re-registers (firmware hang, dead NIC, or a cable/PoE fault), leaving it floating with no active migration to retry. The sweep runs on a fixed interval and, for each scenario camera that is not confirmed online on its target codec and has no active migration, takes one of two actions after a per-camera backoff: if the camera is found online on the wrong codec it starts a migration (`CAMERA_SWITCHOVER_RECONCILE_WRONG_CODEC`); if it is online nowhere it applies a bounded floating-recovery policy (`CAMERA_SWITCHOVER_RECONCILE_FLOATING`) that cycles the camera port VLAN across probe codecs (target codec first, then other scenario codecs, then remaining managed codecs) and performs PoE bounce on each attempt (`action='probeAndBouncePoe'`). After **12 total attempts**, the watchdog stops retrying that camera (`reason='attemptLimitReached'`).
-
-Floating recovery state is scoped to the active room-combiner scenario and is cleared on scenario change, so retries from a previous combination do not leak into a new one.
-
-When any managed camera reports connected, the manager immediately re-runs reconciliation for the current scenario. This ensures post-recovery cases where a camera reappears on the wrong codec are corrected right away instead of waiting for the next periodic sweep.
-
-### Migration logging verbosity
-
-Migration logging is split by level so the **Debug** stream reads as a clean per-camera sequence of state transitions, while the high-frequency and redundant detail is kept at **Verbose** for deep troubleshooting.
-
-At **Debug**, the manager emits the structured `CAMERA_SWITCHOVER_*` state markers: `FACTORY_RESET_ISSUED`, `FACTORY_RESET_DISCONNECT_CONFIRMED`/`_TIMEOUT`, `MIGRATION_STARTED`, `READY`, `ATTACH_WAITING`, `TARGET_SERIAL_ASSIGN`, `TARGET_SLOT_BUSY`/`_CLEAR`/`_ASSIGN`, `ATTACH_CONFIRMED`, `ATTACH_FAILED`, `ASSIGNED_CLEARED_FALLBACK`/`_TIMEOUT`, `POE_REENABLE_RETRY`, `POE_SAFEGUARD_TRIGGERED`, `PHANTOM_DISCONNECT`, `RECONCILE_WRONG_CODEC`, and `RECONCILE_FLOATING`, plus dynamic camera-ID allocation and all real warnings/errors.
-
-At **Verbose**, the manager emits the routine/high-frequency detail: the per-camera scenario-reconciliation pass that runs on every camera connect (including `CAMERA_PORT_ENSURE` and its `action='skipped' reason='notOnlineOnTargetCodec'` form, `skipping factory reset … already assigned`, and `skipping port-state ensure … active migration`), no-op notifications (port VLAN/PoE events with no active migration, disconnect/connect events that resolve no managed camera), the `CAMERA_SWITCHOVER_WAITING`/`_DUPLICATE_DISCONNECT`/`_POE_GUARD_ENSURE_ON`/`_POE_ON_AFTER_VLAN` guards, and the prose companions that restate a structured marker.
-
-Note that the reconciliation warning `cannot reset camera … parent codec is not available` is logged at **Verbose** and is expected/benign: during a reconnect the codec fires its `CameraConnected` event (which triggers reconciliation) a moment before it repopulates the camera's parent-codec reference, so a camera that is actively completing its migration can transiently read as having no parent codec. The migration completes normally (`CAMERA_SWITCHOVER_ATTACH_CONFIRMED`) immediately afterward.
-
-### Codec diagnostics logging
-
-The codec subscribes to `/Status/Diagnostics` and logs each diagnostics message the codec reports (`Type`, `Level`, `Description`, `References`). `Error`/`Critical` messages are logged as errors, `Warning` as warnings, and others as information; cleared (ghosted) messages are logged at debug level. This surfaces camera-related conditions such as `CameraAuthentication`, `CameraPairing`, and `CameraSerial` failures (for example, a camera that requires a physical pinhole factory reset) that the migration logic cannot resolve on its own.
 
 ## Bridge
 
