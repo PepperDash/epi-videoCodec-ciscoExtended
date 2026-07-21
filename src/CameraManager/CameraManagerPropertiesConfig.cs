@@ -216,6 +216,74 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 a != null && string.Equals(a.CameraKey, cameraKey, StringComparison.OrdinalIgnoreCase));
             return assignment?.CameraId;
         }
+
+        /// <summary>
+        /// Returns the explicitly configured display name for the given camera key in this scenario,
+        /// or null when none was declared (string form, or object without <c>cameraName</c>). A null
+        /// result means "leave the connector name unchanged".
+        /// </summary>
+        /// <param name="cameraKey">Camera device key (case-insensitive).</param>
+        public string GetConfiguredCameraName(string cameraKey)
+        {
+            if (CameraAssignments == null || string.IsNullOrEmpty(cameraKey))
+            {
+                return null;
+            }
+
+            var assignment = CameraAssignments.FirstOrDefault(a =>
+                a != null && string.Equals(a.CameraKey, cameraKey, StringComparison.OrdinalIgnoreCase));
+            return assignment?.CameraName;
+        }
+
+        /// <summary>
+        /// Number of camera assignments in this codec config flagged <c>primary: true</c>. Used by
+        /// activation validation to reject a codec config that marks more than one primary.
+        /// </summary>
+        [JsonIgnore]
+        public int PrimaryCount
+        {
+            get { return CameraAssignments == null ? 0 : CameraAssignments.Count(a => a != null && a.Primary); }
+        }
+
+        /// <summary>
+        /// Returns the device key of the camera explicitly flagged <c>primary: true</c> for this
+        /// codec in this scenario, or null when none is flagged. A null result means the manager
+        /// does not force a main-video-source selection for this codec.
+        /// </summary>
+        public string GetPrimaryCameraKey()
+        {
+            if (CameraAssignments == null || CameraAssignments.Count == 0)
+            {
+                return null;
+            }
+
+            return CameraAssignments.FirstOrDefault(a => a != null && a.Primary)?.CameraKey;
+        }
+
+        /// <summary>
+        /// Number of camera assignments in this codec config flagged <c>presenterTrack: true</c>.
+        /// Used by activation validation to reject more than one presenter-track camera per codec.
+        /// </summary>
+        [JsonIgnore]
+        public int PresenterTrackCount
+        {
+            get { return CameraAssignments == null ? 0 : CameraAssignments.Count(a => a != null && a.PresenterTrack); }
+        }
+
+        /// <summary>
+        /// Returns the device key of the camera flagged <c>presenterTrack: true</c> for this codec in
+        /// this scenario, or null when none is flagged. A null result means the manager leaves the
+        /// codec's PresenterTrack connector untouched.
+        /// </summary>
+        public string GetPresenterTrackCameraKey()
+        {
+            if (CameraAssignments == null || CameraAssignments.Count == 0)
+            {
+                return null;
+            }
+
+            return CameraAssignments.FirstOrDefault(a => a != null && a.PresenterTrack)?.CameraKey;
+        }
     }
 
     /// <summary>
@@ -237,6 +305,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         [JsonProperty("cameraId")]
         public uint? CameraId { get; set; }
+
+        /// <summary>
+        /// Optional display name to apply to this camera's video input connector on the target codec
+        /// for this scenario (via <c>xConfiguration Video Input Connector[id] Name</c>). When null or
+        /// empty, the connector name is left unchanged.
+        /// </summary>
+        [JsonProperty("cameraName")]
+        public string CameraName { get; set; }
+
+        /// <summary>
+        /// When true, this camera is selected as the codec's main video source (the "primary" camera)
+        /// once every camera for this codec is confirmed attached for the scenario. At most one
+        /// assignment per codec config may set this. When none is flagged, the manager does not force
+        /// a selection for that codec. Only the object form of a <c>cameraKeys</c> element can set this.
+        /// </summary>
+        [JsonProperty("primary")]
+        public bool Primary { get; set; }
+
+        /// <summary>
+        /// When true, this camera is set as the codec's PresenterTrack camera once every camera for
+        /// this codec is confirmed attached for the scenario (the manager issues
+        /// <c>xConfiguration Cameras PresenterTrack Connector</c> with this camera's slot and enables
+        /// PresenterTrack). At most one assignment per codec config may set this. Independent of
+        /// <see cref="Primary"/>. Only the object form of a <c>cameraKeys</c> element can set this.
+        /// </summary>
+        [JsonProperty("presenterTrack")]
+        public bool PresenterTrack { get; set; }
     }
 
     /// <summary>
@@ -286,7 +381,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             CameraKey = (string)jo["cameraKey"],
                             CameraId = jo["cameraId"] != null && jo["cameraId"].Type != JTokenType.Null
                                 ? (uint?)jo["cameraId"].Value<uint>()
-                                : null
+                                : null,
+                            CameraName = jo["cameraName"] != null && jo["cameraName"].Type != JTokenType.Null
+                                ? (string)jo["cameraName"]
+                                : null,
+                            Primary = jo["primary"] != null && jo["primary"].Type != JTokenType.Null
+                                && jo["primary"].Value<bool>(),
+                            PresenterTrack = jo["presenterTrack"] != null && jo["presenterTrack"].Type != JTokenType.Null
+                                && jo["presenterTrack"].Value<bool>()
                         });
                         break;
                     default:

@@ -65,6 +65,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             this.LogDebug("Clearing the assigned serial number for camera ID {cameraId}", cameraId);
             EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] AssignedSerialNumber: \"\"");
         }
+
+        public void SetCameraFlip(uint cameraId, bool flip)
+        {
+            var flipValue = flip ? "On" : "Off";
+            this.LogDebug("Setting camera {cameraId} Flip to {flip}", cameraId, flipValue);
+            EnqueueCommand($"xConfiguration Cameras Camera[{cameraId}] Flip: {flipValue}");
+        }
+
+        public void SetPresenterTrackConnector(uint connector)
+        {
+            this.LogDebug("Setting PresenterTrack connector to {connector}", connector);
+            EnqueueCommand($"xConfiguration Cameras PresenterTrack Connector: {connector}");
+        }
+
+        public void SetPresenterTrackEnabled(bool enabled)
+        {
+            var enabledValue = enabled ? "True" : "False";
+            this.LogDebug("Setting PresenterTrack Enabled to {enabled}", enabledValue);
+            EnqueueCommand($"xConfiguration Cameras PresenterTrack Enabled: {enabledValue}");
+        }
     }
 
 }

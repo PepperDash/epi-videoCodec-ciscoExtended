@@ -6682,13 +6682,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
 			);
 
-			if (camera != null)
+			if (camera == null)
 			{
-				this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
-				SelectedCamera = camera;
-			}
-			else
 				this.LogDebug("Unable to select camera with key: '{key}'", key);
+				return;
+			}
+
+			this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
+			SelectedCamera = camera;
 
 			EnqueueCommand(
 				string.Format(
