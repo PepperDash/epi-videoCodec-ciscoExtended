@@ -81,6 +81,31 @@ namespace PepperDash.Essentials.Core.DeviceTypeInterfaces
         void ClearCameraAssignedSerialNumber(uint cameraId);
 
         /// <summary>
+        /// Sets the image flip for a specific camera slot.
+        /// Equivalent to "xConfiguration Cameras Camera[<paramref name="cameraId"/>] Flip: On|Off".
+        /// Used to apply a physical mounting orientation (e.g. ceiling-mounted cameras are flipped)
+        /// after a camera attaches to a codec slot.
+        /// </summary>
+        /// <param name="cameraId">Logical camera ID (slot) on this codec (1-based)</param>
+        /// <param name="flip">True to flip the image (On), false for normal (Off)</param>
+        void SetCameraFlip(uint cameraId, bool flip);
+
+        /// <summary>
+        /// Sets which connector holds the PresenterTrack camera on this codec.
+        /// Equivalent to "xConfiguration Cameras PresenterTrack Connector: <paramref name="connector"/>".
+        /// </summary>
+        /// <param name="connector">Connector/camera id of the PresenterTrack camera</param>
+        void SetPresenterTrackConnector(uint connector);
+
+        /// <summary>
+        /// Enables or disables the PresenterTrack feature on this codec.
+        /// Equivalent to "xConfiguration Cameras PresenterTrack Enabled: True|False".
+        /// Must be True for the configured PresenterTrack connector to be usable.
+        /// </summary>
+        /// <param name="enabled">True to enable PresenterTrack, false to disable</param>
+        void SetPresenterTrackEnabled(bool enabled);
+
+        /// <summary>
         /// Returns the serial number of the camera currently paired with the given camera slot,
         /// or null/empty when not available.
         /// </summary>

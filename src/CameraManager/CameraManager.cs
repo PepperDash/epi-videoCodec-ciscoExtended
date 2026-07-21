@@ -28,6 +28,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private readonly Dictionary<string, CameraMigrationState> activeMigrations = new Dictionary<string, CameraMigrationState>();
         private readonly object activeMigrationsLock = new object();
 
+        // Tracks the scenario for which per-codec camera roles (primary main-source selection and
+        // PresenterTrack connector) have already been applied, so repeated ticks do not re-issue them.
+        // Keyed by codec key -> scenario key. Cleared on scenario change. Guarded by activeMigrationsLock.
+        private readonly Dictionary<string, string> rolesAppliedScenarioByCodec = new Dictionary<string, string>();
+
         // In-flight dynamic camera ID reservations. Between the moment we issue an
         // AssignedSerialNumber to a codec and the moment the codec reports it back in its Cameras
         // collection, the confirmed state does not yet reflect the assignment. Without tracking
@@ -1081,6 +1086,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 // how the previous burst ended.
                 TryReleaseAndDispatchBurstGate();
 
+                // Once a codec's cameras have all settled for the current scenario, select its primary
+                // camera as main source and pin/enable its PresenterTrack connector. Self-gates and
+                // applies once per codec per scenario.
+                TryApplyScenarioCameraRoles(roomCombiner?.CurrentScenario?.Key);
+
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
@@ -1605,6 +1615,123 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 && string.Equals(c.SerialNumber, camera.SerialNumber, StringComparison.OrdinalIgnoreCase)) == true;
         }
 
+        /// <summary>
+        /// For the current scenario, selects each codec's configured "primary" camera as its main
+        /// video source and pins/enables the configured PresenterTrack camera's connector. Applied
+        /// once per codec per scenario (tracked in <see cref="rolesAppliedScenarioByCodec"/>) and only
+        /// after every camera that codec owns in the scenario is confirmed attached with no move in
+        /// flight — otherwise a later attach could steal focus or the presenter camera might be absent.
+        /// Safe to call every tick; it self-gates. A codec with no primary/presenter flagged is left
+        /// untouched.
+        /// </summary>
+        private void TryApplyScenarioCameraRoles(string scenarioKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey)
+                || config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                var codecKey = codecConfig?.CodecKey;
+                if (string.IsNullOrWhiteSpace(codecKey))
+                {
+                    continue;
+                }
+
+                bool alreadyApplied;
+                lock (activeMigrationsLock)
+                {
+                    alreadyApplied = rolesAppliedScenarioByCodec.TryGetValue(codecKey, out var appliedScenario)
+                        && string.Equals(appliedScenario, scenarioKey, StringComparison.OrdinalIgnoreCase);
+                }
+                if (alreadyApplied)
+                {
+                    continue;
+                }
+
+                // Only act once every camera this codec owns in the scenario is confirmed online on it
+                // and no move is in flight.
+                if (!IsCodecFullyAttachedForScenario(codecConfig))
+                {
+                    continue;
+                }
+
+                if (!managedCodecs.TryGetValue(codecKey, out var codecDevice) || !(codecDevice is CiscoCodec codec))
+                {
+                    this.LogDebug($"Camera Manager {Key} cannot apply camera roles on codec '{codecKey}': codec not a managed CiscoCodec");
+                    continue;
+                }
+
+                // Primary camera -> main video source. Defensive online re-check.
+                var primaryCameraKey = codecConfig.GetPrimaryCameraKey();
+                if (!string.IsNullOrWhiteSpace(primaryCameraKey)
+                    && managedCameras.TryGetValue(primaryCameraKey, out var primaryCamera)
+                    && IsCameraOnlineOnCodec(codecKey, primaryCamera))
+                {
+                    this.LogDebug($"CAMERA_SCENARIO_PRIMARY_SELECT scenario='{scenarioKey}' codec='{codecKey}' primaryCamera='{primaryCameraKey}'");
+                    codec.SelectCamera(primaryCamera.Key);
+                }
+
+                // Presenter-track camera -> PresenterTrack Connector (enable first; a connector set on a
+                // codec with PresenterTrack disabled has no effect). The connector is the camera's
+                // effective slot (explicit scenario cameraId, else its defaultCameraId).
+                var presenterTrackCameraKey = codecConfig.GetPresenterTrackCameraKey();
+                if (!string.IsNullOrWhiteSpace(presenterTrackCameraKey)
+                    && managedCameras.TryGetValue(presenterTrackCameraKey, out var ptCamera)
+                    && IsCameraOnlineOnCodec(codecKey, ptCamera))
+                {
+                    var connector = codecConfig.GetConfiguredCameraId(presenterTrackCameraKey) ?? ptCamera.DefaultCameraId;
+                    this.LogDebug($"CAMERA_SCENARIO_PRESENTERTRACK_SET scenario='{scenarioKey}' codec='{codecKey}' presenterTrackCamera='{presenterTrackCameraKey}' connector='{connector}' enabled='True'");
+                    codec.SetPresenterTrackEnabled(true);
+                    codec.SetPresenterTrackConnector(connector);
+                }
+
+                lock (activeMigrationsLock)
+                {
+                    rolesAppliedScenarioByCodec[codecKey] = scenarioKey;
+                }
+            }
+        }
+
+        /// <summary>
+        /// True when every camera assigned to <paramref name="codecConfig"/> in its scenario is
+        /// confirmed online on that codec and none of them has an active or queued move.
+        /// </summary>
+        private bool IsCodecFullyAttachedForScenario(CameraManagerCodecConfig codecConfig)
+        {
+            if (codecConfig?.CameraKeys == null || codecConfig.CameraKeys.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var cameraKey in codecConfig.CameraKeys)
+            {
+                if (!managedCameras.TryGetValue(cameraKey, out var camera)
+                    || !IsCameraOnlineOnCodec(codecConfig.CodecKey, camera))
+                {
+                    return false;
+                }
+            }
+
+            lock (activeMigrationsLock)
+            {
+                foreach (var cameraKey in codecConfig.CameraKeys)
+                {
+                    if (activeMigrations.ContainsKey(cameraKey)
+                        || pendingMigrationStarts.Any(p => string.Equals(p.Camera?.Key, cameraKey, StringComparison.Ordinal)))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         private string FindCodecKeyWhereCameraOnline(CiscoCamera camera)
         {
             if (camera == null || string.IsNullOrWhiteSpace(camera.SerialNumber))
@@ -1684,6 +1811,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     this.LogDebug($"Camera Manager {Key} clearing {pendingMigrationStarts.Count} queued migration start(s) on scenario change to '{currentScenario?.Key}'");
                     pendingMigrationStarts.Clear();
                 }
+
+                // New scenario -> re-apply primary/PresenterTrack roles once its cameras settle.
+                rolesAppliedScenarioByCodec.Clear();
             }
 
             this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
@@ -2355,6 +2485,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     this.LogDebug($"CAMERA_SWITCHOVER_SET_CAMERA_NAME camera='{camera.Key}' codec='{codec.Key}' connectorId='{targetSlot}' name='{configuredCameraName}'");
                     codec.SetCameraName(targetSlot, configuredCameraName);
+                }
+
+                // Apply the camera image flip (On for ceiling-mounted cameras) from the camera's
+                // FlipImage config, so it is correct on whichever codec/slot the camera lands on.
+                if (codec != null)
+                {
+                    this.LogDebug($"CAMERA_SWITCHOVER_SET_CAMERA_FLIP camera='{camera.Key}' codec='{codec.Key}' slot='{targetSlot}' flip='{camera.FlipImage}'");
+                    codec.SetCameraFlip(targetSlot, camera.FlipImage);
                 }
             }
             else

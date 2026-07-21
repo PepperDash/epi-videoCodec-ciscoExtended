@@ -64,6 +64,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public string NetworkSwitchPort { get; private set; }
 
         /// <summary>
+        /// Whether this camera's image should be flipped (true for a ceiling-mounted camera, false
+        /// for a normally-mounted one). Declared on the camera device via <c>flipImage</c> and read
+        /// by the CameraManager, which applies it to the codec slot the camera attaches to via
+        /// <see cref="ICiscoCodecCameraFactoryReset.SetCameraFlip"/>.
+        /// </summary>
+        public bool FlipImage { get; private set; }
+
+        /// <summary>
         /// Valid range 1-15
         /// </summary>
         protected uint PanSpeed { get; private set; }
@@ -142,6 +150,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             SerialNumber = props.SerialNumber;
             MacAddress = props.MacAddress;
             NetworkSwitchPort = props.NetworkSwitchPort;
+            FlipImage = props.FlipImage ?? false;
             configMaintainCameraId = props.MaintainConfiguredCameraId ?? false;
             effectiveMaintain = configMaintainCameraId;
 
