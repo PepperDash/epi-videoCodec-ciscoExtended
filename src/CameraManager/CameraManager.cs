@@ -2266,10 +2266,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         return;
                     }
 
-                    // Camera is online on the wrong codec. Send the factory reset to start re-pairing,
-                    // then start the CLI cascade after a short delay. We do NOT wait for the source
-                    // codec to report the camera disconnected — that bounce loop is what prevented the
-                    // migration from completing.
+                    // Phantom-connect guard: if this camera is ALREADY confirmed online on its TARGET
+                    // codec, a connect reported from some other codec is a stale/duplicate serial report
+                    // (a camera's serial can linger in, or be re-detected by, a codec it just left).
+                    // Starting a migration here would tear down a correct placement and re-migrate an
+                    // already-homed camera — burning a full attach timeout plus floating recovery before
+                    // it re-settles, and leaving the camera bouncing between codecs in the meantime. This
+                    // is the mirror image of the phantom-DISCONNECT guard. A serial merely appearing in the
+                    // target's camera list is not enough; the target codec must report it Connected.
+                    if (IsCameraOnlineOnCodec(targetCodecKey, camera))
+                    {
+                        this.LogDebug($"CAMERA_SWITCHOVER_PHANTOM_CONNECT camera='{camera.Key}' reportedCodec='{codec?.Key}' targetCodec='{targetCodecKey}' reason='cameraAlreadyOnlineOnTargetCodec' — ignoring stale wrong-codec connect, not re-migrating an already-homed camera");
+                        return;
+                    }
+
+                    // Camera is online on the wrong codec (and not on its target). Send the factory reset to
+                    // start re-pairing, then start the CLI cascade after a short delay. We do NOT wait for
+                    // the source codec to report the camera disconnected — that bounce loop is what
+                    // prevented the migration from completing.
                     this.LogDebug($"Camera Manager {Key} detected camera '{camera.Key}' online on codec '{codec?.Key}' but should be on codec '{targetCodecKey}' per scenario '{currentScenario.Key}'. Confirmed online — starting migration.");
 
                     TryStartMigration(camera, codec, e.CameraId, targetCodecKey, currentScenario.Key);
