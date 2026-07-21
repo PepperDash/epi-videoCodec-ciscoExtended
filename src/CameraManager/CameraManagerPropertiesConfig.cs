@@ -216,6 +216,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 a != null && string.Equals(a.CameraKey, cameraKey, StringComparison.OrdinalIgnoreCase));
             return assignment?.CameraId;
         }
+
+        /// <summary>
+        /// Returns the explicitly configured display name for the given camera key in this scenario,
+        /// or null when none was declared (string form, or object without <c>cameraName</c>). A null
+        /// result means "leave the connector name unchanged".
+        /// </summary>
+        /// <param name="cameraKey">Camera device key (case-insensitive).</param>
+        public string GetConfiguredCameraName(string cameraKey)
+        {
+            if (CameraAssignments == null || string.IsNullOrEmpty(cameraKey))
+            {
+                return null;
+            }
+
+            var assignment = CameraAssignments.FirstOrDefault(a =>
+                a != null && string.Equals(a.CameraKey, cameraKey, StringComparison.OrdinalIgnoreCase));
+            return assignment?.CameraName;
+        }
     }
 
     /// <summary>
@@ -237,6 +255,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         [JsonProperty("cameraId")]
         public uint? CameraId { get; set; }
+
+        /// <summary>
+        /// Optional display name to apply to this camera's video input connector on the target codec
+        /// for this scenario (via <c>xConfiguration Video Input Connector[id] Name</c>). When null or
+        /// empty, the connector name is left unchanged.
+        /// </summary>
+        [JsonProperty("cameraName")]
+        public string CameraName { get; set; }
     }
 
     /// <summary>
@@ -286,6 +312,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             CameraKey = (string)jo["cameraKey"],
                             CameraId = jo["cameraId"] != null && jo["cameraId"].Type != JTokenType.Null
                                 ? (uint?)jo["cameraId"].Value<uint>()
+                                : null,
+                            CameraName = jo["cameraName"] != null && jo["cameraName"].Type != JTokenType.Null
+                                ? (string)jo["cameraName"]
                                 : null
                         });
                         break;

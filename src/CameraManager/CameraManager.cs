@@ -56,6 +56,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // bounce on every attempt and stops once the attempt limit is reached.
         private readonly Dictionary<string, int> floatingRecoveryCounts = new Dictionary<string, int>();
 
+        // Skip-if-unchanged cache for the port-state-ensure pass. TryEnsureScenarioCameraPortStates
+        // re-asserts VLAN/PoE for every already-placed camera on every reconcile pass (which runs on
+        // every codec connect event), flooding the switch with redundant commands for cameras that
+        // never moved. These caches hold the last VLAN/PoE value this manager commanded per port so
+        // the ensure pass issues a command only when it actually differs. Cleared on scenario change
+        // so any real drift is re-corrected once per scenario. Guarded by activeMigrationsLock.
+        private readonly Dictionary<string, uint> lastEnsuredVlan = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, bool> lastEnsuredPoe = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        // Burst serialization. The switch-command burst of a migration (factory reset -> PoE off ->
+        // VLAN change -> PoE on) must run for ONE camera at a time. All ports are driven over a single
+        // slow (9600-baud) switch console; when several migrations run concurrently their commands
+        // interleave and starve each other on that console, smearing the last camera's off/vlan/on
+        // timing badly enough that it never re-registers on its target codec. Only the burst is
+        // serialized: as soon as a camera reaches its attach wait (its last switch command sent) the
+        // gate frees and the next queued camera's burst begins, so attach waits still overlap.
+        // activeBurstCameraKey is the camera holding the gate (null = free); pendingMigrationStarts
+        // holds migrations waiting their turn. All guarded by activeMigrationsLock.
+        private string activeBurstCameraKey;
+        private DateTime burstGateClaimedUtc = DateTime.MinValue;
+        private readonly List<PendingMigrationStart> pendingMigrationStarts = new List<PendingMigrationStart>();
+
+        // Safety net: if a burst owner somehow never reaches its attach wait and is never removed
+        // (an unforeseen stuck cascade), force-free the gate after this long so the queue cannot wedge
+        // permanently. Comfortably above a worst-case-but-normal burst (~25s disconnect fallback +
+        // PoE/VLAN steps), well below the 120s attach timeout that starts after the burst.
+        private const int BurstGateMaxHoldMs = 90000;
+
+        // Captures the arguments needed to start a migration cascade that has been deferred because
+        // another camera's burst holds the gate. The migration state is created up front so a camera
+        // cannot be double-queued; it is only registered in activeMigrations when the burst begins.
+        private sealed class PendingMigrationStart
+        {
+            public CiscoCamera Camera;
+            public CiscoCodec SourceCodec;
+            public uint SourceCameraId;
+            public string TargetCodecKey;
+            public string ScenarioKey;
+            public CameraMigrationState Migration;
+        }
+
         private readonly Timer attachVerificationTimer;
         private int attachVerificationTimerHandlerActive;
         // Only touched from inside AttachVerificationTimer_Elapsed (single-threaded via the
@@ -714,15 +755,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return false;
             }
 
-            lock (activeMigrationsLock)
-            {
-                if (activeMigrations.ContainsKey(camera.Key))
-                {
-                    this.LogVerbose($"Camera Manager {Key} not starting migration for camera '{camera.Key}': migration to a target is already in progress");
-                    return false;
-                }
-            }
-
             var migration = new CameraMigrationState
             {
                 CameraKey = camera.Key,
@@ -734,9 +766,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             lock (activeMigrationsLock)
             {
-                activeMigrations[camera.Key] = migration;
+                if (activeMigrations.ContainsKey(camera.Key))
+                {
+                    this.LogVerbose($"Camera Manager {Key} not starting migration for camera '{camera.Key}': migration to a target is already in progress");
+                    return false;
+                }
+
+                if (pendingMigrationStarts.Any(p => string.Equals(p.Camera?.Key, camera.Key, StringComparison.Ordinal)))
+                {
+                    this.LogVerbose($"Camera Manager {Key} not starting migration for camera '{camera.Key}': already queued for a switch burst");
+                    return false;
+                }
+
+                // Always enqueue rather than immediately claiming the gate. The dispatcher
+                // (TryReleaseAndDispatchBurstGate) runs migrations one at a time and picks vacate-before-fill
+                // order: a camera whose target slot is currently held by another queued camera waits until
+                // that camera has moved out. Enqueuing first lets the dispatcher see the whole batch (all
+                // movers from a scenario change are enqueued together) before choosing what to run first.
+                pendingMigrationStarts.Add(new PendingMigrationStart
+                {
+                    Camera = camera,
+                    SourceCodec = sourceCodec,
+                    SourceCameraId = sourceCameraId,
+                    TargetCodecKey = targetCodecKey,
+                    ScenarioKey = scenarioKey,
+                    Migration = migration
+                });
+                this.LogDebug($"CAMERA_SWITCHOVER_QUEUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceSlot='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}' pending='{pendingMigrationStarts.Count}' activeBurst='{activeBurstCameraKey ?? "none"}'");
             }
 
+            UpdateScenarioReconciledStatus();
+            return true;
+        }
+
+        /// <summary>
+        /// Issues the factory reset that opens a migration's switch-command burst and arms the wait for
+        /// the source codec to report the camera disconnected. The caller must have already claimed the
+        /// burst gate (<see cref="activeBurstCameraKey"/>) and registered the migration in
+        /// <see cref="activeMigrations"/>.
+        /// </summary>
+        private void IssueFactoryResetForMigration(CiscoCamera camera, CiscoCodec sourceCodec, uint sourceCameraId, string targetCodecKey, string scenarioKey, CameraMigrationState migration)
+        {
             this.LogDebug($"CAMERA_SWITCHOVER_FACTORY_RESET_ISSUED camera='{camera.Key}' sourceCodec='{sourceCodec.Key}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' scenario='{scenarioKey}'");
             sourceCodec.CameraFactoryReset(sourceCameraId);
 
@@ -757,9 +827,145 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogVerbose($"Camera Manager {Key} sending factory reset for camera '{camera.Key}' on codec '{sourceCodec.Key}', then starting PoE/VLAN cascade after {factoryResetSettleMs}ms");
                 ScheduleDelayed(factoryResetSettleMs, () => BeginMigrationPoeOffAndClearSerial(migration, sourceCodec));
             }
+        }
 
-            UpdateScenarioReconciledStatus();
-            return true;
+        /// <summary>
+        /// Frees the burst gate when its owner has finished its switch-command burst (reached the attach
+        /// wait), has been removed, or has held the gate past <see cref="BurstGateMaxHoldMs"/>, then
+        /// starts the next still-valid queued migration. Invoked every attach-verification tick so the
+        /// handoff is robust across the success, failure and timeout paths alike.
+        /// </summary>
+        private void TryReleaseAndDispatchBurstGate()
+        {
+            CiscoCamera nextCamera = null;
+            CiscoCodec nextSourceCodec = null;
+            uint nextSourceCameraId = 0;
+            string nextTargetCodecKey = null;
+            string nextScenarioKey = null;
+            CameraMigrationState nextMigration = null;
+            int remainingQueueDepth = 0;
+
+            lock (activeMigrationsLock)
+            {
+                if (activeBurstCameraKey != null)
+                {
+                    var owner = activeMigrations.TryGetValue(activeBurstCameraKey, out var m) ? m : null;
+                    var heldMs = (DateTime.UtcNow - burstGateClaimedUtc).TotalMilliseconds;
+
+                    if (owner == null)
+                    {
+                        this.LogVerbose($"Camera Manager {Key} freeing migration burst gate: owner '{activeBurstCameraKey}' is no longer an active migration");
+                        activeBurstCameraKey = null;
+                    }
+                    else if (owner.AttachWaitStarted)
+                    {
+                        // Owner has sent its last switch command and is now waiting to attach — free the
+                        // gate so the next burst overlaps this attach wait.
+                        this.LogDebug($"CAMERA_SWITCHOVER_BURST_GATE_RELEASED camera='{activeBurstCameraKey}' reason='attachWaitStarted' heldMs='{(int)heldMs}'");
+                        activeBurstCameraKey = null;
+                    }
+                    else if (heldMs >= BurstGateMaxHoldMs)
+                    {
+                        // Safety net: owner is stuck mid-burst. Force-free so the queue cannot wedge.
+                        this.LogWarning($"CAMERA_SWITCHOVER_BURST_GATE_FORCE_RELEASED camera='{activeBurstCameraKey}' reason='maxHoldExceeded' heldMs='{(int)heldMs}'");
+                        activeBurstCameraKey = null;
+                    }
+                    else
+                    {
+                        // Still mid-burst — keep the gate.
+                        return;
+                    }
+                }
+
+                // Drop stale pending entries (camera gone, or a migration already active for it).
+                pendingMigrationStarts.RemoveAll(p =>
+                    p?.Camera == null || activeMigrations.ContainsKey(p.Camera.Key));
+
+                // Vacate-before-fill: pick the first pending migration whose target slot is NOT still
+                // occupied by another queued camera. Running a "fill" before the matching "vacate" strands
+                // the incoming camera on the target VLAN with no free slot to be adopted into
+                // (TARGET_SLOT_BUSY) — the dominant cause of attach failures during reshuffles. If every
+                // candidate is blocked (a slot cycle), fall back to the first so the queue still advances.
+                int chosenIndex = -1;
+                for (int i = 0; i < pendingMigrationStarts.Count; i++)
+                {
+                    if (!IsPendingMigrationBlocked(pendingMigrationStarts[i]))
+                    {
+                        chosenIndex = i;
+                        break;
+                    }
+                }
+                if (chosenIndex < 0 && pendingMigrationStarts.Count > 0)
+                {
+                    chosenIndex = 0;
+                    this.LogWarning($"Camera Manager {Key} all {pendingMigrationStarts.Count} pending migration(s) are blocked on occupied target slots (possible slot cycle); dispatching '{pendingMigrationStarts[0].Camera?.Key}' anyway to guarantee progress");
+                }
+
+                if (chosenIndex >= 0)
+                {
+                    var candidate = pendingMigrationStarts[chosenIndex];
+                    pendingMigrationStarts.RemoveAt(chosenIndex);
+
+                    activeBurstCameraKey = candidate.Camera.Key;
+                    burstGateClaimedUtc = DateTime.UtcNow;
+                    activeMigrations[candidate.Camera.Key] = candidate.Migration;
+                    nextCamera = candidate.Camera;
+                    nextSourceCodec = candidate.SourceCodec;
+                    nextSourceCameraId = candidate.SourceCameraId;
+                    nextTargetCodecKey = candidate.TargetCodecKey;
+                    nextScenarioKey = candidate.ScenarioKey;
+                    nextMigration = candidate.Migration;
+                    remainingQueueDepth = pendingMigrationStarts.Count;
+                }
+            }
+
+            if (nextCamera != null)
+            {
+                this.LogDebug($"CAMERA_SWITCHOVER_DEQUEUED camera='{nextCamera.Key}' targetCodec='{nextTargetCodecKey}' scenario='{nextScenarioKey}' remainingQueue='{remainingQueueDepth}'");
+                IssueFactoryResetForMigration(nextCamera, nextSourceCodec, nextSourceCameraId, nextTargetCodecKey, nextScenarioKey, nextMigration);
+                UpdateScenarioReconciledStatus();
+            }
+        }
+
+        /// <summary>
+        /// A pending migration is "blocked" when its target slot is currently held by another camera that
+        /// is itself still waiting to migrate away — i.e. another pending migration whose SOURCE is this
+        /// migration's target codec+slot. Dispatching the blocked (fill) migration before the occupying
+        /// (vacate) one lands its camera on the target VLAN with no free slot to be adopted into
+        /// (TARGET_SLOT_BUSY), which strands it until the attach timeout. Must be called under
+        /// activeMigrationsLock.
+        /// </summary>
+        private bool IsPendingMigrationBlocked(PendingMigrationStart m)
+        {
+            if (m?.Camera == null)
+            {
+                return false;
+            }
+
+            var targetSlot = GetScenarioConfiguredCameraId(m.ScenarioKey, m.TargetCodecKey, m.Camera.Key);
+            if (!targetSlot.HasValue)
+            {
+                // Target slot not explicitly configured for this scenario — cannot reason about slot
+                // occupancy, so do not constrain ordering; let it proceed.
+                return false;
+            }
+
+            foreach (var other in pendingMigrationStarts)
+            {
+                if (other == null || ReferenceEquals(other, m) || other.Camera == null)
+                {
+                    continue;
+                }
+
+                // Another queued camera currently occupies (and will vacate) this migration's target slot.
+                if (other.SourceCameraId == targetSlot.Value
+                    && string.Equals(other.SourceCodec?.Key, m.TargetCodecKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -869,6 +1075,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             try
             {
                 TryRunDeferredStartupReconciliation();
+
+                // Hand the switch-burst gate to the next queued migration once the current one has
+                // finished its burst (or stalled). Runs every tick so handoff is robust regardless of
+                // how the previous burst ended.
+                TryReleaseAndDispatchBurstGate();
 
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
@@ -1458,6 +1669,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             ClearAllFloatingRecoveryState();
 
+            // Reset the skip-if-unchanged port cache so the reconciliation below re-asserts each
+            // port's VLAN/PoE once for the new scenario, correcting any drift, before subsequent
+            // connect-driven passes start skipping unchanged ports.
+            ClearEnsuredPortStateCache();
+
+            // Drop migration starts queued for the previous scenario; the reconciliation below
+            // re-queues whatever the new scenario needs from current physical state. Any in-flight
+            // burst is left to finish (or time out) on its own gate rather than being interrupted.
+            lock (activeMigrationsLock)
+            {
+                if (pendingMigrationStarts.Count > 0)
+                {
+                    this.LogDebug($"Camera Manager {Key} clearing {pendingMigrationStarts.Count} queued migration start(s) on scenario change to '{currentScenario?.Key}'");
+                    pendingMigrationStarts.Clear();
+                }
+            }
+
             this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
 
             RunScenarioReconciliation(currentScenario?.Key);
@@ -1559,12 +1787,80 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     }
 
                     this.LogVerbose($"CAMERA_PORT_ENSURE camera='{cameraKey}' targetCodec='{codecConfig.CodecKey}' port='{port}' vlan='{vlanId}' scenario='{scenarioKey}' poeCycling='{(disablePoeCycling ? "disabled" : "enabled")}'");
-                    networkSwitch.SetPortVlan(port, vlanId);
+                    EnsurePortVlan(port, vlanId, cameraKey);
                     if (!disablePoeCycling)
                     {
-                        networkSwitch.SetPortPoeState(port, true);
+                        EnsurePortPoe(port, true, cameraKey);
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Issues SetPortVlan only when the target VLAN differs from the last value this manager
+        /// commanded for the port (skip-if-unchanged). The ensure pass runs on every codec connect
+        /// event and, without this guard, re-asserts the same VLAN dozens of times for cameras that
+        /// never moved. The cache is cleared on scenario change so genuine drift is re-corrected once
+        /// per scenario.
+        /// </summary>
+        private void EnsurePortVlan(string port, uint vlanId, string cameraKey)
+        {
+            if (string.IsNullOrWhiteSpace(port))
+            {
+                return;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                if (lastEnsuredVlan.TryGetValue(port, out var last) && last == vlanId)
+                {
+                    this.LogVerbose($"CAMERA_PORT_ENSURE_VLAN_SKIP camera='{cameraKey}' port='{port}' vlan='{vlanId}' reason='unchanged'");
+                    return;
+                }
+
+                lastEnsuredVlan[port] = vlanId;
+            }
+
+            this.LogDebug($"CAMERA_PORT_ENSURE_VLAN_SET camera='{cameraKey}' port='{port}' vlan='{vlanId}'");
+            networkSwitch.SetPortVlan(port, vlanId);
+        }
+
+        /// <summary>
+        /// Issues SetPortPoeState only when the desired PoE state differs from the last value this
+        /// manager commanded for the port (skip-if-unchanged). See <see cref="EnsurePortVlan"/>.
+        /// </summary>
+        private void EnsurePortPoe(string port, bool enabled, string cameraKey)
+        {
+            if (string.IsNullOrWhiteSpace(port))
+            {
+                return;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                if (lastEnsuredPoe.TryGetValue(port, out var last) && last == enabled)
+                {
+                    this.LogVerbose($"CAMERA_PORT_ENSURE_POE_SKIP camera='{cameraKey}' port='{port}' enabled='{enabled}' reason='unchanged'");
+                    return;
+                }
+
+                lastEnsuredPoe[port] = enabled;
+            }
+
+            this.LogDebug($"CAMERA_PORT_ENSURE_POE_SET camera='{cameraKey}' port='{port}' enabled='{enabled}'");
+            networkSwitch.SetPortPoeState(port, enabled);
+        }
+
+        /// <summary>
+        /// Drops the skip-if-unchanged port-state cache so the next ensure pass re-asserts VLAN/PoE
+        /// once per port, re-correcting any drift that occurred under the previous scenario.
+        /// </summary>
+        private void ClearEnsuredPortStateCache()
+        {
+            lock (activeMigrationsLock)
+            {
+                lastEnsuredVlan.Clear();
+                lastEnsuredPoe.Clear();
             }
         }
 
@@ -1658,6 +1954,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             {
                 this.LogDebug($"Camera Manager {Key} has no configuration for room combination scenario '{scenarioKey}'");
             }
+
+            // All movers for this scenario are now enqueued. Dispatch once here so the vacate-before-fill
+            // ordering sees the complete batch and starts a "vacate" migration before its matching "fill".
+            // (The attach-verification tick also dispatches, but this makes scenario-change ordering
+            // deterministic rather than dependent on tick timing relative to the enqueue loop.)
+            TryReleaseAndDispatchBurstGate();
         }
 
         private void Codec_CameraAssignedSerialNumberChanged(object sender, CameraEventArgs e)
@@ -1794,7 +2096,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CameraKeys.Contains(camera.Key));
                 if (codecConfig != null && codecConfig.CodecKey == codec?.Key)
                 {
-                    this.LogVerbose($"Camera Manager {Key} ignoring CameraDisconnected for camera '{camera.Key}' on codec '{codec?.Key}' — this is the target codec for scenario '{currentScenario.Key}'");
+                    // A camera dropping off the codec it is SUPPOSED to be on is the "floating" precursor
+                    // we are chasing: it was placed correctly, then fell off its target. This was
+                    // previously only a Verbose "ignore, transient" line. Surface it at Information with
+                    // full state so a genuine drop (vs a transient init blip) is diagnosable without
+                    // enabling Debug/Verbose console spew.
+                    bool dropHadActiveMigration;
+                    lock (activeMigrationsLock)
+                    {
+                        dropHadActiveMigration = activeMigrations.ContainsKey(camera.Key);
+                    }
+                    this.LogDebug($"CAMERA_TARGET_DROP camera='{camera.Key}' targetCodec='{codec?.Key}' droppedCameraId='{e.CameraId}' serial='{camera.SerialNumber}' isOnline='{camera.IsOnline}' parentCodec='{camera.ParentCodec?.Key}' activeMigration='{dropHadActiveMigration}' scenario='{currentScenario.Key}' targetCodecCameras='{BuildCodecCameraSnapshot(codec?.Key)}' managed='{BuildManagedCameraSnapshot(camera.Key)}' — camera left the codec it should be on (transient re-init or genuine drop; watch for a follow-up RECONCILE_FLOATING)");
                     return;
                 }
             }
@@ -2020,6 +2332,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 this.LogDebug($"CAMERA_SWITCHOVER_TARGET_SLOT_ASSIGN camera='{camera.Key}' codec='{codec?.Key}' effectiveSlot='{targetSlot}' configuredSlot='{camera.DefaultCameraId}' serial='{camera.SerialNumber}' attachedSlot='{e.CameraId}'");
                 this.LogVerbose($"Camera Manager {Key} assigning serial '{camera.SerialNumber}' to slot {targetSlot} on codec '{codec?.Key}' for camera '{camera.Key}'");
                 codecCameraReset.SetCameraAssignedSerialNumber(targetSlot, camera.SerialNumber);
+
+                // Apply the per-scenario display name to this camera's video-input connector, if one is
+                // configured for this scenario. The connector id is the camera's target slot (the id the
+                // manager uses to address the camera everywhere else). Skipped when no name is configured.
+                var configuredCameraName = GetScenarioConfiguredCameraName(currentScenario?.Key, codec?.Key, camera.Key);
+                if (!string.IsNullOrEmpty(configuredCameraName) && codec != null)
+                {
+                    this.LogDebug($"CAMERA_SWITCHOVER_SET_CAMERA_NAME camera='{camera.Key}' codec='{codec.Key}' connectorId='{targetSlot}' name='{configuredCameraName}'");
+                    codec.SetCameraName(targetSlot, configuredCameraName);
+                }
             }
             else
             {
@@ -2252,6 +2574,28 @@ foreach (var codecConfig in scenarioConfig.CodecConfigs)
 
             var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CodecKey == targetCodecKey);
             return codecConfig?.GetConfiguredCameraId(cameraKey);
+        }
+
+        /// <summary>
+        /// Returns the per-scenario display name configured for a camera on its target codec, or null
+        /// when none is set for this scenario/codec/camera.
+        /// </summary>
+        private string GetScenarioConfiguredCameraName(string scenarioKey, string targetCodecKey, string cameraKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey) || string.IsNullOrEmpty(targetCodecKey) || string.IsNullOrEmpty(cameraKey))
+            {
+                return null;
+            }
+
+            if (config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return null;
+            }
+
+            var codecConfig = scenarioConfig.CodecConfigs.FirstOrDefault(cc => cc.CodecKey == targetCodecKey);
+            return codecConfig?.GetConfiguredCameraName(cameraKey);
         }
 
         private string BuildManagedCameraSnapshot(string cameraKey)
