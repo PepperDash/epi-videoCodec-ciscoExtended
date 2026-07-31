@@ -1,10 +1,79 @@
-﻿using Independentsoft.Exchange;
+﻿using System;
+using Independentsoft.Exchange;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
+    /// <summary>
+    /// Custom converter for backwards compatibility: handles Url as both plain string (older firmware) and object with Value/id (ce26+)
+    /// </summary>
+    public class UrlConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType.Name == "Url";
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            var token = JToken.Load(reader);
+
+            if (token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                return null;
+            }
+
+            var urlInstance = Activator.CreateInstance(objectType);
+
+            if (token.Type == JTokenType.String)
+            {
+                // Older firmware: plain string
+                var valueProp = objectType.GetProperty("Value");
+                valueProp?.SetValue(urlInstance, token.Value<string>());
+            }
+            else if (token.Type == JTokenType.Object)
+            {
+                // ce26+: { Value, id }
+                var valueProp = objectType.GetProperty("Value");
+                var idProp = objectType.GetProperty("Id");
+                
+                valueProp?.SetValue(urlInstance, token["Value"]?.Value<string>());
+                idProp?.SetValue(urlInstance, token["id"]?.Value<string>());
+            }
+
+            return urlInstance;
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
+            var type = value.GetType();
+            var valueProp = type.GetProperty("Value");
+            var idProp = type.GetProperty("Id");
+
+            var urlValue = (string)valueProp?.GetValue(value);
+            var idValue = (string)idProp?.GetValue(value);
+
+            writer.WriteStartObject();
+            writer.WritePropertyName("Value");
+            writer.WriteValue(urlValue);
+            if (!string.IsNullOrEmpty(idValue))
+            {
+                writer.WritePropertyName("id");
+                writer.WriteValue(idValue);
+            }
+            writer.WriteEndObject();
+        }
+    }
+
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
     /// </summary>
@@ -191,6 +260,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     
             [JsonProperty("display")]
             public WebViewDisplay Display { get; set; } // /Event/UserInterface/WebView/Display
+            
+            [JsonProperty("cleared")]
+            public WebViewClear Cleared { get; set; } // /Event/UserInterface/WebView/Cleared
         }
 
 
@@ -230,16 +302,68 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
+        public class UrlProperty
+        {
+            [JsonProperty("id")]
+            public string Id { get; set; }
+
+            [JsonProperty("Value")]
+            public string Value { get; set; }
+        }
+
+        public class TitleProperty
+        {
+            [JsonProperty("id")]
+            public string Id { get; set; }
+
+            [JsonProperty("Value")]
+            public string Value { get; set; }
+        }
+
         public class WebViewDisplay
         {
-            [JsonProperty("mode")]
+            [JsonProperty("Mode")]
             public DisplayMode Mode { get; set; }
 
-            [JsonProperty("url")]
-            public string Url { get; set; }
+            [JsonProperty("Url")]
+            public UrlProperty Url { get; set; }
 
+            [JsonProperty("Target")]
+            public Target Target { get; set; }
+
+            [JsonProperty("Title")]
+            public TitleProperty Title { get; set; }
+
+            [JsonProperty("id")]
+            public string Id { get; set; }
+        }
+
+        public class WebViewClear
+        {
             [JsonProperty("target")]
             public Target Target { get; set; }
+
+            [JsonProperty("id")]
+            public string Id { get; set; }
+        }
+
+        [JsonConverter(typeof(UrlConverter))]
+        public class Url : ValueProperty
+        {
+            private string _value;
+
+            [JsonProperty("id")]
+            public string Id { get; set; }
+
+            public string Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = value;
+                    OnValueChanged();
+                }
+            }
         }
 
         public class UiExtensions : ValueProperty // /Event/UserInterface/Extensions/

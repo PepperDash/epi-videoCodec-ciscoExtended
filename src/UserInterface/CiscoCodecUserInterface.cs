@@ -77,6 +77,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
             UiExtensions = ConfigProps.Extensions;
 
             UiExtensionsHandler = new ExtensionsHandler(this, Parent.EnqueueCommand);
+            
+            // Forward WebViewClearedByCommand event to the codec so it can fire WebViewStatusChanged
+            // This is needed because Navigator uses this ExtensionsHandler, not the codec's one
+            UiExtensionsHandler.WebViewClearedByCommand += (sender, args) =>
+            {
+                this.LogDebug("WebView cleared by command from UI, forwarding to codec");
+                Parent.OnWebViewClearedFromUi(args);
+            };
 
             // Removing this to allow the navigator to control the initialization. If the codec itself has extensions, then it will initialize those separately. This should allow for
             // controlling and possibly separating out extensions/panels and their behavior.
