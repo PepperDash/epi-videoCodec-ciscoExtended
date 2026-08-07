@@ -1997,6 +1997,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public VideoInput()
             {
                 MainVideoMute = new MainVideoMute();
+                InputConnectors = new List<Connector>();
             }
         }
 

@@ -196,6 +196,90 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("VideoInputConnector1SignalPresent")]
+        public JoinDataComplete VideoInputConnector1SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 208,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 1 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("VideoInputConnector2SignalPresent")]
+        public JoinDataComplete VideoInputConnector2SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 209,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 2 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("VideoInputConnector3SignalPresent")]
+        public JoinDataComplete VideoInputConnector3SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 210,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 3 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("VideoInputConnector4SignalPresent")]
+        public JoinDataComplete VideoInputConnector4SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 211,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 4 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("VideoInputConnector5SignalPresent")]
+        public JoinDataComplete VideoInputConnector5SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 212,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 5 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("VideoInputConnector6SignalPresent")]
+        public JoinDataComplete VideoInputConnector6SignalPresent = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 213,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Video Input Connector 6 Signal Present - true as soon as the codec detects a source at this input, before Presentation View is engaged",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
         [JoinName("ResumeAllCalls")]
         public JoinDataComplete ResumeAllCalls = new JoinDataComplete(
             new JoinData

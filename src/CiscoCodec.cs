@@ -656,6 +656,44 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public BoolFeedback ContentInputActiveFeedback { get; private set; }
 
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 1,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector1SignalPresentFeedback { get; private set; }
+
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 2,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector2SignalPresentFeedback { get; private set; }
+
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 3,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector3SignalPresentFeedback { get; private set; }
+
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 4,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector4SignalPresentFeedback { get; private set; }
+
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 5,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector5SignalPresentFeedback { get; private set; }
+
+		/// <summary>
+		/// True as soon as the codec detects an active video signal at Video Input Connector 6,
+		/// independent of Presentation/View state.
+		/// </summary>
+		public BoolFeedback VideoInputConnector6SignalPresentFeedback { get; private set; }
+
+		private readonly Dictionary<int, bool> _videoInputConnectorSignalPresent = new Dictionary<int, bool>();
+
 		private int _presentationSource;
 
 		private int _desiredPresentationSource;
@@ -883,6 +921,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
+
+			VideoInputConnector1SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(1)
+			);
+			VideoInputConnector2SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(2)
+			);
+			VideoInputConnector3SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(3)
+			);
+			VideoInputConnector4SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(4)
+			);
+			VideoInputConnector5SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(5)
+			);
+			VideoInputConnector6SignalPresentFeedback = new BoolFeedback(
+				() => GetVideoInputConnectorSignalPresent(6)
+			);
 
 			IsInPwaModeFeedback = new BoolFeedback(() => IsInPwaMode);
 
@@ -1823,6 +1880,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				+ Delimiter
 				+ prefix
 				+ "/Status/Video/Input/MainVideoSource"
+				+ Delimiter
+				+ prefix
+				+ "/Status/Video/Input/Connector"
 				+ Delimiter
 				+ prefix
 				+ "/Bookings"
@@ -3607,6 +3667,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
 			var mainSourceToken = statusToken.SelectToken("Video.Input.MainVideoSource");
+			var videoInputConnectorToken = statusToken.SelectToken("Video.Input.Connector");
 			var mediaChannelsToken = statusToken.SelectToken("MediaChannels.Call");
 			var systemUnitToken = statusToken.SelectToken("SystemUnit");
 			var cameraToken = statusToken.SelectToken("Cameras.Camera");
@@ -3804,6 +3865,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMainSourceToken(mainSourceToken);
 			}
+			if (videoInputConnectorToken != null)
+			{
+				ParseVideoInputConnectorToken(videoInputConnectorToken);
+			}
 
 			// we don't want to do this... this will expand lists infinitely
 			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
@@ -3852,6 +3917,89 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			else
 			{
 				this.LogDebug("No Camera found for Main Video Source ID: {sourceId}", mainSourceValue);
+			}
+		}
+
+		/// <summary>
+		/// Parses xStatus Video Input Connector[n] SignalState/Connected. Unlike the presentation
+		/// LocalInstance-based feedbacks, this reflects raw signal detection at the physical input -
+		/// it goes true as soon as a source is plugged in and generating a valid signal, before the
+		/// source has been selected for the local share preview or sent to the far end.
+		/// </summary>
+		private void ParseVideoInputConnectorToken(JToken connectorToken)
+		{
+			if (connectorToken == null)
+				return;
+
+			List<JObject> connectors;
+			try
+			{
+				connectors = connectorToken.ToObject<List<JObject>>();
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Error parsing Video Input Connector token: {message}", ex.Message);
+				return;
+			}
+
+			if (connectors == null)
+				return;
+
+			foreach (var connector in connectors)
+			{
+				var idString = connector.SelectToken("id")?.ToString();
+				if (string.IsNullOrEmpty(idString) || !int.TryParse(idString, out var connectorId))
+				{
+					continue;
+				}
+
+				var signalStateValue = connector.SelectToken("SignalState.Value")?.ToString();
+				if (string.IsNullOrEmpty(signalStateValue))
+				{
+					// This update didn't include SignalState (e.g. only Connected changed) -
+					// don't clobber the last known signal state.
+					continue;
+				}
+
+				var isPresent = signalStateValue.Equals("OK", StringComparison.OrdinalIgnoreCase);
+
+				_videoInputConnectorSignalPresent[connectorId] = isPresent;
+
+				this.LogDebug(
+					"Video Input Connector {connectorId} SignalState={signalState} -> Present={present}",
+					connectorId, signalStateValue, isPresent);
+
+				FireVideoInputConnectorSignalPresentFeedback(connectorId);
+			}
+		}
+
+		private bool GetVideoInputConnectorSignalPresent(int connectorId)
+		{
+			return _videoInputConnectorSignalPresent.TryGetValue(connectorId, out var present) && present;
+		}
+
+		private void FireVideoInputConnectorSignalPresentFeedback(int connectorId)
+		{
+			switch (connectorId)
+			{
+				case 1:
+					VideoInputConnector1SignalPresentFeedback.FireUpdate();
+					break;
+				case 2:
+					VideoInputConnector2SignalPresentFeedback.FireUpdate();
+					break;
+				case 3:
+					VideoInputConnector3SignalPresentFeedback.FireUpdate();
+					break;
+				case 4:
+					VideoInputConnector4SignalPresentFeedback.FireUpdate();
+					break;
+				case 5:
+					VideoInputConnector5SignalPresentFeedback.FireUpdate();
+					break;
+				case 6:
+					VideoInputConnector6SignalPresentFeedback.FireUpdate();
+					break;
 			}
 		}
 
@@ -5271,6 +5419,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 			PresentationSendingLocalRemoteFeedback.LinkInputSig(
 				trilist.BooleanInput[joinMap.PresentationLocalRemote.JoinNumber]
+			);
+
+			VideoInputConnector1SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector1SignalPresent.JoinNumber]
+			);
+			VideoInputConnector2SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector2SignalPresent.JoinNumber]
+			);
+			VideoInputConnector3SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector3SignalPresent.JoinNumber]
+			);
+			VideoInputConnector4SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector4SignalPresent.JoinNumber]
+			);
+			VideoInputConnector5SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector5SignalPresent.JoinNumber]
+			);
+			VideoInputConnector6SignalPresentFeedback.LinkInputSig(
+				trilist.BooleanInput[joinMap.VideoInputConnector6SignalPresent.JoinNumber]
 			);
 
 			//PresenterTrackAvailableFeedback.LinkInputSig(trilist.BooleanInput[joinMap.PresenterTrackEnabled.JoinNumber]);
