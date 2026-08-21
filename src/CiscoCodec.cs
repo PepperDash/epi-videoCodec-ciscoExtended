@@ -669,7 +669,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private StringBuilder _jsonMessage;
 
-		private bool _jsonFeedbackMessageIsIncoming;
+		private volatile bool _jsonFeedbackMessageIsIncoming;
 
 		/// <summary>
 		/// True while a JSON response from the codec is currently being accumulated. Used to hold
