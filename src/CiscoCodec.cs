@@ -64,7 +64,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			IRoutingSinkWithSwitchingWithInputPort,
+			IRoutingSinkWithFeedback,
 			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,
@@ -1616,11 +1616,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-#if SERIES4
 		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
-#else
-		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
-#endif
 		{
 			if (roomMessenger == null)
 			{
@@ -1674,7 +1670,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		public override bool CustomActivate()
+		protected override bool CustomActivate()
 		{
 			CrestronConsole.AddNewConsoleCommand(
 				SetCommDebug,
@@ -1758,7 +1754,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region Overrides of Device
 
-		public override void Initialize()
+		protected override void Initialize()
 		{
 			try
 			{
@@ -4836,7 +4832,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				using (var sReader = new StringReader(response))
+				using (var sReader = new System.IO.StringReader(response))
 				using (var jReader = new JsonTextReader(sReader))
 				{
 					while (jReader.Read())
@@ -5207,6 +5203,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public override void Dial(string number)
 		{
 			EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\"", number));
+		}
+
+		public override void Dial(string number, string password)
+		{
+			// Cisco xCommand Dial has no password parameter; PINs are handled via WebexPinRequestHandler.
+			Dial(number);
 		}
 
 		public override void Dial(Meeting meeting)
@@ -6423,7 +6425,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void SetUpCameras(List<CameraInfo> cameraInfo)
 		{
 			// Add the internal camera
-			Cameras = new List<CameraBase>();
+			Cameras = new List<IHasCameraControls>();
 
 			var camCount = cameraInfo.Count;
 			this.LogDebug("Setting up cameras from info: {info}",
@@ -6590,7 +6592,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				throw new ArgumentNullException("cameraInfo");
 
 			// Add the internal camera
-			Cameras = new List<CameraBase>();
+			Cameras = new List<IHasCameraControls>();
 
 			var camCount = cameraInfo.Count;
 			this.LogDebug("THERE ARE {count} CAMERAS", camCount);
@@ -6694,15 +6696,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region IHasCodecCameras Members
 
-		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
+		public event EventHandler<CameraSelectedEventArgs<IHasCameraControls>> CameraSelected;
 
-		public List<CameraBase> Cameras { get; private set; } = new List<CameraBase>();
+		public List<IHasCameraControls> Cameras { get; private set; } = new List<IHasCameraControls>();
 
 		public StringFeedback SelectedCameraFeedback { get; private set; }
 
-		private CameraBase _selectedCamera;
+		private IHasCameraControls _selectedCamera;
 
-		public CameraBase SelectedCamera
+		public IHasCameraControls SelectedCamera
 		{
 			get { return _selectedCamera; }
 			private set
@@ -6712,7 +6714,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ControllingFarEndCameraFeedback.FireUpdate();
 				if (CameraIsOffFeedback.BoolValue)
 					CameraMuteOff();
-				CameraSelected?.Invoke(this, new CameraSelectedEventArgs(SelectedCamera));
+				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
 			}
 		}
 
@@ -6961,7 +6963,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public DeviceInfo DeviceInfo { get; private set; }
 
 		public event DeviceInfoChangeHandler DeviceInfoChanged;
-		public event SourceInfoChangeHandler CurrentSourceChange;
 
 		public void UpdateDeviceInfo()
 		{
@@ -7043,17 +7044,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			set
 			{
 				if (value == currentSourceInfo) return;
-
-				var handler = CurrentSourceChange;
-
-				handler?.Invoke(currentSourceInfo, ChangeType.WillChange);
-
 				currentSourceInfo = value;
-
-				handler?.Invoke(currentSourceInfo, ChangeType.DidChange);
 			}
 		}
 		private SourceListItem currentSourceInfo;
+
+		#region ICurrentSources Members
+
+		public Dictionary<eRoutingSignalType, IRoutingSource> CurrentSources { get; } = new Dictionary<eRoutingSignalType, IRoutingSource>
+		{
+			{ eRoutingSignalType.Audio, null },
+			{ eRoutingSignalType.Video, null },
+		};
+
+		public Dictionary<eRoutingSignalType, string> CurrentSourceKeys { get; } = new Dictionary<eRoutingSignalType, string>
+		{
+			{ eRoutingSignalType.Audio, string.Empty },
+			{ eRoutingSignalType.Video, string.Empty },
+		};
+
+		public event EventHandler<PepperDash.Essentials.Core.Routing.CurrentSourcesChangedEventArgs> CurrentSourcesChanged;
+
+		public void SetCurrentSource(eRoutingSignalType signalType, IRoutingSource sourceDevice)
+		{
+			foreach (eRoutingSignalType type in Enum.GetValues(typeof(eRoutingSignalType)))
+			{
+				var flag = Convert.ToInt32(type);
+				if (flag == 0 || (flag & (flag - 1)) != 0) continue;
+				if (!signalType.HasFlag(type)) continue;
+
+				CurrentSources.TryGetValue(type, out var previous);
+				CurrentSources[type] = sourceDevice;
+				CurrentSourceKeys[type] = sourceDevice?.Key;
+				CurrentSourcesChanged?.Invoke(this, new PepperDash.Essentials.Core.Routing.CurrentSourcesChangedEventArgs(type, previous, sourceDevice));
+			}
+		}
+
+		#endregion
 		public void SendDtmfToPhone(string digit)
 		{
 			var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);

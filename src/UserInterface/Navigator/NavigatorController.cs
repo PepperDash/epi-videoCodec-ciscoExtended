@@ -39,7 +39,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             AppUrlFeedback = new StringFeedback("appUrl", () => appUrl);
         }
 
-        private void HandleCodecReady(object sender, EventArgs e)
+        private void HandleCodecReady(object sender, IsReadyEventArgs e)
         {
             try
             {
@@ -68,12 +68,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             }
         }
 
-        public override bool CustomActivate()
+        protected override bool CustomActivate()
         {
             if (Parent != null)
             {
                 this.LogDebug("Subscribing for IsReady Change");
-                Parent.IsReadyChange += HandleCodecReady;
+                Parent.IsReadyEvent += HandleCodecReady;
             }
 
             mobileControl = DeviceManager.AllDevices.OfType<IMobileControl>().FirstOrDefault();

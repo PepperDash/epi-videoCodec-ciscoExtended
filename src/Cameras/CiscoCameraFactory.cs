@@ -9,7 +9,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     {
         public CiscoCameraFactory()
         {
-            MinimumEssentialsFrameworkVersion = "2.0.0";
+            MinimumEssentialsFrameworkVersion = "3.0.0";
 
             TypeNames = new List<string>() { "ciscocamera" };
         }

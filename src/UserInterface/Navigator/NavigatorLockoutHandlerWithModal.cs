@@ -128,7 +128,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             SetupCustomLockouts();
 
-            mcTpController.Parent.IsReadyChange += (s, a) =>
+            mcTpController.Parent.IsReadyEvent += (s, a) =>
             {
                 if (!mcTpController.Parent.IsReady) return;
 
