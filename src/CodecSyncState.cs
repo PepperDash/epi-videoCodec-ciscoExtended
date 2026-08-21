@@ -239,6 +239,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             while (_isProcessing == Processing)
             {
+                // Hold off sending anything to the codec while a JSON response is currently being
+                // accumulated - the codec can echo in-flight commands back into the response stream,
+                // which corrupts the JSON buffer being parsed.
+                if (_parent.IsReceivingJsonMessage)
+                {
+                    _waitHandle.Wait(20);
+                    continue;
+                }
+
                 if (_systemActions.TryToDequeue(out Action sys))
                 {
                     try

@@ -575,6 +575,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+		// "ghost": "True" to indicate that item has been removed/is no longer available. Ghost
+		// entries only carry an "id" (and the ghost flag) - none of the item's normal data - so
+		// callers should skip/remove them rather than treat them as incomplete data.
+		private static bool IsGhostItem(JObject item)
+		{
+			var ghostToken = CheckJTokenInObject(item, "ghost");
+			return ghostToken != null && bool.TryParse(ghostToken.ToString(), out var ghost) && ghost;
+		}
+
 		private bool FirmwareCompare(Version ver)
 		{
 			if (CodecFirmware == null)
@@ -659,7 +669,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private StringBuilder _jsonMessage;
 
-		private bool _jsonFeedbackMessageIsIncoming;
+		private volatile bool _jsonFeedbackMessageIsIncoming;
+
+		/// <summary>
+		/// True while a JSON response from the codec is currently being accumulated. Used to hold
+		/// off sending queued commands, since sending a command while a response is mid-stream can
+		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
+		/// </summary>
+		internal bool IsReceivingJsonMessage => _jsonFeedbackMessageIsIncoming;
 
 		public bool CommDebuggingIsOn;
 
@@ -2132,7 +2149,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						SendText("Echo off");
+						// Disable the SSH console's command echo so in-flight commands are no longer
+						// echoed back into the response stream, which was corrupting JSON messages
+						// that happened to be accumulating at the same time.
+						SendTextWithoutQueue("echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
@@ -2148,10 +2168,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							// SendText("xStatus Call");
 							SendTextWithoutQueue("xStatus");
 						}
-					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
 					}
 				}
 
@@ -2177,13 +2193,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
-				_jsonMessage.Append(response);
+
+				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
+				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
+				// being accumulated. These echoes can appear anywhere within a received line - before,
+				// after, or straddling legitimate JSON content on the same line (e.g. the terminal can
+				// wrap a long JSON line so an echo ends up prepended or appended to real JSON text on
+				// what the transport treats as a single "line") - so rather than accepting or rejecting
+				// the whole line, strip out just the echoed command substring(s) and keep any
+				// legitimate JSON content that surrounds them.
+				var sanitizedResponse = EchoedCommandPattern.Replace(response, string.Empty);
+				if (sanitizedResponse != response)
+				{
+					this.LogDebug("Stripped echoed command text embedded in JSON stream: {line}", response);
+				}
+
+				_jsonMessage.Append(sanitizedResponse);
 			}
 			catch (Exception ex)
 			{
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
 			}
 		}
+
+		// Matches an echoed xAPI command keyword and any following text up to the next JSON
+		// structural character ({, }, [, ], "), so only the echoed command text is stripped and
+		// any legitimate JSON content before/after it on the same line is preserved.
+		private static readonly Regex EchoedCommandPattern = new Regex(
+			@"x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*",
+			RegexOptions.IgnoreCase
+		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
 
@@ -2294,9 +2333,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (!(layout is JArray layoutArray))
 				return;
+
+			// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+			// "ghost": "True" to indicate that item has been removed/is no longer available -
+			// these entries only carry an "id" (and the ghost flag), with none of the item's
+			// normal data, so they must be skipped rather than treated as incomplete data.
 			var layoutData = (
 				from o in layoutArray.Children<JObject>()
-				select o.SelectToken("LayoutName.Value").ToString() into name
+				where !IsGhostItem(o)
+				select o.SelectToken("LayoutName.Value")?.ToString() into name
 				where !string.IsNullOrEmpty(name)
 				select new CodecCommandWithLabel(name, name)
 			).ToList();
@@ -2992,8 +3037,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var callId = callIdToken.ToString();
 
-					var callGhostToken = CheckJTokenInObject(item, "ghost");
-					var callGhost = callGhostToken != null && bool.Parse(callGhostToken.ToString());
+					var callGhost = IsGhostItem(item);
 
 					if (!callGhost)
 					{
@@ -4253,6 +4297,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Main Source Value is not an integer: {value}", mainSourceValueToken.ToString());
 				return;
 			}
+
+			// Cameras null-checked above.
 
 			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
 
