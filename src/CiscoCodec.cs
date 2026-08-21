@@ -582,7 +582,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private static bool IsGhostItem(JObject item)
 		{
 			var ghostToken = CheckJTokenInObject(item, "ghost");
-			return ghostToken != null && bool.Parse(ghostToken.ToString());
+			return ghostToken != null && bool.TryParse(ghostToken.ToString(), out var ghost) && ghost;
 		}
 
 		private bool FirmwareCompare(Version ver)
