@@ -676,10 +676,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		/// off sending queued commands, since sending a command while a response is mid-stream can
 		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
 		/// </summary>
-		public bool IsReceivingJsonMessage
-		{
-			get { return _jsonFeedbackMessageIsIncoming; }
-		}
+		internal bool IsReceivingJsonMessage => _jsonFeedbackMessageIsIncoming;
 
 		public bool CommDebuggingIsOn;
 
