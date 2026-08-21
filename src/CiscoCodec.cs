@@ -4301,11 +4301,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			if (Cameras == null)
-			{
-				this.LogDebug("Cameras list not yet initialized. Skipping Main Video Source lookup.");
-				return;
-			}
+			// Cameras null-checked above.
 
 			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
 
