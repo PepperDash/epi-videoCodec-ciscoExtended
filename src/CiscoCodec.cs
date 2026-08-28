@@ -2182,7 +2182,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var success = DeserializeResponse(_jsonMessage.ToString());
 
-					if (success) _jsonMessage = null;
+					if (success)
+					{
+						_jsonMessage = null;
+
+						// A valid JSON message is definitive proof the codec is in JSON output mode,
+						// even if the 'xPreferences outputmode json' echo never arrived ('echo off',
+						// sent at login, can suppress it). Use it as a proxy so InitialSync isn't gated
+						// on that unreliable echo.
+						if (!SyncState.JsonResponseModeSet)
+							SyncState.JsonResponseModeConfirmedByValidJson();
+					}
 
 					return;
 				}

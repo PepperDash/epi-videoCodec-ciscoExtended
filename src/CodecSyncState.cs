@@ -126,6 +126,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Schedule();
         }
 
+        /// <summary>
+        /// Marks JSON output mode as active based on a successfully-parsed JSON message, for codecs
+        /// (e.g. the EQ) that never echo/acknowledge the 'xPreferences outputmode json' command.
+        /// </summary>
+        public void JsonResponseModeConfirmedByValidJson()
+        {
+            _systemActions.Enqueue(() =>
+            {
+                if (!JsonResponseModeSet)
+                    this.LogDebug("JSON output mode confirmed by a valid JSON response (outputmode echo not received).");
+
+                JsonResponseModeSet = true;
+                CheckSyncStatus();
+            });
+
+            Schedule();
+        }
+
         public void InitialStatusMessageReceived()
         {
             _systemActions.Enqueue(() =>
