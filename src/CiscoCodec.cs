@@ -2117,7 +2117,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				if (response.ToLower().Contains("xcommand"))
+				// Discard a bare echoed 'xCommand ...' line (SSH command echo) only when we're not
+				// accumulating a JSON message and the line actually begins with the token, so we don't
+				// throw away legitimate JSON/feedback content that merely contains the substring.
+				if (!_jsonFeedbackMessageIsIncoming
+					&& response.TrimStart().StartsWith("xcommand", StringComparison.OrdinalIgnoreCase))
 				{
 					return;
 				}
@@ -2207,21 +2211,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
 
-				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
-				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
-				// being accumulated. These echoes can appear anywhere within a received line - before,
-				// after, or straddling legitimate JSON content on the same line (e.g. the terminal can
-				// wrap a long JSON line so an echo ends up prepended or appended to real JSON text on
-				// what the transport treats as a single "line") - so rather than accepting or rejecting
-				// the whole line, strip out just the echoed command substring(s) and keep any
-				// legitimate JSON content that surrounds them.
-				var sanitizedResponse = EchoedCommandPattern.Replace(response, string.Empty);
-				if (sanitizedResponse != response)
+				// The codec can echo an in-flight command (xStatus, xConfiguration, xFeedback,
+				// xPreferences, xCommand) back on the same session while a JSON message is being
+				// accumulated. Drop a line that is wholly such an echo (no JSON structural characters),
+				// but never strip substrings out of a line that carries real JSON - a legitimate JSON
+				// string value can contain tokens like "xStatus", and stripping would corrupt it.
+				if (EchoedCommandLinePattern.IsMatch(response))
 				{
-					this.LogDebug("Stripped echoed command text embedded in JSON stream: {line}", response);
+					this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", response);
+					return;
 				}
 
-				_jsonMessage.Append(sanitizedResponse);
+				_jsonMessage.Append(response);
 			}
 			catch (Exception ex)
 			{
@@ -2229,11 +2230,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		// Matches an echoed xAPI command keyword and any following text up to the next JSON
-		// structural character ({, }, [, ], "), so only the echoed command text is stripped and
-		// any legitimate JSON content before/after it on the same line is preserved.
-		private static readonly Regex EchoedCommandPattern = new Regex(
-			@"x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*",
+		// Matches a line that is wholly an echoed xAPI command (leading command keyword, then text
+		// containing no JSON structural characters {, }, [, ], "), so only standalone echo lines are
+		// dropped and any line carrying real JSON is left untouched.
+		private static readonly Regex EchoedCommandLinePattern = new Regex(
+			@"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*$",
 			RegexOptions.IgnoreCase
 		);
 
