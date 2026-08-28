@@ -262,6 +262,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 var combiner = combinerHandler.EssentialsRoomCombiner;
                 var currentScenario = combiner.CurrentScenario;
+                if (currentScenario == null)
+                {
+                    this.LogDebug("CurrentScenario is null in HandleRoomCombineScenarioChanged");
+                    return;
+                }
+
                 var uiMap = currentScenario.UiMap;
 
                 if (uiMap == null)
