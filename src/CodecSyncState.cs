@@ -14,6 +14,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         bool _initialSyncComplete;
 
+        // Ensures the initial 'xStatus' dump is requested exactly once per connection, independent
+        // of whether the codec echoes the 'xPreferences outputmode json' command back.
+        private bool _initialStatusRequested;
+
         private const int Idle = 0;
         private const int Processing = 1;
         private int _isProcessing;
@@ -106,6 +110,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _parent.SendTextWithoutQueue("xPreferences outputmode json");
                 }
 
+                // Kick off the initial status dump here rather than waiting on the codec to echo
+                // the 'xPreferences outputmode json' command - with SSH 'echo off' that echo may
+                // never arrive, which would otherwise stall initial sync.
+                RequestInitialStatusOnce();
+
                 CheckSyncStatus();
             });
 
@@ -120,6 +129,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Json Response Mode Message Received.");
 
                 JsonResponseModeSet = true;
+                RequestInitialStatusOnce();
                 CheckSyncStatus();
             });
 
@@ -138,10 +148,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("JSON output mode confirmed by a valid JSON response (outputmode echo not received).");
 
                 JsonResponseModeSet = true;
+                RequestInitialStatusOnce();
                 CheckSyncStatus();
             });
 
             Schedule();
+        }
+
+        private void RequestInitialStatusOnce()
+        {
+            if (InitialStatusMessageWasReceived || _initialStatusRequested)
+                return;
+
+            _initialStatusRequested = true;
+            _parent.SendTextWithoutQueue("xStatus");
         }
 
         public void InitialStatusMessageReceived()
@@ -208,6 +228,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
                 LoginMessageWasReceived = false;
                 JsonResponseModeSet = false;
+                _initialStatusRequested = false;
                 InitialConfigurationMessageWasReceived = false;
                 InitialStatusMessageWasReceived = false;
                 FeedbackWasRegistered = false;

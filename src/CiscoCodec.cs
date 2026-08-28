@@ -2168,15 +2168,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						if (SyncState.JsonResponseModeSet)
 							return;
 
+						// The initial 'xStatus' kickoff is owned by CodecSyncState (driven from login /
+						// JSON-mode confirmation) so it no longer depends on this echo arriving.
 						SyncState.JsonResponseModeMessageReceived();
-
-						if (!SyncState.InitialStatusMessageWasReceived)
-						{
-							// SendText("xStatus Cameras");
-							// SendText("xStatus SIP");
-							// SendText("xStatus Call");
-							SendTextWithoutQueue("xStatus");
-						}
 					}
 				}
 
