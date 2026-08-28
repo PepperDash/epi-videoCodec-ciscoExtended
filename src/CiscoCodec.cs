@@ -205,6 +205,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CTimer _brandingTimer;
 		private CTimer _registrationCheckTimer;
 
+		// Pre-sync self-heal for the xFeedback List verify, whose reply can be lost in the startup
+		// flood, leaving FeedbackWasRegistered false with no other recovery until sync completes.
+		private CTimer _feedbackRegistrationRecoveryTimer;
+		private int _feedbackRecoveryAttempts;
+		private int _lastFeedbackReceivedCount = -1;
+		private const long FeedbackRecoveryFastMs = 10000;
+		private const long FeedbackRecoverySlowMs = 30000;
+		private const int FeedbackRecoveryWarnAfter = 6;
+		private const int FeedbackRecoverySlowReWarnEvery = 10;
+
 		public CommunicationGather PortGather { get; private set; }
 
 		public StatusMonitorBase CommunicationMonitor { get; private set; }
@@ -1927,6 +1937,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ActiveCalls.Count
 			);
 
+			StopFeedbackRegistrationRecovery();
+
 			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
@@ -2078,6 +2090,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
+				StopFeedbackRegistrationRecovery();
 				PhonebookRefreshTimer?.Stop();
 				PhonebookRefreshTimer = null;
 				BookingsRefreshTimer?.Stop();
@@ -2239,12 +2252,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			var receivedCount = data.Split('\n').Count();
 			var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+			_lastFeedbackReceivedCount = receivedCount;
 			this.LogDebug(
 				"ProcessFeedbackList: receivedCount={received}, expectedCount={expected}",
 				receivedCount, expectedCount);
 
 			if (receivedCount >= expectedCount)
 			{
+				StopFeedbackRegistrationRecovery();
 				if (!SyncState.FeedbackWasRegistered)
 					SyncState.FeedbackRegistered();
 				return;
@@ -4231,6 +4246,54 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			this.LogDebug("Requesting xFeedback List to verify registration");
 			SendTextWithoutQueue("xFeedback List");
+
+			StartFeedbackRegistrationRecovery();
+		}
+
+		private void StartFeedbackRegistrationRecovery()
+		{
+			if (SyncState.FeedbackWasRegistered || SyncState.InitialSyncComplete)
+				return;
+
+			_feedbackRecoveryAttempts = 0;
+			if (_feedbackRegistrationRecoveryTimer == null)
+				_feedbackRegistrationRecoveryTimer =
+					new CTimer(FeedbackRegistrationRecoveryCallback, null, FeedbackRecoveryFastMs);
+			else
+				_feedbackRegistrationRecoveryTimer.Reset(FeedbackRecoveryFastMs);
+		}
+
+		private void StopFeedbackRegistrationRecovery()
+		{
+			_feedbackRegistrationRecoveryTimer?.Stop();
+		}
+
+		private void FeedbackRegistrationRecoveryCallback(object _)
+		{
+			if (SyncState.FeedbackWasRegistered || SyncState.InitialSyncComplete)
+				return; // succeeded elsewhere; let the timer lapse
+
+			_feedbackRecoveryAttempts++;
+
+			SendTextWithoutQueue("xFeedback List");
+
+			var reWarn = _feedbackRecoveryAttempts > FeedbackRecoveryWarnAfter
+				&& (_feedbackRecoveryAttempts - FeedbackRecoveryWarnAfter) % FeedbackRecoverySlowReWarnEvery == 0;
+			if (_feedbackRecoveryAttempts == FeedbackRecoveryWarnAfter || reWarn)
+			{
+				var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+				var received = _lastFeedbackReceivedCount < 0
+					? "none (no xFeedback List response)"
+					: _lastFeedbackReceivedCount.ToString();
+				this.LogWarning(
+					"Feedback registration still unverified after {attempts} attempts - received {received} vs expected {expected}; continuing to retry",
+					_feedbackRecoveryAttempts, received, expectedCount);
+			}
+
+			var nextInterval = _feedbackRecoveryAttempts < FeedbackRecoveryWarnAfter
+				? FeedbackRecoveryFastMs
+				: FeedbackRecoverySlowMs;
+			_feedbackRegistrationRecoveryTimer.Reset(nextInterval);
 		}
 
 		private void ParseDiagnosticsToken(JToken diagnosticsToken)
