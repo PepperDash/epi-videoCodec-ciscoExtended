@@ -4457,6 +4457,59 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return false;
 		}
 
+		/// <summary>
+		/// Connector ids whose InputSourceType is "camera", from xConfiguration Video Input.
+		///
+		/// This is the authoritative map of which video inputs are cameras. The camera list built
+		/// from xStatus Cameras is not: network-attached PTZ cameras can all report the same
+		/// DetectedConnector (observed: two cameras both reporting connector 1), so a camera on
+		/// connector 2 would not be recognised.
+		/// </summary>
+		private readonly HashSet<int> _cameraConnectorIds = new HashSet<int>();
+
+		/// <summary>
+		/// Records which video input connectors are configured as cameras. Tolerant of a partial
+		/// or absent token - an xConfiguration dump that omits Video.Input leaves the previous
+		/// mapping in place rather than clearing it.
+		/// </summary>
+		private void ParseVideoInputConnectorSourceTypes(JToken connectorsToken)
+		{
+			if (connectorsToken == null)
+				return;
+
+			try
+			{
+				foreach (var connector in connectorsToken.Children())
+				{
+					var idToken = connector.SelectToken("id");
+					var sourceType = (string)connector.SelectToken("InputSourceType.Value");
+
+					if (idToken == null || string.IsNullOrEmpty(sourceType))
+						continue;
+
+					if (!int.TryParse(idToken.ToString(), out var connectorId))
+						continue;
+
+					if (sourceType.Equals("camera", StringComparison.OrdinalIgnoreCase))
+						_cameraConnectorIds.Add(connectorId);
+					else
+						_cameraConnectorIds.Remove(connectorId);
+				}
+
+				this.LogDebug(
+					"Camera-backed video input connectors: {connectors}",
+					_cameraConnectorIds.Count == 0 ? "none" : string.Join(",", _cameraConnectorIds)
+				);
+			}
+			catch (Exception e)
+			{
+				this.LogError(
+					"Exception parsing Video Input Connector source types: {message}",
+					e.Message
+				);
+			}
+		}
+
 		private void ParseConfigurationObject(JToken configurationToken)
 		{
 			try
@@ -4469,6 +4522,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					ParseCameraAssignedSerialFeedback(cameraConfigurationToken);
 				}
+
+				ParseVideoInputConnectorSourceTypes(
+					configurationToken.SelectToken("Video.Input.Connector")
+				);
 
 				var configuration = new CiscoCodecConfiguration.Configuration();
 				try
@@ -5088,9 +5145,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
+			// A route targeting a camera-backed connector describes how a camera is physically
+			// wired to this codec, not content the room wants presented. Presenting it puts the
+			// camera image on the room display in place of the home screen, and (because the
+			// presentation is never torn down) holds the codec out of standby. Camera connectors
+			// are also typically Visibility: Never, so nothing surfaces on the touch panel to
+			// show a share is running or to let anyone stop it.
+			if (IsCameraConnector(input))
+			{
+				this.LogDebug(
+					"Route to connector {input} is a camera input; not starting a presentation",
+					input
+				);
+				return;
+			}
+
 			SelectPresentationSource(input);
 
 			_presentationSourceKey = selector.ToString();
+		}
+
+		/// <summary>
+		/// True when <paramref name="connectorId"/> is a video input this codec has a camera on.
+		/// Reads the camera list the plugin already builds from xStatus Cameras (see the
+		/// SourceId/DetectedConnector wiring), so it needs no extra polling.
+		/// </summary>
+		private bool IsCameraConnector(int connectorId)
+		{
+			if (connectorId <= 0)
+				return false;
+
+			// InputSourceType is authoritative. The camera list is a fallback for the window
+			// before the first xConfiguration dump lands.
+			return _cameraConnectorIds.Contains(connectorId)
+				|| Cameras.OfType<CiscoCamera>().Any(c => c.SourceId == connectorId);
 		}
 
 		public void ExecuteSwitch(
@@ -5455,14 +5543,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void StartSharing()
 		{
-			if (_desiredPresentationSource > 0)
-				EnqueueCommand(
-					string.Format(
-						"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
-						_desiredPresentationSource,
-						PresentationStates.ToString()
-					)
-				);
+			if (_desiredPresentationSource <= 0)
+				return;
+
+			// LocalRemote asks the codec to send the presentation to the far end. Out of a call
+			// there is no far end, so fall back to LocalOnly rather than starting a share the
+			// codec has to treat as outgoing.
+			var sendingMode = IsInCall
+				? PresentationStates
+				: eCodecPresentationStates.LocalOnly;
+
+			EnqueueCommand(
+				string.Format(
+					"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
+					_desiredPresentationSource,
+					sendingMode
+				)
+			);
 		}
 
 		public override void StopSharing()
