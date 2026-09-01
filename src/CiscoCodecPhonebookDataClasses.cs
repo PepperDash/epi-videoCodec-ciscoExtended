@@ -172,9 +172,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             var rootFolders = new List<DirectoryItem>();
 
-            if (result.Folder.Count == 0)
+            // an empty phonebook has no folders, not a parse failure - return empty rather than null
+            if (result?.Folder == null || result.Folder.Count == 0)
             {
-                return null;
+                return rootFolders;
             }
             else if (result.Folder.Count > 0)
             {
@@ -213,9 +214,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 var rootContacts = new List<DirectoryItem>();
 
-                if (result.Contact.Count == 0)
+                // an empty phonebook has no contacts, not a parse failure - return empty rather than null
+                if (result?.Contact == null || result.Contact.Count == 0)
                 {
-                    return null;
+                    return rootContacts;
                 }
                 else if (result.Contact.Count > 0)
                 {
@@ -284,14 +286,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 rootContacts.OrderBy(f => f.Name);
 
-                return rootContacts;
+                // strip any nulls a downstream subscriber's non-null-safe predicate might trip on
+                return rootContacts.Where(item => item != null).ToList();
             }
             catch (Exception ex)
             {
                 Debug.LogError("Error processing user action: {message}", ex.Message);
                 Debug.LogVerbose(ex, "Exception");
 
-                return null;
+                return new List<DirectoryItem>();
             }
         }
 
