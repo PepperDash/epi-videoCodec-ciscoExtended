@@ -934,6 +934,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			else
 			{
+				// trailing Delimiter is required - see sibling if-branch comment above
 				const string pollString =
 					"xstatus systemunit"
 					+ Delimiter
@@ -941,7 +942,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ Delimiter
 					+ "xstatus sip/registration"
 					+ Delimiter
-					+ "xStatus Audio Volume";
+					+ "xStatus Audio Volume"
+					+ Delimiter;
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
