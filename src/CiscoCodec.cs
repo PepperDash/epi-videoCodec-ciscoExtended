@@ -934,6 +934,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			else
 			{
+				// trailing Delimiter is required - see sibling if-branch comment above
 				const string pollString =
 					"xstatus systemunit"
 					+ Delimiter
@@ -941,7 +942,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ Delimiter
 					+ "xstatus sip/registration"
 					+ Delimiter
-					+ "xStatus Audio Volume";
+					+ "xStatus Audio Volume"
+					+ Delimiter;
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
@@ -4469,7 +4471,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var directoryResults = new CodecDirectory();
 
-					if (phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value != "0")
+					var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
+					if (totalRowsValue != "0")
 						directoryResults =
 							CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
 								phonebookSearchResultResponseObject
@@ -4486,7 +4489,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookDirectoryResponseTypical : {message}", ex.Message);
+				this.LogError("Exception in ParsePhonebookDirectoryResponseTypical : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -4533,9 +4536,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				if (PhonebookSyncState == null)
 					return;
-				PhonebookSyncState.SetNumberOfContacts(
-					int.Parse(phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value)
-				);
+				var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
+				if (int.TryParse(totalRowsValue, out var totalRows))
+					PhonebookSyncState.SetNumberOfContacts(totalRows);
 				if (DirectoryRoot == null)
 					return;
 				DirectoryRoot.AddContactsToDirectory(
@@ -4548,7 +4551,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookNumberOfContacts : {message}", ex.Message);
+				this.LogError("Exception in ParsePhonebookNumberOfContacts : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -4672,7 +4675,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			catch (Exception ex)
 			{
 				this.LogError(
-					"Exception in ParsePhonebookSearchResultResponse : {message}", ex.Message);
+					"Exception in ParsePhonebookSearchResultResponse : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -4849,15 +4852,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
 
-			// This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
-			DirectoryResultReturned?.Invoke(
-					this,
-					new DirectoryEventArgs()
-					{
-						Directory = result,
-						DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
-					}
-				);
+			// Fire event to all subscribed UIs. Isolate faulty subscribers so a bad one
+			// (e.g. Essentials Core's LinkVideoCodecDirectoryToApi predicate) can't
+			// bubble a NullReferenceException back up into our phonebook parser.
+			try
+			{
+				DirectoryResultReturned?.Invoke(
+						this,
+						new DirectoryEventArgs()
+						{
+							Directory = result,
+							DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
+						}
+					);
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Directory subscriber threw: {message}", ex.Message);
+				this.LogVerbose(ex, "Directory subscriber exception");
+			}
 
 			PrintDirectory(result);
 		}
