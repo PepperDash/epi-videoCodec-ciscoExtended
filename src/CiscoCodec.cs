@@ -4231,6 +4231,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogDebug("Sending Configuration");
 				SendTextWithoutQueue("xConfiguration");
+
+				// Ask for the video input source types on their own as well. They tell us which
+				// connectors are cameras, which decides whether a route may start a presentation
+				// (see IsCameraConnector). The full dump above nominally carries them, but it is
+				// large and arrives in many chunks, so it is not dependable for something a route
+				// needs early. This reply is small and lands in one piece, and it reflects the
+				// codec's own configuration however it was set - by Essentials, by Control Hub,
+				// or by hand - rather than assuming any particular site convention.
+				SendTextWithoutQueue("xConfiguration Video Input Connector InputSourceType");
 			}
 			if (SyncState.FeedbackWasRegistered)
 				return;
@@ -5175,10 +5184,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (connectorId <= 0)
 				return false;
 
-			// InputSourceType is authoritative. The camera list is a fallback for the window
-			// before the first xConfiguration dump lands.
-			return _cameraConnectorIds.Contains(connectorId)
-				|| Cameras.OfType<CiscoCamera>().Any(c => c.SourceId == connectorId);
+			// Only InputSourceType is trusted here. The camera list built from xStatus Cameras
+			// is deliberately not consulted: network-attached PTZ cameras can all report the same
+			// DetectedConnector (observed: two cameras both reporting connector 1), which makes it
+			// wrong in both directions - it misses real camera connectors and could mark a content
+			// input as a camera.
+			return _cameraConnectorIds.Contains(connectorId);
 		}
 
 		public void ExecuteSwitch(
@@ -6854,6 +6865,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
 			this.LogDebug("Setting the source type of video connector {id} to {sourceType}", videoConnectorId, sourceType);
+
+			// Record it here as well as parsing it back from xConfiguration. Deployments commonly
+			// declare their camera inputs through this setter (config activation actions), and
+			// reading the value back out of the full configuration dump is neither immediate nor
+			// guaranteed - the dump is large, chunked, and may land after the first route runs.
+			// Knowing it at the moment we set it removes that dependency entirely.
+			if (sourceType.ToString().Equals("camera", StringComparison.OrdinalIgnoreCase))
+				_cameraConnectorIds.Add((int)videoConnectorId);
+			else
+				_cameraConnectorIds.Remove((int)videoConnectorId);
+
 			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
 		}
 
