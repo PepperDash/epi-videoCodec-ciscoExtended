@@ -249,7 +249,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// Custom activation to link the Camera Manager to the room combiner, network switch, codecs, and cameras based on the keys provided in the configuration.
         /// </summary>
         /// <returns></returns>
-        public override bool CustomActivate()
+        protected override bool CustomActivate()
         {
             var activated = CustomActivateInternal();
             if (activated)

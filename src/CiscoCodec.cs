@@ -64,7 +64,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			IHasCodecLayoutsAvailable,
 			IHasCodecSelfView,
 			ICommunicationMonitor,
-			IRoutingSinkWithSwitchingWithInputPort,
+			IRoutingSinkWithFeedback,
 			IRoutingSource,
 			IHasCodecCameras,
 			IHasCameraAutoMode,
@@ -204,6 +204,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private CTimer _brandingTimer;
 		private CTimer _registrationCheckTimer;
+
+		// Pre-sync self-heal for the xFeedback List verify, whose reply can be lost in the startup
+		// flood, leaving FeedbackWasRegistered false with no other recovery until sync completes.
+		private CTimer _feedbackRegistrationRecoveryTimer;
+		private int _feedbackRecoveryAttempts;
+		private int _lastFeedbackReceivedCount = -1;
+		private const long FeedbackRecoveryFastMs = 10000;
+		private const long FeedbackRecoverySlowMs = 30000;
+		private const int FeedbackRecoveryWarnAfter = 6;
+		private const int FeedbackRecoverySlowReWarnEvery = 10;
 
 		public CommunicationGather PortGather { get; private set; }
 
@@ -575,6 +585,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+		// "ghost": "True" to indicate that item has been removed/is no longer available. Ghost
+		// entries only carry an "id" (and the ghost flag) - none of the item's normal data - so
+		// callers should skip/remove them rather than treat them as incomplete data.
+		private static bool IsGhostItem(JObject item)
+		{
+			var ghostToken = CheckJTokenInObject(item, "ghost");
+			return ghostToken != null && bool.TryParse(ghostToken.ToString(), out var ghost) && ghost;
+		}
+
 		private bool FirmwareCompare(Version ver)
 		{
 			if (CodecFirmware == null)
@@ -659,7 +679,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private StringBuilder _jsonMessage;
 
-		private bool _jsonFeedbackMessageIsIncoming;
+		private volatile bool _jsonFeedbackMessageIsIncoming;
+
+		/// <summary>
+		/// True while a JSON response from the codec is currently being accumulated. Used to hold
+		/// off sending queued commands, since sending a command while a response is mid-stream can
+		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
+		/// </summary>
+		internal bool IsReceivingJsonMessage => _jsonFeedbackMessageIsIncoming;
 
 		public bool CommDebuggingIsOn;
 
@@ -1599,11 +1626,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-#if SERIES4
 		private void SendMcBrandingUrl(IMobileControlRoomMessenger roomMessenger)
-#else
-		private void SendMcBrandingUrl(IMobileControlRoomBridge roomMessenger)
-#endif
 		{
 			if (roomMessenger == null)
 			{
@@ -1657,7 +1680,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		public override bool CustomActivate()
+		protected override bool CustomActivate()
 		{
 			CrestronConsole.AddNewConsoleCommand(
 				SetCommDebug,
@@ -1741,7 +1764,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region Overrides of Device
 
-		public override void Initialize()
+		protected override void Initialize()
 		{
 			try
 			{
@@ -1914,6 +1937,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ActiveCalls.Count
 			);
 
+			StopFeedbackRegistrationRecovery();
+
 			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
@@ -2065,6 +2090,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
+				StopFeedbackRegistrationRecovery();
 				PhonebookRefreshTimer?.Stop();
 				PhonebookRefreshTimer = null;
 				BookingsRefreshTimer?.Stop();
@@ -2091,7 +2117,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				if (response.ToLower().Contains("xcommand"))
+				// Discard a bare echoed 'xCommand ...' line (SSH command echo) only when we're not
+				// accumulating a JSON message and the line actually begins with the token, so we don't
+				// throw away legitimate JSON/feedback content that merely contains the substring.
+				if (!_jsonFeedbackMessageIsIncoming
+					&& response.TrimStart().StartsWith("xcommand", StringComparison.OrdinalIgnoreCase))
 				{
 					return;
 				}
@@ -2132,26 +2162,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						SendText("Echo off");
+						// Disable the SSH console's command echo so in-flight commands are no longer
+						// echoed back into the response stream, which was corrupting JSON messages
+						// that happened to be accumulating at the same time.
+						SendTextWithoutQueue("echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
 						if (SyncState.JsonResponseModeSet)
 							return;
 
+						// The initial 'xStatus' kickoff is owned by CodecSyncState (driven from login /
+						// JSON-mode confirmation) so it no longer depends on this echo arriving.
 						SyncState.JsonResponseModeMessageReceived();
-
-						if (!SyncState.InitialStatusMessageWasReceived)
-						{
-							// SendText("xStatus Cameras");
-							// SendText("xStatus SIP");
-							// SendText("xStatus Call");
-							SendTextWithoutQueue("xStatus");
-						}
-					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
 					}
 				}
 
@@ -2170,13 +2193,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var success = DeserializeResponse(_jsonMessage.ToString());
 
-					if (success) _jsonMessage = null;
+					if (success)
+					{
+						_jsonMessage = null;
+
+						// A valid JSON message is definitive proof the codec is in JSON output mode,
+						// even if the 'xPreferences outputmode json' echo never arrived ('echo off',
+						// sent at login, can suppress it). Use it as a proxy so InitialSync isn't gated
+						// on that unreliable echo.
+						if (!SyncState.JsonResponseModeSet)
+							SyncState.JsonResponseModeConfirmedByValidJson();
+					}
 
 					return;
 				}
 
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
+
+				// The codec can echo an in-flight command (xStatus, xConfiguration, xFeedback,
+				// xPreferences, xCommand) back on the same session while a JSON message is being
+				// accumulated. Drop a line that is wholly such an echo (no JSON structural characters),
+				// but never strip substrings out of a line that carries real JSON - a legitimate JSON
+				// string value can contain tokens like "xStatus", and stripping would corrupt it.
+				if (EchoedCommandLinePattern.IsMatch(response))
+				{
+					this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", response);
+					return;
+				}
+
 				_jsonMessage.Append(response);
 			}
 			catch (Exception ex)
@@ -2184,6 +2229,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
 			}
 		}
+
+		// Matches a line that is wholly an echoed xAPI command (leading command keyword, then text
+		// containing no JSON structural characters {, }, [, ], "), so only standalone echo lines are
+		// dropped and any line carrying real JSON is left untouched.
+		private static readonly Regex EchoedCommandLinePattern = new Regex(
+			@"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*$",
+			RegexOptions.IgnoreCase
+		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
 
@@ -2194,12 +2247,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			var receivedCount = data.Split('\n').Count();
 			var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+			_lastFeedbackReceivedCount = receivedCount;
 			this.LogDebug(
 				"ProcessFeedbackList: receivedCount={received}, expectedCount={expected}",
 				receivedCount, expectedCount);
 
 			if (receivedCount >= expectedCount)
 			{
+				StopFeedbackRegistrationRecovery();
 				if (!SyncState.FeedbackWasRegistered)
 					SyncState.FeedbackRegistered();
 				return;
@@ -2294,9 +2349,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (!(layout is JArray layoutArray))
 				return;
+
+			// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+			// "ghost": "True" to indicate that item has been removed/is no longer available -
+			// these entries only carry an "id" (and the ghost flag), with none of the item's
+			// normal data, so they must be skipped rather than treated as incomplete data.
 			var layoutData = (
 				from o in layoutArray.Children<JObject>()
-				select o.SelectToken("LayoutName.Value").ToString() into name
+				where !IsGhostItem(o)
+				select o.SelectToken("LayoutName.Value")?.ToString() into name
 				where !string.IsNullOrEmpty(name)
 				select new CodecCommandWithLabel(name, name)
 			).ToList();
@@ -2992,8 +3053,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var callId = callIdToken.ToString();
 
-					var callGhostToken = CheckJTokenInObject(item, "ghost");
-					var callGhost = callGhostToken != null && bool.Parse(callGhostToken.ToString());
+					var callGhost = IsGhostItem(item);
 
 					if (!callGhost)
 					{
@@ -4171,6 +4231,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogDebug("Sending Configuration");
 				SendTextWithoutQueue("xConfiguration");
+
+				// Ask for the video input source types on their own as well. They tell us which
+				// connectors are cameras, which decides whether a route may start a presentation
+				// (see IsCameraConnector). The full dump above nominally carries them, but it is
+				// large and arrives in many chunks, so it is not dependable for something a route
+				// needs early. This reply is small and lands in one piece, and it reflects the
+				// codec's own configuration however it was set - by Essentials, by Control Hub,
+				// or by hand - rather than assuming any particular site convention.
+				SendTextWithoutQueue("xConfiguration Video Input Connector InputSourceType");
 			}
 			if (SyncState.FeedbackWasRegistered)
 				return;
@@ -4181,6 +4250,54 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			this.LogDebug("Requesting xFeedback List to verify registration");
 			SendTextWithoutQueue("xFeedback List");
+
+			StartFeedbackRegistrationRecovery();
+		}
+
+		private void StartFeedbackRegistrationRecovery()
+		{
+			if (SyncState.FeedbackWasRegistered || SyncState.InitialSyncComplete)
+				return;
+
+			_feedbackRecoveryAttempts = 0;
+			if (_feedbackRegistrationRecoveryTimer == null)
+				_feedbackRegistrationRecoveryTimer =
+					new CTimer(FeedbackRegistrationRecoveryCallback, null, FeedbackRecoveryFastMs);
+			else
+				_feedbackRegistrationRecoveryTimer.Reset(FeedbackRecoveryFastMs);
+		}
+
+		private void StopFeedbackRegistrationRecovery()
+		{
+			_feedbackRegistrationRecoveryTimer?.Stop();
+		}
+
+		private void FeedbackRegistrationRecoveryCallback(object _)
+		{
+			if (SyncState.FeedbackWasRegistered || SyncState.InitialSyncComplete)
+				return; // succeeded elsewhere; let the timer lapse
+
+			_feedbackRecoveryAttempts++;
+
+			SendTextWithoutQueue("xFeedback List");
+
+			var reWarn = _feedbackRecoveryAttempts > FeedbackRecoveryWarnAfter
+				&& (_feedbackRecoveryAttempts - FeedbackRecoveryWarnAfter) % FeedbackRecoverySlowReWarnEvery == 0;
+			if (_feedbackRecoveryAttempts == FeedbackRecoveryWarnAfter || reWarn)
+			{
+				var expectedCount = BuildFeedbackRegistrationExpression().Split('\n').Count();
+				var received = _lastFeedbackReceivedCount < 0
+					? "none (no xFeedback List response)"
+					: _lastFeedbackReceivedCount.ToString();
+				this.LogWarning(
+					"Feedback registration still unverified after {attempts} attempts - received {received} vs expected {expected}; continuing to retry",
+					_feedbackRecoveryAttempts, received, expectedCount);
+			}
+
+			var nextInterval = _feedbackRecoveryAttempts < FeedbackRecoveryWarnAfter
+				? FeedbackRecoveryFastMs
+				: FeedbackRecoverySlowMs;
+			_feedbackRegistrationRecoveryTimer.Reset(nextInterval);
 		}
 
 		private void ParseDiagnosticsToken(JToken diagnosticsToken)
@@ -4253,6 +4370,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Main Source Value is not an integer: {value}", mainSourceValueToken.ToString());
 				return;
 			}
+
+			// Cameras null-checked above.
 
 			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
 
@@ -4347,6 +4466,59 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return false;
 		}
 
+		/// <summary>
+		/// Connector ids whose InputSourceType is "camera", from xConfiguration Video Input.
+		///
+		/// This is the authoritative map of which video inputs are cameras. The camera list built
+		/// from xStatus Cameras is not: network-attached PTZ cameras can all report the same
+		/// DetectedConnector (observed: two cameras both reporting connector 1), so a camera on
+		/// connector 2 would not be recognised.
+		/// </summary>
+		private readonly HashSet<int> _cameraConnectorIds = new HashSet<int>();
+
+		/// <summary>
+		/// Records which video input connectors are configured as cameras. Tolerant of a partial
+		/// or absent token - an xConfiguration dump that omits Video.Input leaves the previous
+		/// mapping in place rather than clearing it.
+		/// </summary>
+		private void ParseVideoInputConnectorSourceTypes(JToken connectorsToken)
+		{
+			if (connectorsToken == null)
+				return;
+
+			try
+			{
+				foreach (var connector in connectorsToken.Children())
+				{
+					var idToken = connector.SelectToken("id");
+					var sourceType = (string)connector.SelectToken("InputSourceType.Value");
+
+					if (idToken == null || string.IsNullOrEmpty(sourceType))
+						continue;
+
+					if (!int.TryParse(idToken.ToString(), out var connectorId))
+						continue;
+
+					if (sourceType.Equals("camera", StringComparison.OrdinalIgnoreCase))
+						_cameraConnectorIds.Add(connectorId);
+					else
+						_cameraConnectorIds.Remove(connectorId);
+				}
+
+				this.LogDebug(
+					"Camera-backed video input connectors: {connectors}",
+					_cameraConnectorIds.Count == 0 ? "none" : string.Join(",", _cameraConnectorIds)
+				);
+			}
+			catch (Exception e)
+			{
+				this.LogError(
+					"Exception parsing Video Input Connector source types: {message}",
+					e.Message
+				);
+			}
+		}
+
 		private void ParseConfigurationObject(JToken configurationToken)
 		{
 			try
@@ -4359,6 +4531,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					ParseCameraAssignedSerialFeedback(cameraConfigurationToken);
 				}
+
+				ParseVideoInputConnectorSourceTypes(
+					configurationToken.SelectToken("Video.Input.Connector")
+				);
 
 				var configuration = new CiscoCodecConfiguration.Configuration();
 				try
@@ -4790,7 +4966,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				using (var sReader = new StringReader(response))
+				using (var sReader = new System.IO.StringReader(response))
 				using (var jReader = new JsonTextReader(sReader))
 				{
 					while (jReader.Read())
@@ -4978,9 +5154,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
+			// A route targeting a camera-backed connector describes how a camera is physically
+			// wired to this codec, not content the room wants presented. Presenting it puts the
+			// camera image on the room display in place of the home screen, and (because the
+			// presentation is never torn down) holds the codec out of standby. Camera connectors
+			// are also typically Visibility: Never, so nothing surfaces on the touch panel to
+			// show a share is running or to let anyone stop it.
+			if (IsCameraConnector(input))
+			{
+				this.LogDebug(
+					"Route to connector {input} is a camera input; not starting a presentation",
+					input
+				);
+				return;
+			}
+
 			SelectPresentationSource(input);
 
 			_presentationSourceKey = selector.ToString();
+		}
+
+		/// <summary>
+		/// True when <paramref name="connectorId"/> is a video input this codec has a camera on.
+		/// Reads the camera list the plugin already builds from xStatus Cameras (see the
+		/// SourceId/DetectedConnector wiring), so it needs no extra polling.
+		/// </summary>
+		private bool IsCameraConnector(int connectorId)
+		{
+			if (connectorId <= 0)
+				return false;
+
+			// Only InputSourceType is trusted here. The camera list built from xStatus Cameras
+			// is deliberately not consulted: network-attached PTZ cameras can all report the same
+			// DetectedConnector (observed: two cameras both reporting connector 1), which makes it
+			// wrong in both directions - it misses real camera connectors and could mark a content
+			// input as a camera.
+			return _cameraConnectorIds.Contains(connectorId);
 		}
 
 		public void ExecuteSwitch(
@@ -5163,6 +5372,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\"", number));
 		}
 
+		public override void Dial(string number, string password)
+		{
+			// Cisco xCommand Dial has no password parameter; PINs are handled via WebexPinRequestHandler.
+			Dial(number);
+		}
+
 		public override void Dial(Meeting meeting)
 		{
 			if (EndAllCallsOnMeetingJoin)
@@ -5339,14 +5554,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void StartSharing()
 		{
-			if (_desiredPresentationSource > 0)
-				EnqueueCommand(
-					string.Format(
-						"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
-						_desiredPresentationSource,
-						PresentationStates.ToString()
-					)
-				);
+			if (_desiredPresentationSource <= 0)
+				return;
+
+			// LocalRemote asks the codec to send the presentation to the far end. Out of a call
+			// there is no far end, so fall back to LocalOnly rather than starting a share the
+			// codec has to treat as outgoing.
+			var sendingMode = IsInCall
+				? PresentationStates
+				: eCodecPresentationStates.LocalOnly;
+
+			EnqueueCommand(
+				string.Format(
+					"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
+					_desiredPresentationSource,
+					sendingMode
+				)
+			);
 		}
 
 		public override void StopSharing()
@@ -6377,7 +6601,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void SetUpCameras(List<CameraInfo> cameraInfo)
 		{
 			// Add the internal camera
-			Cameras = new List<CameraBase>();
+			Cameras = new List<IHasCameraControls>();
 
 			var camCount = cameraInfo.Count;
 			this.LogDebug("Setting up cameras from info: {info}",
@@ -6544,7 +6768,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				throw new ArgumentNullException("cameraInfo");
 
 			// Add the internal camera
-			Cameras = new List<CameraBase>();
+			Cameras = new List<IHasCameraControls>();
 
 			var camCount = cameraInfo.Count;
 			this.LogDebug("THERE ARE {count} CAMERAS", camCount);
@@ -6641,6 +6865,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
 		{
 			this.LogDebug("Setting the source type of video connector {id} to {sourceType}", videoConnectorId, sourceType);
+
+			// Record it here as well as parsing it back from xConfiguration. Deployments commonly
+			// declare their camera inputs through this setter (config activation actions), and
+			// reading the value back out of the full configuration dump is neither immediate nor
+			// guaranteed - the dump is large, chunked, and may land after the first route runs.
+			// Knowing it at the moment we set it removes that dependency entirely.
+			if (sourceType.ToString().Equals("camera", StringComparison.OrdinalIgnoreCase))
+				_cameraConnectorIds.Add((int)videoConnectorId);
+			else
+				_cameraConnectorIds.Remove((int)videoConnectorId);
+
 			EnqueueCommand($"xConfiguration Video Input Connector[{videoConnectorId}]  InputSourceType: {sourceType}");
 		}
 
@@ -6648,15 +6883,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		#region IHasCodecCameras Members
 
-		public event EventHandler<CameraSelectedEventArgs> CameraSelected;
+		public event EventHandler<CameraSelectedEventArgs<IHasCameraControls>> CameraSelected;
 
-		public List<CameraBase> Cameras { get; private set; } = new List<CameraBase>();
+		public List<IHasCameraControls> Cameras { get; private set; } = new List<IHasCameraControls>();
 
 		public StringFeedback SelectedCameraFeedback { get; private set; }
 
-		private CameraBase _selectedCamera;
+		private IHasCameraControls _selectedCamera;
 
-		public CameraBase SelectedCamera
+		public IHasCameraControls SelectedCamera
 		{
 			get { return _selectedCamera; }
 			private set
@@ -6666,7 +6901,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ControllingFarEndCameraFeedback.FireUpdate();
 				if (CameraIsOffFeedback.BoolValue)
 					CameraMuteOff();
-				CameraSelected?.Invoke(this, new CameraSelectedEventArgs(SelectedCamera));
+				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
 			}
 		}
 
@@ -6915,7 +7150,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public DeviceInfo DeviceInfo { get; private set; }
 
 		public event DeviceInfoChangeHandler DeviceInfoChanged;
-		public event SourceInfoChangeHandler CurrentSourceChange;
 
 		public void UpdateDeviceInfo()
 		{
@@ -6997,17 +7231,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			set
 			{
 				if (value == currentSourceInfo) return;
-
-				var handler = CurrentSourceChange;
-
-				handler?.Invoke(currentSourceInfo, ChangeType.WillChange);
-
 				currentSourceInfo = value;
-
-				handler?.Invoke(currentSourceInfo, ChangeType.DidChange);
 			}
 		}
 		private SourceListItem currentSourceInfo;
+
+		#region ICurrentSources Members
+
+		public Dictionary<eRoutingSignalType, IRoutingSource> CurrentSources { get; } = new Dictionary<eRoutingSignalType, IRoutingSource>
+		{
+			{ eRoutingSignalType.Audio, null },
+			{ eRoutingSignalType.Video, null },
+		};
+
+		public Dictionary<eRoutingSignalType, string> CurrentSourceKeys { get; } = new Dictionary<eRoutingSignalType, string>
+		{
+			{ eRoutingSignalType.Audio, string.Empty },
+			{ eRoutingSignalType.Video, string.Empty },
+		};
+
+		public event EventHandler<PepperDash.Essentials.Core.Routing.CurrentSourcesChangedEventArgs> CurrentSourcesChanged;
+
+		public void SetCurrentSource(eRoutingSignalType signalType, IRoutingSource sourceDevice)
+		{
+			foreach (eRoutingSignalType type in Enum.GetValues(typeof(eRoutingSignalType)))
+			{
+				var flag = Convert.ToInt32(type);
+				if (flag == 0 || (flag & (flag - 1)) != 0) continue;
+				if (!signalType.HasFlag(type)) continue;
+
+				CurrentSources.TryGetValue(type, out var previous);
+				CurrentSources[type] = sourceDevice;
+				CurrentSourceKeys[type] = sourceDevice?.Key;
+				CurrentSourcesChanged?.Invoke(this, new PepperDash.Essentials.Core.Routing.CurrentSourcesChangedEventArgs(type, previous, sourceDevice));
+			}
+		}
+
+		#endregion
 		public void SendDtmfToPhone(string digit)
 		{
 			var phoneCall = ActiveCalls.FirstOrDefault(o => o.Type == eCodecCallType.Audio);

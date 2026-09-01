@@ -1,5 +1,4 @@
 ﻿using System;
-using Independentsoft.Exchange;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
