@@ -161,6 +161,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
 
+        // Safety net: a migration that never reaches attach-wait within this long (comfortably above
+        // the worst-case sum of every earlier-stage fallback: ~25s disconnect + ~5s assignment-clear +
+        // room for retries) is force-removed and its port reseeded onto the source codec's VLAN, the
+        // same recovery action used on attach timeout. Without this, a cascade that stalls before any
+        // stage flag is set (e.g. an exception between registration and the first flag) is invisible to
+        // every other periodic scan below (they all filter on a specific flag being set) and remains in
+        // activeMigrations forever, permanently blocking that camera from ever migrating again.
+        private const int MigrationMaxLifetimeMs = 240000;
+
         /// <summary>
         /// Device key of the configured room combiner used by this CameraManager.
         /// </summary>
@@ -766,7 +775,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 Port = camera.NetworkSwitchPort,
                 SourceCodecKey = sourceCodec.Key,
                 SourceCameraId = sourceCameraId,
-                TargetCodecKey = targetCodecKey
+                TargetCodecKey = targetCodecKey,
+                CreatedUtc = DateTime.UtcNow
             };
 
             lock (activeMigrationsLock)
@@ -1096,11 +1106,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 List<string> pendingPoeReenableRetryKeys;
                 List<string> pendingDisconnectWaitKeys;
                 List<string> pendingAssignmentClearTimeoutKeys;
+                List<string> pendingStaleMigrationKeys;
                 var now = DateTime.UtcNow;
                 lock (activeMigrationsLock)
                 {
                     pendingAttachKeys = activeMigrations.Values
                         .Where(m => m.AttachWaitStarted && m.AttachWaitDeadlineUtc <= now)
+                        .Select(m => m.CameraKey)
+                        .ToList();
+
+                    pendingStaleMigrationKeys = activeMigrations.Values
+                        .Where(m => !m.AttachWaitStarted && (now - m.CreatedUtc).TotalMilliseconds >= MigrationMaxLifetimeMs)
                         .Select(m => m.CameraKey)
                         .ToList();
 
@@ -1309,6 +1325,51 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     else
                     {
                         this.LogError($"Camera Manager {Key} cannot run attach failure reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
+                    }
+                }
+
+                foreach (var migrationKey in pendingStaleMigrationKeys)
+                {
+                    string cameraKey;
+                    string sourceCodecKey;
+                    uint sourceCameraId;
+                    string targetCodecKey;
+                    string port;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!activeMigrations.TryGetValue(migrationKey, out var migration)
+                            || migration.AttachWaitStarted
+                            || (now - migration.CreatedUtc).TotalMilliseconds < MigrationMaxLifetimeMs)
+                        {
+                            continue;
+                        }
+
+                        cameraKey = migration.CameraKey;
+                        sourceCodecKey = migration.SourceCodecKey;
+                        sourceCameraId = migration.SourceCameraId;
+                        targetCodecKey = migration.TargetCodecKey;
+                        port = migration.Port;
+
+                        activeMigrations.Remove(migration.CameraKey);
+                        if (string.Equals(activeBurstCameraKey, migration.CameraKey, StringComparison.Ordinal))
+                        {
+                            activeBurstCameraKey = null;
+                        }
+                        reconcileNextActionUtc[migration.CameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                    }
+
+                    this.LogWarning($"CAMERA_SWITCHOVER_STALE_MIGRATION_FORCE_REMOVED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' maxLifetimeMs='{MigrationMaxLifetimeMs}' action='reseedSourceVlanAndPoe'");
+                    if (managedCodecs.TryGetValue(sourceCodecKey, out var staleSourceCodecDevice))
+                    {
+                        networkSwitch.SetPortVlan(port, staleSourceCodecDevice.VLanId);
+                        if (!disablePoeCycling)
+                        {
+                            networkSwitch.SetPortPoeState(port, true);
+                        }
+                    }
+                    else
+                    {
+                        this.LogError($"Camera Manager {Key} cannot run stale-migration reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
                     }
                 }
 
@@ -1801,6 +1862,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             // connect-driven passes start skipping unchanged ports.
             ClearEnsuredPortStateCache();
 
+            // Map camera -> desired target codec under the NEW scenario, used below to invalidate any
+            // in-flight migration bookkeeping that the scenario change has made obsolete.
+            var newScenarioTargets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(currentScenario?.Key)
+                && config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var newScenarioConfig))
+            {
+                foreach (var codecConfig in newScenarioConfig.CodecConfigs)
+                {
+                    foreach (var cameraKey in codecConfig.CameraKeys)
+                    {
+                        newScenarioTargets[cameraKey] = codecConfig.CodecKey;
+                    }
+                }
+            }
+
             // Drop migration starts queued for the previous scenario; the reconciliation below
             // re-queues whatever the new scenario needs from current physical state. Any in-flight
             // burst is left to finish (or time out) on its own gate rather than being interrupted.
@@ -1810,6 +1886,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     this.LogDebug($"Camera Manager {Key} clearing {pendingMigrationStarts.Count} queued migration start(s) on scenario change to '{currentScenario?.Key}'");
                     pendingMigrationStarts.Clear();
+                }
+
+                // A migration registered for the PREVIOUS scenario whose target no longer matches (or
+                // is no longer needed at all) under the NEW scenario is obsolete bookkeeping, not a
+                // genuine in-flight move for the scenario we're switching to. Without this, a migration
+                // that stalled before ever reaching attach-wait (activeMigrations is otherwise only
+                // cleared on attach-confirmed or attach-timeout) permanently blocks TryStartMigration for
+                // that camera on every future scenario change — it logs "confirmed ... starting
+                // migration" immediately followed by "already in progress" and the camera never moves.
+                var staleCameraKeys = activeMigrations
+                    .Where(kvp => !newScenarioTargets.TryGetValue(kvp.Key, out var desiredTarget)
+                        || !string.Equals(desiredTarget, kvp.Value.TargetCodecKey, StringComparison.Ordinal))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
+                foreach (var staleCameraKey in staleCameraKeys)
+                {
+                    this.LogWarning($"Camera Manager {Key} discarding stale migration bookkeeping for camera '{staleCameraKey}' (target no longer matches scenario '{currentScenario?.Key}') so it can be re-evaluated from scratch");
+                    activeMigrations.Remove(staleCameraKey);
+                    if (string.Equals(activeBurstCameraKey, staleCameraKey, StringComparison.Ordinal))
+                    {
+                        activeBurstCameraKey = null;
+                    }
                 }
 
                 // New scenario -> re-apply primary/PresenterTrack roles once its cameras settle.
@@ -2893,6 +2992,7 @@ foreach (var codecConfig in scenarioConfig.CodecConfigs)
             public DateTime PoeReenableDeadlineUtc { get; set; }
             public bool WaitingForSourceDisconnect { get; set; }
             public DateTime DisconnectWaitDeadlineUtc { get; set; }
+            public DateTime CreatedUtc { get; set; }
         }
     }
 }
