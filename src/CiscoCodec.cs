@@ -839,7 +839,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			LocalLayoutIsProminentFeedback = new BoolFeedback(LocalLayoutIsProminentFeedbackFunc);
 			FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
 			CameraIsOffFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
+				// Null-safe: MainVideoMute may be absent until the codec first reports a mute status.
+				// Evaluated from the SelectedCamera setter, so an NRE here throws out of SelectCamera and
+				// (on the CameraManager timer thread) is silently swallowed, wedging role application.
+				() => CodecStatus?.Status?.Video?.VideoInput?.MainVideoMute?.BoolValue ?? false
 			);
 			AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
 			DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
