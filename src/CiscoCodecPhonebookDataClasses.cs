@@ -284,10 +284,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     }
                 }
 
-                rootContacts.OrderBy(f => f.Name);
-
                 // strip any nulls a downstream subscriber's non-null-safe predicate might trip on
-                return rootContacts.Where(item => item != null).ToList();
+                return rootContacts.Where(item => item != null).OrderBy(item => item.Name).ToList();
             }
             catch (Exception ex)
             {
