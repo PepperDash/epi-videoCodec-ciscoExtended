@@ -4852,24 +4852,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
 
-			// Fire event to all subscribed UIs. Isolate faulty subscribers so a bad one
-			// (e.g. Essentials Core's LinkVideoCodecDirectoryToApi predicate) can't
-			// bubble a NullReferenceException back up into our phonebook parser.
-			try
+			// Fire event to all subscribed UIs. Isolate faulty subscribers so one bad handler
+			// can't bubble an exception back into our phonebook parser or prevent other UIs from updating.
+			var handlers = DirectoryResultReturned;
+			if (handlers != null)
 			{
-				DirectoryResultReturned?.Invoke(
-						this,
-						new DirectoryEventArgs()
-						{
-							Directory = result,
-							DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
-						}
-					);
-			}
-			catch (Exception ex)
-			{
-				this.LogError("Directory subscriber threw: {message}", ex.Message);
-				this.LogVerbose(ex, "Directory subscriber exception");
+				foreach (var d in handlers.GetInvocationList())
+				{
+					var handler = (EventHandler<DirectoryEventArgs>)d;
+					try
+					{
+						handler(
+							this,
+							new DirectoryEventArgs()
+							{
+								Directory = result,
+								DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
+							}
+						);
+					}
+					catch (Exception ex)
+					{
+						this.LogError(
+							"Directory subscriber threw ({subscriber}): {message}",
+							handler.Method.DeclaringType != null ? handler.Method.DeclaringType.FullName : handler.Method.Name,
+							ex.Message
+						);
+						this.LogVerbose(ex, "Directory subscriber exception");
+					}
+				}
 			}
 
 			PrintDirectory(result);
