@@ -4472,7 +4472,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var directoryResults = new CodecDirectory();
 
 					var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
-					if (totalRowsValue != "0")
+					if (int.TryParse(totalRowsValue, out var totalRows) && totalRows > 0)
 						directoryResults =
 							CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
 								phonebookSearchResultResponseObject
