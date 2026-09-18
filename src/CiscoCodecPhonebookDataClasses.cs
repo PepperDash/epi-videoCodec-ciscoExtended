@@ -328,10 +328,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         folder.Name = f.Name.Value;
                         folder.FolderId = f.FolderId.Value;
 
-                        // a folder with no parent is a root folder; Essentials Core filters
-                        // root items on ParentFolderId == "root"
+                        // Keep the codec's own value, empty when it supplies none. Do not
+                        // substitute "root" here: Core's non-root view filters on
+                        // ParentFolderId != "root", so a folder returned by a search would
+                        // be excluded from its own results. "root" belongs only to the
+                        // root-specific helpers above.
                         folder.ParentFolderId =
-                            f.ParentFolderId != null ? f.ParentFolderId.Value : "root";
+                            f.ParentFolderId != null ? f.ParentFolderId.Value : string.Empty;
 
                         folders.Add(folder);
                     }
@@ -357,10 +360,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                             contact.FolderId = c.FolderId.Value;
                         }
 
-                        // a contact's parent is its folder, or root when it has none
-                        contact.ParentFolderId = string.IsNullOrEmpty(contact.FolderId)
-                            ? "root"
-                            : contact.FolderId;
+                        // A contact's parent is its folder. Search results carry no folder;
+                        // leave those empty rather than "root", because Core's non-root view
+                        // filters on ParentFolderId != "root" and would drop every search
+                        // result. Empty is still non-null, so the root predicate is safe.
+                        contact.ParentFolderId = contact.FolderId ?? string.Empty;
 
                         foreach (ContactMethod m in c.ContactMethod)
                         {
