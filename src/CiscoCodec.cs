@@ -4668,6 +4668,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					var reason = resultToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
 					this.LogError("Phonebook query failed. Reason: {reason}", reason);
+
+					// SearchDirectory raised the busy flag and queued this resultId, and only
+					// the normal completion path clears them - a failed query has to do it here
+					// or DirectorySearchInProgress latches on. Startup queries carry no
+					// resultId; don't drain the queue for those, a user search may be pending.
+					if (!string.IsNullOrEmpty(resultId))
+					{
+						while (_searches.Count > 0)
+						{
+							if (_searches.Dequeue() != resultId)
+								continue;
+
+							_searchInProgress = false;
+							DirectorySearchInProgress.FireUpdate();
+							break;
+						}
+					}
+
 					return;
 				}
 
