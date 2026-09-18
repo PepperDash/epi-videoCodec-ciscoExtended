@@ -685,7 +685,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private string _phonebookMode = "Local"; // Default to Local
 
-		private uint _phonebookResultsLimit = 255; // Could be set later by config.
+		// RoomOS rejects any phonebook query whose limit falls outside [1,100].
+		private const uint PhonebookResultsLimitMax = 100;
+
+		private uint _phonebookResultsLimit = PhonebookResultsLimitMax; // Could be set later by config.
 
 		private CTimer _loginMessageReceivedTimer;
 		private CTimer _retryConnectionTimer;
@@ -796,10 +799,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 			}
 
-			// Use the configured phonebook results limit if present
+			// Use the configured phonebook results limit if present, clamped to what RoomOS accepts
 			if (props.PhonebookResultsLimit > 0)
 			{
-				_phonebookResultsLimit = props.PhonebookResultsLimit;
+				_phonebookResultsLimit = Math.Min(
+					props.PhonebookResultsLimit,
+					PhonebookResultsLimitMax
+				);
 			}
 
 			// The queue that will collect the repsonses in the order they are received
@@ -4648,6 +4654,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
+				// An error response carries no Contact/Folder data, so parsing it yields empty
+				// collections and looks identical to "no results" unless the reason is surfaced.
+				var resultToken =
+					phonebookSearchResultResponseToken.SelectToken("PhonebookSearchResult")
+					?? phonebookSearchResultResponseToken;
+
+				var status = resultToken.SelectToken("status")?.ToString();
+				if (
+					!string.IsNullOrEmpty(status)
+					&& status.Equals("Error", StringComparison.OrdinalIgnoreCase)
+				)
+				{
+					var reason = resultToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
+					this.LogError("Phonebook query failed. Reason: {reason}", reason);
+					return;
+				}
+
 				var phonebookSearchResultResponseObject =
 					new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
 				PopulateObjectWithToken(
