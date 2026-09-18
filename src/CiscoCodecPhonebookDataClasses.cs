@@ -190,7 +190,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     folder.FolderId = f.FolderId.Value;
 
                     if (f.ParentFolderId == null)
+                    {
+                        // Essentials Core filters root items on ParentFolderId == "root"
+                        folder.ParentFolderId = "root";
                         rootFolders.Add(folder);
+                    }
 
                     if (Debug.Level > 0)
                         Debug.LogDebug("+ {value}", folder.Name);
@@ -231,6 +235,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         {
                             contact.Name = c.Name.Value;
                             contact.ContactId = c.ContactId.Value;
+                            // Essentials Core filters root items on ParentFolderId == "root"
+                            contact.ParentFolderId = "root";
 
                             if (!string.IsNullOrEmpty(c.Title.Value))
                                 contact.Title = c.Title.Value;
@@ -322,10 +328,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         folder.Name = f.Name.Value;
                         folder.FolderId = f.FolderId.Value;
 
-                        if (f.ParentFolderId != null)
-                        {
-                            folder.ParentFolderId = f.ParentFolderId.Value;
-                        }
+                        // a folder with no parent is a root folder; Essentials Core filters
+                        // root items on ParentFolderId == "root"
+                        folder.ParentFolderId =
+                            f.ParentFolderId != null ? f.ParentFolderId.Value : "root";
 
                         folders.Add(folder);
                     }
@@ -350,6 +356,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         {
                             contact.FolderId = c.FolderId.Value;
                         }
+
+                        // a contact's parent is its folder, or root when it has none
+                        contact.ParentFolderId = string.IsNullOrEmpty(contact.FolderId)
+                            ? "root"
+                            : contact.FolderId;
 
                         foreach (ContactMethod m in c.ContactMethod)
                         {
