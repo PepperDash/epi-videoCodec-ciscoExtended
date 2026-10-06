@@ -64,6 +64,25 @@ public class NavigatorAppUrlTests
     }
 
     [Fact]
+    public void KeepsTheExistingQueryStringExactly()
+    {
+        const string url = "http://10.0.0.5:50003/mc/app?token=a%2Bb&x=1";
+
+        NavigatorAppUrl.AddQueryParams(url, Params(("perfLabel", "navigator")))
+            .Should().Be(url + "&perfLabel=navigator");
+    }
+
+    [Fact]
+    public void ThePluginDoesNotReferenceSystemWebHttpUtility()
+    {
+        // The Essentials plugin loader rejects plugins that reference System.Web.HttpUtility
+        // ("Uses incompatible type"), so the whole plugin fails to load.
+        AssemblyFixture.PluginAssembly.GetReferencedAssemblies()
+            .Select(a => a.Name)
+            .Should().NotContain("System.Web.HttpUtility");
+    }
+
+    [Fact]
     public void WithNoParameters_ReturnsTheUrlUnchanged()
     {
         NavigatorAppUrl.AddQueryParams(AppUrl, null!).Should().Be(AppUrl);
