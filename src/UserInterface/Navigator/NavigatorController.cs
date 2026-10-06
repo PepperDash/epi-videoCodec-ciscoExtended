@@ -143,7 +143,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             try
             {
                 this.LogDebug("Setting AppUrl to: {url}", url);
-                appUrl = url;
+                // Every web view the Navigator opens is built from this URL, so parameters added
+                // here reach all of them.
+                appUrl = NavigatorAppUrl.AddQueryParams(url, props.AppUrlQueryParams);
                 AppUrlFeedback.FireUpdate();
             }
             catch (Exception e)

@@ -33,5 +33,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
 		[JsonProperty("customLockouts")]
 		public List<Lockout> CustomLockouts { get; set; }
 
+		/// <summary>
+		/// Extra query string parameters added to the Mobile Control app URL this Navigator loads,
+		/// e.g. <c>{ "perfLabel": "navigator" }</c>. Every web view the Navigator opens is built from
+		/// that URL, so they all carry them. Parameters the URL already has, such as the token, are
+		/// never overwritten.
+		/// </summary>
+		[JsonProperty("appUrlQueryParams", NullValueHandling = NullValueHandling.Ignore)]
+		public Dictionary<string, string> AppUrlQueryParams { get; set; }
+
 	}
 }

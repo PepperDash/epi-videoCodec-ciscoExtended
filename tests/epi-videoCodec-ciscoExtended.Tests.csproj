@@ -21,6 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Dependency-free plugin source compiled in directly, so its behaviour can be tested
+         (the plugin assembly itself is only loaded for reflection). -->
+    <Compile Include="..\src\UserInterface\Navigator\NavigatorAppUrl.cs" Link="Plugin\NavigatorAppUrl.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
     <ProjectReference Include="..\src\epi-videoCodec-ciscoExtended.4Series.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

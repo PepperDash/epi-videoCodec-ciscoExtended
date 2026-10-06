@@ -24,6 +24,7 @@ public class ConfigDeserializationTests
         new object[] { "CiscoCodecConfig", "showSelfViewByDefault" },
         new object[] { "CiscoCodecConfig", "externalSourceListEnabled" },
         new object[] { "CiscoCodecConfig", "communicationMonitorProperties" },
+        new object[] { "NavigatorConfig", "appUrlQueryParams" },
     };
 
     private static Type? FindType(string simpleName) =>
