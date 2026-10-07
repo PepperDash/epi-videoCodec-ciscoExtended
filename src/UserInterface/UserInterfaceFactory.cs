@@ -11,7 +11,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
     {
         public UserInterfaceFactory()
         {
-            MinimumEssentialsFrameworkVersion = "2.0.0";
+            MinimumEssentialsFrameworkVersion = "3.0.0";
 
             TypeNames = new List<string>() { "ciscoRoomOsMobileControl" };
         }

@@ -4,7 +4,7 @@
   </PropertyGroup>
   
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net8</TargetFramework>
     <RootNamespace>PepperDash.Essentials.Plugin.CiscoRoomOsCodec</RootNamespace>
     <Deterministic>false</Deterministic>
     <AssemblyTitle>epi-videoCodec-ciscoExtended</AssemblyTitle>
@@ -20,14 +20,6 @@
     <PackageTags>crestron 4series cisco webex webexpro vtc videocodec codec</PackageTags>
   </PropertyGroup>
   
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>$(DefineConstants);SERIES4</DefineConstants>
-  </PropertyGroup>
-
-   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DefineConstants>$(DefineConstants);SERIES4</DefineConstants>
-  </PropertyGroup>
-  
 
   <ItemGroup>
     <Compile Remove="Properties\**" />
@@ -39,7 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PepperDashEssentials" Version="2.37.0-feature-web-api-updates.9">
+    <PackageReference Include="PepperDashEssentials" Version="3.0.0-feat-update-ihaswebview.1">
 	    <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="WebSocketSharp-netstandard" Version="1.0.1" />

@@ -45,6 +45,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
         private bool combinationLockout;
 
+        // Debounce lockout re-pushes so the scenario-change clear and the 5s poll can't emit a
+        // burst of pushes that lands while the React app is still loading/joining (tears the
+        // WebView down mid-load -> blank). Must be < the poll interval so a genuinely missing
+        // webview still recovers on the next poll.
+        private DateTime _lastLockoutPushUtc = DateTime.MinValue;
+        private const int LockoutPushDebounceMs = 4000;
+
+        // The mobile-control path currently being asserted as the lockout, so a repeat StartLockout
+        // for the same target can skip the redundant clear/re-push cycle.
+        private string _currentLockoutPath;
+
         private bool inProgressWebViewActive;
 
         private EventHandler<EventArgs> _combinationOperationStatusChangedHandler;
@@ -128,7 +139,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 
             SetupCustomLockouts();
 
-            mcTpController.Parent.IsReadyChange += (s, a) =>
+            mcTpController.Parent.IsReadyEvent += (s, a) =>
             {
                 if (!mcTpController.Parent.IsReady) return;
 
@@ -251,6 +262,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             {
                 var combiner = combinerHandler.EssentialsRoomCombiner;
                 var currentScenario = combiner.CurrentScenario;
+                if (currentScenario == null)
+                {
+                    this.LogDebug("CurrentScenario is null in HandleRoomCombineScenarioChanged");
+                    return;
+                }
+
                 var uiMap = currentScenario.UiMap;
 
                 if (uiMap == null)
@@ -549,12 +566,30 @@ catch (Exception ex)
 
         private void StartLockout(bool isCombinationLockout = true)
         {
+            var wasAlreadyLockedOut = mcTpController.LockedOut;
+            var newPath = string.IsNullOrEmpty(currentLockout?.MobileControlPath)
+                ? "/lockout"
+                : currentLockout.MobileControlPath;
+            var samePathAsBefore = wasAlreadyLockedOut
+                && string.Equals(_currentLockoutPath, newPath, StringComparison.OrdinalIgnoreCase);
+
             mcTpController.LockedOut = true;
 
             combinationLockout = isCombinationLockout;
 
-            ClearWebView();
+            _currentLockoutPath = newPath;
 
+            // Only clear when transitioning into lockout or switching lockout targets. Re-clearing
+            // while already showing the same lockout triggers a status-error -> re-push cycle that
+            // can tear down the still-loading app (blank).
+            if (!samePathAsBefore)
+            {
+                ClearWebView();
+            }
+
+            // Idempotent subscription: without the unsubscribe, repeated StartLockout calls stack
+            // duplicate handlers so each webview status reply fires SendLockout multiple times.
+            extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
             extensionsHandler.UiWebViewChangedEvent += LockoutWebViewChanged;
 
             mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
@@ -579,6 +614,9 @@ catch (Exception ex)
             combinationLockout = false;
 
             inProgressWebViewActive = false;
+
+            _currentLockoutPath = null;
+            _lastLockoutPushUtc = DateTime.MinValue;
 
             CancelInProgressFailureCloseTimer();
 
@@ -629,6 +667,17 @@ catch (Exception ex)
 
         private void SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
         {
+            // Suppress burst re-pushes (scenario-change clear + poll both emit webview "Error"
+            // events) so a re-push can't land while the React app is still loading and joining.
+            var sinceLastPush = (DateTime.UtcNow - _lastLockoutPushUtc).TotalMilliseconds;
+            if (sinceLastPush < LockoutPushDebounceMs)
+            {
+                this.LogVerbose("Skipping lockout re-push; last push {ms}ms ago (< {debounce}ms debounce)",
+                    (int)sinceLastPush, LockoutPushDebounceMs);
+                return;
+            }
+            _lastLockoutPushUtc = DateTime.UtcNow;
+
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
             var path = currentLockout?.MobileControlPath;

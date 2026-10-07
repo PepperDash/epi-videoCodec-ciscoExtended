@@ -18,7 +18,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         public CiscoCodecFactory()
         {
-            MinimumEssentialsFrameworkVersion = "1.15.2";
+            MinimumEssentialsFrameworkVersion = "3.0.0";
 
             TypeNames = new List<string>() { "ciscoRoomOS", "ciscoRoomBar", "ciscoRoomBarPro", "ciscoCodecEq", "ciscoCodecPro" };
         }

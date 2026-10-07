@@ -7,6 +7,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
     public class CiscoCodecJoinMap : VideoCodecControllerJoinMap
     {
+        // Re-added for v3: both Serial join 142 (To/FromSIMPL) were on the Core VideoCodecControllerJoinMap
+        // base in v2 but removed in v3; the plugin still bridges them (README joins 142).
+        [JoinName("AvailableLayoutsFb")]
+        public JoinDataComplete AvailableLayoutsFb = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 142,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "xSig of all available layouts",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
+        [JoinName("SelectLayout")]
+        public JoinDataComplete SelectLayout = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 142,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Select Layout by string",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
         #region Digital
 
 

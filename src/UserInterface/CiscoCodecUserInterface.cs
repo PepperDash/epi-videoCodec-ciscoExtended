@@ -29,7 +29,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface
         #region Custom Activate
         private readonly List<Action> CustomActivateActions = new List<Action>();
 
-        public override bool CustomActivate()
+        protected override bool CustomActivate()
         {
 
             foreach (var action in CustomActivateActions)
