@@ -463,10 +463,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         public string Id { get; set; }
 
         /// <summary>
+        /// Length of each base64 line sent to the codec (the MIME line length).
+        /// </summary>
+        public const int ContentLineLength = 76;
+
+        /// <summary>
         /// The base64-encoded content of the custom icon.
         /// </summary>
-        [XmlElement("Content")]
+        [XmlIgnore]
         public string Content { get; set; }
+
+        /// <summary>
+        /// <see cref="Content"/> as written to the codec: the base64 split into lines of
+        /// <see cref="ContentLineLength"/> characters. Over RS-232 RoomOS resets the session on any
+        /// line longer than 2,048 bytes, and a custom icon sent as one line is usually longer (#114).
+        /// RoomOS ignores the line breaks when it decodes the base64.
+        /// </summary>
+        [XmlElement("Content")]
+        [JsonIgnore]
+        public string WrappedContent
+        {
+            get => WrapBase64(Content);
+            set => Content = value == null ? null : new string(value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        }
+
+        private static string WrapBase64(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+                return content;
+
+            var base64 = new string(content.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            var lines = new List<string>();
+            for (var i = 0; i < base64.Length; i += ContentLineLength)
+                lines.Add(base64.Substring(i, Math.Min(ContentLineLength, base64.Length - i)));
+
+            return "\n" + string.Join("\n", lines) + "\n";
+        }
     }
 
     /// <summary>
