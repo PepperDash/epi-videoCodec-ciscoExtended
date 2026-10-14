@@ -3637,33 +3637,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var currentStandbyStatusToken = (string)standbyToken.SelectToken("State.Value");
 				if (!string.IsNullOrEmpty(currentStandbyStatusToken))
 				{
-					switch (currentStandbyStatusToken.ToLower())
-					{
-						case "standby":
-							_standbyState = StandbyState.Standby;
-							this.LogInformation("Standby State = Standby");
-							break;
-						case "enteringstandby":
-							_standbyState = StandbyState.EnteringStandby;
-							this.LogInformation("Standby State = EnteringStandby");
-							break;
-						case "off":
-							_standbyState = StandbyState.Off;
-							this.LogInformation("Standby State = Off");
-							break;
-						case "halfwake":
-							_standbyState = StandbyState.HalfWake;
-							this.LogInformation("Standby State = HalfWake");
-							break;
-						default:
-							_standbyState = StandbyState.Unknown;
-							this.LogError("Unknown Standby State: {state}", currentStandbyStatusToken);
-							break;
-					}
-
-					StandbyIsOnFeedback.FireUpdate();
-					EnteringStandbyModeFeedback.FireUpdate();
-					HalfWakeModeIsOnFeedback.FireUpdate();
+					ApplyStandbyState(currentStandbyStatusToken);
 				}
 			}
 			if (legacyLayoutsToken != null && !EnhancedLayouts)
@@ -6369,6 +6343,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public void HalfwakeActivate()
 		{
 			EnqueueCommand("xCommand Standby Halfwake");
+		}
+
+		private void ApplyStandbyState(string state)
+		{
+			switch (state.ToLower())
+			{
+				case "standby":
+					_standbyState = StandbyState.Standby;
+					this.LogInformation("Standby State = Standby");
+					break;
+				case "enteringstandby":
+					_standbyState = StandbyState.EnteringStandby;
+					this.LogInformation("Standby State = EnteringStandby");
+					break;
+				case "off":
+					_standbyState = StandbyState.Off;
+					this.LogInformation("Standby State = Off");
+					break;
+				case "halfwake":
+					_standbyState = StandbyState.HalfWake;
+					this.LogInformation("Standby State = HalfWake");
+					break;
+				default:
+					_standbyState = StandbyState.Unknown;
+					this.LogError("Unknown Standby State: {state}", state);
+					break;
+			}
+
+			StandbyIsOnFeedback.FireUpdate();
+			EnteringStandbyModeFeedback.FireUpdate();
+			HalfWakeModeIsOnFeedback.FireUpdate();
+		}
+
+		/// <summary>
+		/// Local test hook for devjson: simulates the codec reporting a standby state (Off, EnteringStandby,
+		/// Standby, HalfWake) without a connected codec. Uses the same path as a real Status.Standby.State update.
+		/// </summary>
+		public void SimulateStandbyState(string state)
+		{
+			this.LogInformation("Simulating standby state: {state}", state);
+			ApplyStandbyState(state);
 		}
 
 		#endregion

@@ -1,0 +1,27 @@
+SimulateStandbyState - bench test hook (no codec required)
+
+Sets the plugin's standby state the same way a real Status.Standby.State update does
+(StandbyIsOnFeedback / HalfWakeModeIsOnFeedback / EnteringStandbyModeFeedback all fire).
+Valid states (case-insensitive): Off, EnteringStandby, Standby, HalfWake. Anything else = Unknown.
+Feedbacks only fire on a change, so send Off first when testing a fresh transition.
+
+Send from the processor console (program slot 1, device key codecA or codecB):
+
+devjson:1 {"deviceKey":"codecA","methodName":"SimulateStandbyState","params":["Off"]}
+devjson:1 {"deviceKey":"codecA","methodName":"SimulateStandbyState","params":["HalfWake"]}
+devjson:1 {"deviceKey":"codecA","methodName":"SimulateStandbyState","params":["EnteringStandby"]}
+devjson:1 {"deviceKey":"codecA","methodName":"SimulateStandbyState","params":["Standby"]}
+
+Transitions exercised against kpmg-room-plugin 1.17.0-feature-codec-sleep-signage.2 (NYer, roomAB / codecA):
+
+  Awake -> HalfWake      in hours: signage      (Off, HalfWake)
+  Standby -> HalfWake    in hours: signage      (Standby, HalfWake)
+  HalfWake -> Standby    in hours: signage via shutdown (roomOffRouteKey)
+  HalfWake/Standby -> Awake: default present route restored (Off)
+  EnteringStandby        no room action (by design)
+  HalfWake, Standby      outside hours: no signage, normal shutdown
+
+Expected room log lines (filter: roomAB|signage|Codec state changed):
+  Codec state changed: <prev> -> <current>
+  Showing codec sleep signage (<reason>): N action(s)
+  Running Default Present Route: codecOsd
