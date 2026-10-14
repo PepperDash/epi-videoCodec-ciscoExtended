@@ -973,26 +973,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			Communication = comm;
 
+			// The monitor polls through SendTextWithoutQueue rather than writing the poll string to
+			// the connection itself, so its polls take the same send lock as every other plugin write
+			// and can't interleave with them on the wire (#123). SendTextWithoutQueue also adds the
+			// codec delimiter, without which the poll would merge with the next command.
 			if (props.CommunicationMonitorProperties != null)
 			{
-				// Ensure the poll string ends with the codec delimiter (\r\n).
-				// GenericCommunicationMonitor sends the poll string verbatim with no terminator,
-				// so without one the bytes buffer and merge with the next command on the wire.
 				var monitorConfig = props.CommunicationMonitorProperties;
-				if (!string.IsNullOrEmpty(monitorConfig.PollString))
-				{
-					monitorConfig.PollString = monitorConfig.PollString.TrimEnd('\r', '\n') + Delimiter;
-				}
+				var pollString = monitorConfig.PollString;
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
 					Communication,
-					monitorConfig
+					monitorConfig.PollInterval,
+					monitorConfig.TimeToWarning,
+					monitorConfig.TimeToError,
+					() => SendTextWithoutQueue(pollString)
 				);
 			}
 			else
 			{
-				// trailing Delimiter is required - see sibling if-branch comment above
 				const string pollString =
 					"xstatus systemunit"
 					+ Delimiter
@@ -1000,8 +1000,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ Delimiter
 					+ "xstatus sip/registration"
 					+ Delimiter
-					+ "xStatus Audio Volume"
-					+ Delimiter;
+					+ "xStatus Audio Volume";
 
 				CommunicationMonitor = new GenericCommunicationMonitor(
 					this,
@@ -1009,7 +1008,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					30000,
 					120000,
 					300000,
-					pollString
+					() => SendTextWithoutQueue(pollString)
 				);
 			}
 
@@ -2391,8 +2390,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.Replace("\n", Delimiter)
 				.TrimEnd('\r', '\n');
 
-			Communication.SendText(normalized + Delimiter);
+			// Writes come from the receive thread, the sync worker and the communication monitor's
+			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
+			// codec gets garbled commands and loses some of them (#123).
+			lock (_sendLock)
+			{
+				// Skip writes while the connection is down or being torn down (always true on RS-232).
+				if (!Communication.IsConnected)
+					return;
+
+				Communication.SendText(normalized + Delimiter);
+			}
 		}
+
+		private readonly object _sendLock = new object();
 
 		public void SendText(string command)
 		{
@@ -4324,11 +4335,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			this.LogDebug("Sending Feedback");
 
-			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
+			// All three go through the command queue, so they are written by one thread in this
+			// order. xFeedback List must follow every registration: ProcessFeedbackList counts the
+			// registered paths, and a list that overtakes the registrations reads as lost feedback (#123).
+			EnqueueCommand(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
 
 			this.LogDebug("Requesting xFeedback List to verify registration");
-			SendTextWithoutQueue("xFeedback List");
+			EnqueueCommand("xFeedback List");
 		}
 
 		private void ParseDiagnosticsToken(JToken diagnosticsToken)
