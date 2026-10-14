@@ -1167,6 +1167,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void EndGracefully()
 		{
+			// Block any timer a concurrent sync or bookings response would create from here on,
+			// then stop the existing ones.
+			lock (_refreshTimerLock)
+			{
+				_refreshTimersDisabled = true;
+			}
 			StopRefreshTimers();
 			if (_loginMessageReceivedTimer != null)
 			{
@@ -1198,14 +1204,34 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ReplaceTimer(ref _registrationCheckTimer, null);
 		}
 
+		// Guards every create/replace/stop/reset of the refresh timers, which happen on the socket
+		// callback, the sync worker, the receive thread (bookings responses) and shutdown.
+		private readonly object _refreshTimerLock = new object();
+
+		// Set on shutdown so no new refresh timer can be created after the final cleanup.
+		private bool _refreshTimersDisabled;
+
 		/// <summary>
-		/// Atomically swaps a timer field to <paramref name="replacement"/> and then stops and
-		/// disposes whatever timer was there before. The swap happens first, so a timer assigned by
-		/// another thread is never stopped by mistake and a replaced timer is never left running.
+		/// Sets a timer field to <paramref name="replacement"/> and stops and disposes whatever timer
+		/// was there before, under the refresh-timer lock. After shutdown a replacement is discarded
+		/// instead of started.
 		/// </summary>
-		private static void ReplaceTimer(ref CTimer field, CTimer replacement)
+		private void ReplaceTimer(ref CTimer field, CTimer replacement)
 		{
-			var previous = System.Threading.Interlocked.Exchange(ref field, replacement);
+			CTimer previous;
+			lock (_refreshTimerLock)
+			{
+				if (_refreshTimersDisabled && replacement != null)
+				{
+					replacement.Stop();
+					replacement.Dispose();
+					replacement = null;
+				}
+
+				previous = field;
+				field = replacement;
+			}
+
 			if (previous == null || ReferenceEquals(previous, replacement))
 				return;
 
@@ -4926,25 +4952,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose("There are No Meetings");
 				CodecSchedule.Meetings = new List<Meeting>();
 			}
-			// A bookings response can arrive while the timers are being stopped or recreated, so
-			// only create a timer if none exists (never overwrite one another thread assigned).
-			var bookingsTimer = BookingsRefreshTimer;
-			if (bookingsTimer == null)
+			// A bookings response can arrive while the timers are being stopped or recreated, so the
+			// check, create and reset happen under the refresh-timer lock (and never after shutdown).
+			lock (_refreshTimerLock)
 			{
-				var created = new CTimer(GetBookings, 90000, 90000);
-				bookingsTimer = System.Threading.Interlocked.CompareExchange(ref BookingsRefreshTimer, created, null);
-				if (bookingsTimer == null)
+				if (_refreshTimersDisabled)
+					return;
+
+				if (BookingsRefreshTimer == null)
 				{
-					bookingsTimer = created;
+					BookingsRefreshTimer = new CTimer(GetBookings, 90000, 90000);
 					this.LogVerbose("BookingsRefresh Was null");
 				}
-				else
-				{
-					created.Stop();
-					created.Dispose();
-				}
+				BookingsRefreshTimer.Reset(90000, 90000);
 			}
-			bookingsTimer.Reset(90000, 90000);
 		}
 
 		private static string ParseResultId(JObject obj)
@@ -5221,7 +5242,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (DateTime.Now.Hour == 2)
 			{
 				GetPhonebook(null);
-				PhonebookRefreshTimer?.Reset(3600000, 3600000);
+				lock (_refreshTimerLock)
+				{
+					PhonebookRefreshTimer?.Reset(3600000, 3600000);
+				}
 			}
 		}
 
