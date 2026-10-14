@@ -575,6 +575,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+		// "ghost": "True" to indicate that item has been removed/is no longer available. Ghost
+		// entries only carry an "id" (and the ghost flag) - none of the item's normal data - so
+		// callers should skip/remove them rather than treat them as incomplete data.
+		private static bool IsGhostItem(JObject item)
+		{
+			var ghostToken = CheckJTokenInObject(item, "ghost");
+			return ghostToken != null && bool.TryParse(ghostToken.ToString(), out var ghost) && ghost;
+		}
+
 		private bool FirmwareCompare(Version ver)
 		{
 			if (CodecFirmware == null)
@@ -659,7 +669,49 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private StringBuilder _jsonMessage;
 
-		private bool _jsonFeedbackMessageIsIncoming;
+		private volatile bool _jsonFeedbackMessageIsIncoming;
+
+		// Time of the last line received for the JSON message currently being accumulated.
+		private DateTime _jsonMessageLastLineUtc = DateTime.MinValue;
+
+		// A JSON message that receives no new lines for this long is treated as abandoned.
+		private const int JsonMessageStallTimeoutMs = 5000;
+
+		/// <summary>
+		/// True while a JSON response from the codec is currently being accumulated. Used to hold
+		/// off sending queued commands, since sending a command while a response is mid-stream can
+		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
+		/// A message that stops arriving (connection dropped, codec restarted mid-response) would
+		/// otherwise hold the queue forever, so it is abandoned after JsonMessageStallTimeoutMs.
+		/// </summary>
+		internal bool IsReceivingJsonMessage
+		{
+			get
+			{
+				if (!_jsonFeedbackMessageIsIncoming)
+					return false;
+
+				if ((DateTime.UtcNow - _jsonMessageLastLineUtc).TotalMilliseconds < JsonMessageStallTimeoutMs)
+					return true;
+
+				ResetJsonReceiveState(
+					$"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received"
+				);
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Abandons a partially received JSON message so the command queue is no longer held.
+		/// </summary>
+		private void ResetJsonReceiveState(string reason)
+		{
+			if (!_jsonFeedbackMessageIsIncoming)
+				return;
+
+			_jsonFeedbackMessageIsIncoming = false;
+			this.LogWarning("Discarding incomplete JSON response from codec: {reason}", reason);
+		}
 
 		public bool CommDebuggingIsOn;
 
@@ -2061,6 +2113,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void Socket_ConnectionChange(object sender, GenericSocketStatusChageEventArgs e)
 		{
 			this.LogDebug("Socket status change {clientStatus}", e.Client.ClientStatus);
+
+			// Any response that was mid-stream is gone with the old connection; release the
+			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
+			ResetJsonReceiveState("connection to codec changed");
+
 			if (e.Client.IsConnected)
 			{
 				if (!SyncState.LoginMessageWasReceived)
@@ -2104,6 +2161,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 				}
 
+				// A login banner means the codec started a new session (e.g. it restarted, or the
+				// serial session was reset), so a response that was mid-stream will never finish.
+				if (response.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
+				{
+					ResetJsonReceiveState("codec started a new session");
+				}
+
 				if (
 					!response.StartsWith("/")
 					&& _feedbackListMessage != null
@@ -2140,7 +2204,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 						_loginMessageReceivedTimer?.Stop();
 
-						SendText("Echo off");
+						// Disable the SSH console's command echo so in-flight commands are no longer
+						// echoed back into the response stream, which was corrupting JSON messages
+						// that happened to be accumulating at the same time.
+						SendTextWithoutQueue("echo off");
 					}
 					else if (data.Contains("xpreferences outputmode json"))
 					{
@@ -2157,14 +2224,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							SendTextWithoutQueue("xStatus");
 						}
 					}
-					else if (data.Contains("xfeedback register /event/calldisconnect"))
-					{
-						SyncState.FeedbackRegistered();
-					}
 				}
 
 				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
 				{
+					_jsonMessageLastLineUtc = DateTime.UtcNow;
 					_jsonFeedbackMessageIsIncoming = true;
 					_jsonMessage = new StringBuilder();
 				}
@@ -2185,13 +2249,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
-				_jsonMessage.Append(response);
+
+				_jsonMessageLastLineUtc = DateTime.UtcNow;
+
+				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
+				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
+				// being accumulated. These echoes can appear anywhere within a received line - before,
+				// after, or straddling legitimate JSON content on the same line (e.g. the terminal can
+				// wrap a long JSON line so an echo ends up prepended or appended to real JSON text on
+				// what the transport treats as a single "line") - so rather than accepting or rejecting
+				// the whole line, strip out just the echoed command substring(s) and keep any
+				// legitimate JSON content that surrounds them.
+				var sanitizedResponse = EchoedCommandPattern.Replace(response, string.Empty);
+				if (sanitizedResponse != response)
+				{
+					this.LogDebug("Stripped echoed command text embedded in JSON stream: {line}", response);
+				}
+
+				_jsonMessage.Append(sanitizedResponse);
 			}
 			catch (Exception ex)
 			{
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
 			}
 		}
+
+		// Matches an echoed xAPI command keyword and any following text up to the next JSON
+		// structural character ({, }, [, ], "), so only the echoed command text is stripped and
+		// any legitimate JSON content before/after it on the same line is preserved.
+		private static readonly Regex EchoedCommandPattern = new Regex(
+			@"x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*",
+			RegexOptions.IgnoreCase
+		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
 
@@ -2302,9 +2391,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (!(layout is JArray layoutArray))
 				return;
+
+			// Cisco RoomOS marks an item in a list (calls, participants, layouts, etc.) with
+			// "ghost": "True" to indicate that item has been removed/is no longer available -
+			// these entries only carry an "id" (and the ghost flag), with none of the item's
+			// normal data, so they must be skipped rather than treated as incomplete data.
 			var layoutData = (
 				from o in layoutArray.Children<JObject>()
-				select o.SelectToken("LayoutName.Value").ToString() into name
+				where !IsGhostItem(o)
+				select o.SelectToken("LayoutName.Value")?.ToString() into name
 				where !string.IsNullOrEmpty(name)
 				select new CodecCommandWithLabel(name, name)
 			).ToList();
@@ -3000,8 +3095,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var callId = callIdToken.ToString();
 
-					var callGhostToken = CheckJTokenInObject(item, "ghost");
-					var callGhost = callGhostToken != null && bool.Parse(callGhostToken.ToString());
+					var callGhost = IsGhostItem(item);
 
 					if (!callGhost)
 					{
@@ -4261,6 +4355,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Main Source Value is not an integer: {value}", mainSourceValueToken.ToString());
 				return;
 			}
+
+			// Cameras null-checked above.
 
 			var camera = Cameras.OfType<CiscoCamera>().FirstOrDefault(c => c.SourceId == mainSourceValue);
 
