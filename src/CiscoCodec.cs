@@ -671,12 +671,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private volatile bool _jsonFeedbackMessageIsIncoming;
 
+		// Time of the last line received for the JSON message currently being accumulated.
+		private DateTime _jsonMessageLastLineUtc = DateTime.MinValue;
+
+		// A JSON message that receives no new lines for this long is treated as abandoned.
+		private const int JsonMessageStallTimeoutMs = 5000;
+
 		/// <summary>
 		/// True while a JSON response from the codec is currently being accumulated. Used to hold
 		/// off sending queued commands, since sending a command while a response is mid-stream can
 		/// cause the codec to echo it back into the response and corrupt the JSON buffer.
+		/// A message that stops arriving (connection dropped, codec restarted mid-response) would
+		/// otherwise hold the queue forever, so it is abandoned after JsonMessageStallTimeoutMs.
 		/// </summary>
-		internal bool IsReceivingJsonMessage => _jsonFeedbackMessageIsIncoming;
+		internal bool IsReceivingJsonMessage
+		{
+			get
+			{
+				if (!_jsonFeedbackMessageIsIncoming)
+					return false;
+
+				if ((DateTime.UtcNow - _jsonMessageLastLineUtc).TotalMilliseconds < JsonMessageStallTimeoutMs)
+					return true;
+
+				ResetJsonReceiveState(
+					$"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received"
+				);
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Abandons a partially received JSON message so the command queue is no longer held.
+		/// </summary>
+		private void ResetJsonReceiveState(string reason)
+		{
+			if (!_jsonFeedbackMessageIsIncoming)
+				return;
+
+			_jsonFeedbackMessageIsIncoming = false;
+			this.LogWarning("Discarding incomplete JSON response from codec: {reason}", reason);
+		}
 
 		public bool CommDebuggingIsOn;
 
@@ -2070,6 +2105,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void Socket_ConnectionChange(object sender, GenericSocketStatusChageEventArgs e)
 		{
 			this.LogDebug("Socket status change {clientStatus}", e.Client.ClientStatus);
+
+			// Any response that was mid-stream is gone with the old connection; release the
+			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
+			ResetJsonReceiveState("connection to codec changed");
+
 			if (e.Client.IsConnected)
 			{
 				if (!SyncState.LoginMessageWasReceived)
@@ -2111,6 +2151,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (response.ToLower().Contains("xcommand"))
 				{
 					return;
+				}
+
+				// A login banner means the codec started a new session (e.g. it restarted, or the
+				// serial session was reset), so a response that was mid-stream will never finish.
+				if (response.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
+				{
+					ResetJsonReceiveState("codec started a new session");
 				}
 
 				if (
@@ -2173,6 +2220,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
 				{
+					_jsonMessageLastLineUtc = DateTime.UtcNow;
 					_jsonFeedbackMessageIsIncoming = true;
 					_jsonMessage = new StringBuilder();
 				}
@@ -2193,6 +2241,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (!_jsonFeedbackMessageIsIncoming)
 					return;
+
+				_jsonMessageLastLineUtc = DateTime.UtcNow;
 
 				// The codec can echo other in-flight commands (xStatus, xConfiguration, xFeedback,
 				// xPreferences, xCommand, etc.) back on the same session while a JSON message is
