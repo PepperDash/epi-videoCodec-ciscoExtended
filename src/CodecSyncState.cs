@@ -233,6 +233,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 InitialStatusMessageWasReceived = false;
                 FeedbackWasRegistered = false;
                 InitialSyncComplete = false;
+
+                // A reset sync must not leave the previous sync's periodic timers running while it
+                // re-syncs (on RS-232 there is no socket disconnect to stop them).
+                _parent.StopRefreshTimers();
             });
 
             Schedule();
