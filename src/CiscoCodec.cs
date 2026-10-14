@@ -1167,16 +1167,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void EndGracefully()
 		{
-			if (BookingsRefreshTimer != null)
+			// Block any timer a concurrent sync or bookings response would create from here on,
+			// then stop the existing ones.
+			lock (_refreshTimerLock)
 			{
-				BookingsRefreshTimer.Stop();
-				BookingsRefreshTimer.Dispose();
+				_refreshTimersDisabled = true;
 			}
-			if (PhonebookRefreshTimer != null)
-			{
-				PhonebookRefreshTimer.Stop();
-				PhonebookRefreshTimer.Dispose();
-			}
+			StopRefreshTimers();
 			if (_loginMessageReceivedTimer != null)
 			{
 				_loginMessageReceivedTimer.Stop();
@@ -1192,6 +1189,54 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				_scheduleCheckTimer.Stop();
 				_scheduleCheckTimer.Dispose();
 			}
+		}
+
+		/// <summary>
+		/// Stops and disposes the timers created when initial sync completes (phonebook refresh,
+		/// bookings refresh and feedback registration check). Called when sync is reset, before the
+		/// timers are recreated on every sync, and on disconnect/shutdown, so a re-sync replaces them
+		/// instead of adding duplicates that keep running.
+		/// </summary>
+		internal void StopRefreshTimers()
+		{
+			ReplaceTimer(ref PhonebookRefreshTimer, null);
+			ReplaceTimer(ref BookingsRefreshTimer, null);
+			ReplaceTimer(ref _registrationCheckTimer, null);
+		}
+
+		// Guards every create/replace/stop/reset of the refresh timers, which happen on the socket
+		// callback, the sync worker, the receive thread (bookings responses) and shutdown.
+		private readonly object _refreshTimerLock = new object();
+
+		// Set on shutdown so no new refresh timer can be created after the final cleanup.
+		private bool _refreshTimersDisabled;
+
+		/// <summary>
+		/// Sets a timer field to <paramref name="replacement"/> and stops and disposes whatever timer
+		/// was there before, under the refresh-timer lock. After shutdown a replacement is discarded
+		/// instead of started.
+		/// </summary>
+		private void ReplaceTimer(ref CTimer field, CTimer replacement)
+		{
+			CTimer previous;
+			lock (_refreshTimerLock)
+			{
+				if (_refreshTimersDisabled && replacement != null)
+				{
+					replacement.Stop();
+					replacement.Dispose();
+					replacement = null;
+				}
+
+				previous = field;
+				field = replacement;
+			}
+
+			if (previous == null || ReferenceEquals(previous, replacement))
+				return;
+
+			previous.Stop();
+			previous.Dispose();
 		}
 
 		private void CiscoCodec_CodecInfoChanged(object sender, CodecInfoChangedEventArgs args)
@@ -1974,6 +2019,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ActiveCalls.Count
 			);
 
+			// A re-sync (e.g. after a serial session restart, where no socket disconnect fires)
+			// must not leave the previous sync's timers running alongside the new ones.
+			StopRefreshTimers();
+
 			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
@@ -2055,14 +2104,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (config.GetPhonebookOnStartup)
 			{
-				PhonebookRefreshTimer = new CTimer(CheckCurrentHour, 3600000, 3600000);
+				ReplaceTimer(ref PhonebookRefreshTimer, new CTimer(CheckCurrentHour, 3600000, 3600000));
 				// check each hour to see if the phonebook should be downloaded
 				GetPhonebook(null);
 			}
 
 			if (config.GetBookingsOnStartup)
 			{
-				BookingsRefreshTimer = new CTimer(GetBookings, 900000, 900000);
+				ReplaceTimer(ref BookingsRefreshTimer, new CTimer(GetBookings, 900000, 900000));
 				// 15 minute timer to check for new booking info
 				GetBookings(null);
 			}
@@ -2093,7 +2142,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Fire the ready event
 			SetIsReady();
 
-			_registrationCheckTimer = new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000);
+			ReplaceTimer(ref _registrationCheckTimer, new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000));
 		}
 
 		public void SetCommDebug(string s)
@@ -2130,10 +2179,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
-				PhonebookRefreshTimer?.Stop();
-				PhonebookRefreshTimer = null;
-				BookingsRefreshTimer?.Stop();
-				BookingsRefreshTimer = null;
+				StopRefreshTimers();
 			}
 		}
 
@@ -4906,12 +4952,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose("There are No Meetings");
 				CodecSchedule.Meetings = new List<Meeting>();
 			}
-			if (BookingsRefreshTimer == null)
+			// A bookings response can arrive while the timers are being stopped or recreated, so the
+			// check, create and reset happen under the refresh-timer lock (and never after shutdown).
+			lock (_refreshTimerLock)
 			{
-				BookingsRefreshTimer = new CTimer(GetBookings, 90000, 90000);
-				this.LogVerbose("BookingsRefresh Was null");
+				if (_refreshTimersDisabled)
+					return;
+
+				if (BookingsRefreshTimer == null)
+				{
+					BookingsRefreshTimer = new CTimer(GetBookings, 90000, 90000);
+					this.LogVerbose("BookingsRefresh Was null");
+				}
+				BookingsRefreshTimer.Reset(90000, 90000);
 			}
-			BookingsRefreshTimer.Reset(90000, 90000);
 		}
 
 		private static string ParseResultId(JObject obj)
@@ -5188,7 +5242,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (DateTime.Now.Hour == 2)
 			{
 				GetPhonebook(null);
-				PhonebookRefreshTimer.Reset(3600000, 3600000);
+				lock (_refreshTimerLock)
+				{
+					PhonebookRefreshTimer?.Reset(3600000, 3600000);
+				}
 			}
 		}
 
