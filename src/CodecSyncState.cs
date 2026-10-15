@@ -62,10 +62,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Key = key;
             _parent = parent;
 
+            _syncWatchdogTimer = new CTimer(o => CheckSyncProgress(), null, SyncWatchdogIntervalMs, SyncWatchdogIntervalMs);
+
             CrestronEnvironment.ProgramStatusEventHandler += type =>
                 {
                     if (type != eProgramStatusEventType.Stopping)
                         return;
+
+                    _syncWatchdogTimer.Stop();
+                    _syncWatchdogTimer.Dispose();
 
                     Interlocked.Exchange(ref _isProcessing, Idle);
                     _waitHandle.Set();
@@ -91,19 +96,87 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Schedule();
         }
 
+        // How a session is recognised (#113). Over RS-232 there are no socket events, and the codec's
+        // session can outlive a program restart (still logged in, in JSON mode, echo off) or restart on
+        // its own (back to text mode, echo on, no feedback registrations). So the sync is driven by what
+        // the codec actually sends, never only by echoes:
+        //  - a JSON message: the session is logged in and in JSON mode;
+        //  - text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner): a session
+        //    exists but is not in JSON mode - set it up, or re-sync if JSON mode had been confirmed;
+        //  - an echo of the plugin's own poll: a session exists (kept for sessions with echo on).
+
+        /// <summary>
+        /// The plugin's poll was echoed: a session exists.
+        /// </summary>
         public void LoginMessageReceived()
         {
             _systemActions.Enqueue(() =>
             {
+                StartSession("poll echoed");
+                CheckSyncStatus();
+            });
+
+            Schedule();
+        }
+
+        /// <summary>
+        /// A complete JSON message was parsed: the session is logged in and in JSON mode. This also
+        /// covers a session that was already set up before a program restart, where no login banner
+        /// or echo will ever arrive.
+        /// </summary>
+        public void JsonMessageReceived()
+        {
+            if (LoginMessageWasReceived && JsonResponseModeSet)
+                return; // the usual case: nothing to do, and no action queued per message
+
+            _systemActions.Enqueue(() =>
+            {
+                if (LoginMessageWasReceived && JsonResponseModeSet)
+                    return;
+
+                this.LogDebug("JSON received from the codec: the session is logged in and in JSON mode.");
+
                 if (!LoginMessageWasReceived)
                 {
-                    this.LogDebug("Login Message Received.");
                     LoginMessageWasReceived = true;
+                    // A session this program did not set up may still have echo on.
+                    _parent.SendTextWithoutQueue("echo off");
                 }
 
-                if (!JsonResponseModeSet)
+                JsonResponseModeSet = true;
+
+                if (!InitialStatusMessageWasReceived)
+                    _parent.SendTextWithoutQueue("xStatus");
+
+                CheckSyncStatus();
+            });
+
+            Schedule();
+        }
+
+        /// <summary>
+        /// The codec sent text-mode output (a line starting *s, *r, *e or *c, which includes the
+        /// "*r Login successful" banner of a new session).
+        /// </summary>
+        public void TextOutputReceived()
+        {
+            if (LoginMessageWasReceived && !JsonResponseModeSet)
+                return; // the session is already being set up; the watchdog retries if that stalls
+
+            _systemActions.Enqueue(() =>
+            {
+                if (JsonResponseModeSet)
                 {
-                    _parent.SendTextWithoutQueue("xPreferences outputmode json");
+                    // In JSON mode the codec never sends text output, so the session restarted (or
+                    // lost JSON mode) and has lost its echo setting and feedback registrations too.
+                    this.LogWarning(
+                        "Codec sent text-mode output after JSON mode was confirmed: its session restarted or left JSON mode. Re-syncing.");
+                    ResetSync();
+                    StartSession("session restarted");
+                }
+                else if (!LoginMessageWasReceived)
+                {
+                    StartSession("text output received");
                 }
 
                 CheckSyncStatus();
@@ -112,18 +185,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Schedule();
         }
 
-        public void JsonResponseModeMessageReceived()
+        /// <summary>
+        /// Marks the session as logged in and, unless JSON mode is already confirmed, turns echo off and
+        /// requests JSON mode. JSON mode is only marked as set once JSON actually arrives.
+        /// Runs on the worker thread.
+        /// </summary>
+        private void StartSession(string reason)
         {
-            _systemActions.Enqueue(() =>
-            {
-                if (!JsonResponseModeSet)
-                    this.LogDebug("Json Response Mode Message Received.");
+            var isNewSession = !LoginMessageWasReceived;
+            LoginMessageWasReceived = true;
 
-                JsonResponseModeSet = true;
-                CheckSyncStatus();
-            });
+            if (JsonResponseModeSet)
+                return;
 
-            Schedule();
+            if (isNewSession)
+                this.LogDebug("Codec session detected ({reason}): turning echo off and requesting JSON mode.", reason);
+
+            _parent.SendTextWithoutQueue("echo off");
+            _parent.SendTextWithoutQueue("xPreferences outputmode json");
+
+            if (isNewSession && !InitialStatusMessageWasReceived)
+                _parent.SendTextWithoutQueue("xStatus");
         }
 
         public void InitialStatusMessageReceived()
@@ -188,19 +270,96 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
-                LoginMessageWasReceived = false;
-                JsonResponseModeSet = false;
-                InitialConfigurationMessageWasReceived = false;
-                InitialStatusMessageWasReceived = false;
-                FeedbackWasRegistered = false;
-                InitialSyncComplete = false;
-
-                // A reset sync must not leave the previous sync's periodic timers running while it
-                // re-syncs (on RS-232 there is no socket disconnect to stop them).
-                _parent.StopRefreshTimers();
+                ResetSync();
             });
 
             Schedule();
+        }
+
+        /// <summary>
+        /// Clears the sync flags so the next session is synced from the start. Runs on the worker thread.
+        /// </summary>
+        private void ResetSync()
+        {
+            LoginMessageWasReceived = false;
+            JsonResponseModeSet = false;
+            InitialConfigurationMessageWasReceived = false;
+            InitialStatusMessageWasReceived = false;
+            FeedbackWasRegistered = false;
+            InitialSyncComplete = false;
+            _syncIncompleteSinceUtc = null;
+
+            // A reset sync must not leave the previous sync's periodic timers running while it
+            // re-syncs (on RS-232 there is no socket disconnect to stop them).
+            _parent.StopRefreshTimers();
+        }
+
+        // Sync watchdog (#113): each initial request (JSON mode, xStatus, xConfiguration, xFeedback List)
+        // is otherwise sent once, so a lost or unparseable reply left the sync incomplete for good, with
+        // nothing logged. While a session is logged in but not synced, re-request what is missing once
+        // the sync has made no progress for SyncRetryAfter. Long enough for a full xConfiguration reply
+        // (about 96 KB, roughly 9 s at 115200 baud) to arrive and be parsed before anything is resent.
+        private const long SyncWatchdogIntervalMs = 15000;
+        private static readonly TimeSpan SyncRetryAfter = TimeSpan.FromSeconds(60);
+        private CTimer _syncWatchdogTimer;
+        private DateTime? _syncIncompleteSinceUtc;
+
+        private void CheckSyncProgress()
+        {
+            if (InitialSyncComplete)
+                return;
+
+            _systemActions.Enqueue(RetryMissingSyncSteps);
+            Schedule();
+        }
+
+        /// <summary>
+        /// Runs on the worker thread.
+        /// </summary>
+        private void RetryMissingSyncSteps()
+        {
+            if (InitialSyncComplete || !LoginMessageWasReceived)
+            {
+                _syncIncompleteSinceUtc = null;
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            if (_syncIncompleteSinceUtc == null)
+            {
+                _syncIncompleteSinceUtc = now;
+                return;
+            }
+
+            if (now - _syncIncompleteSinceUtc.Value < SyncRetryAfter)
+                return;
+
+            _syncIncompleteSinceUtc = now; // next retry no sooner than another SyncRetryAfter
+
+            this.LogWarning(
+                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, Configuration={Config}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
+                SyncRetryAfter.TotalSeconds, JsonResponseModeSet, InitialStatusMessageWasReceived,
+                InitialConfigurationMessageWasReceived, FeedbackWasRegistered);
+
+            if (!JsonResponseModeSet)
+            {
+                _parent.SendTextWithoutQueue("echo off");
+                _parent.SendTextWithoutQueue("xPreferences outputmode json");
+                _parent.SendTextWithoutQueue("xStatus");
+                return;
+            }
+
+            if (!InitialStatusMessageWasReceived)
+            {
+                _parent.SendTextWithoutQueue("xStatus");
+                return;
+            }
+
+            if (!InitialConfigurationMessageWasReceived)
+                _parent.SendTextWithoutQueue("xConfiguration");
+
+            if (!FeedbackWasRegistered)
+                _parent.SendTextWithoutQueue("xFeedback List");
         }
 
         void CheckSyncStatus()

@@ -2241,35 +2241,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 				}
 
-				if (!SyncState.InitialSyncComplete)
+				// Text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner) means a
+				// session exists that is not in JSON mode: a new one to set up, or - once JSON mode was
+				// confirmed - one the codec restarted, which needs a full re-sync (#113). SyncState
+				// turns echo off and requests JSON mode.
+				if (TextModeOutputPattern.IsMatch(response))
 				{
-					var data = response.Trim().ToLower();
-					if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
-					{
-						SyncState.LoginMessageReceived();
-
-						_loginMessageReceivedTimer?.Stop();
-
-						// Disable the SSH console's command echo so in-flight commands are no longer
-						// echoed back into the response stream, which was corrupting JSON messages
-						// that happened to be accumulating at the same time.
-						SendTextWithoutQueue("echo off");
-					}
-					else if (data.Contains("xpreferences outputmode json"))
-					{
-						if (SyncState.JsonResponseModeSet)
-							return;
-
-						SyncState.JsonResponseModeMessageReceived();
-
-						if (!SyncState.InitialStatusMessageWasReceived)
-						{
-							// SendText("xStatus Cameras");
-							// SendText("xStatus SIP");
-							// SendText("xStatus Call");
-							SendTextWithoutQueue("xStatus");
-						}
-					}
+					_loginMessageReceivedTimer?.Stop();
+					SyncState.TextOutputReceived();
+				}
+				else if (!SyncState.InitialSyncComplete
+					&& response.IndexOf("xstatus systemunit", StringComparison.OrdinalIgnoreCase) >= 0)
+				{
+					// The plugin's poll echoed back: a session with echo on exists.
+					_loginMessageReceivedTimer?.Stop();
+					SyncState.LoginMessageReceived();
 				}
 
 				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
@@ -2288,7 +2274,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					var success = DeserializeResponse(_jsonMessage.ToString());
 
-					if (success) _jsonMessage = null;
+					if (success)
+					{
+						_jsonMessage = null;
+
+						// JSON can only arrive from a logged-in session in JSON mode. This is what
+						// confirms JSON mode, and it also covers a session that was already set up
+						// before a program restart, which sends no banner and no echo (#113).
+						_loginMessageReceivedTimer?.Stop();
+						SyncState.JsonMessageReceived();
+					}
 
 					return;
 				}
@@ -2319,6 +2314,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
 			}
 		}
+
+		// RoomOS text-mode output: status (*s), command results (*r, including the login banner),
+		// events (*e) and configuration (*c). In JSON mode the codec sends none of these.
+		private static readonly Regex TextModeOutputPattern = new Regex(@"^\*[srec] ");
 
 		// Matches an echoed xAPI command keyword and any following text up to the next JSON
 		// structural character ({, }, [, ], "), so only the echoed command text is stripped and
