@@ -281,6 +281,8 @@ This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
 which contains the Base64-encoded "customIconContent" for each icon.
 
+The plugin sends `customIconContent` to the codec split into 76-character lines. Over RS-232, RoomOS restarts the serial session when it receives a single line longer than 2,048 bytes (including CR LF), and an icon sent as one line is usually longer than that. When the codec is controlled over RS-232, the plugin logs an error and does not send any command that still has a line over 2,048 bytes.
+
 ### Navigator Lockout Functionality **NEW**
 
 There are two different methods supported to show a lockout screen on a Navigator panel for use in combined room systems where there is a desire to lockout navigator panels that are attached to a codec not being used as the primary codec in a room combination scenario.
