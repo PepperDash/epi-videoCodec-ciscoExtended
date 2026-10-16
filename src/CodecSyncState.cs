@@ -136,17 +136,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 this.LogDebug("JSON received from the codec: the session is logged in and in JSON mode.");
 
-                if (!LoginMessageWasReceived)
-                {
-                    LoginMessageWasReceived = true;
-                    // A session this program did not set up may still have echo on.
-                    _parent.SendTextWithoutQueue("echo off");
-                }
-
                 JsonResponseModeSet = true;
 
-                if (!InitialStatusMessageWasReceived)
+                if (!LoginMessageWasReceived)
+                {
+                    // Adopting a session this program did not set up (e.g. after a program restart).
+                    LoginMessageWasReceived = true;
+
+                    // It may still have echo on.
+                    _parent.SendTextWithoutQueue("echo off");
+
+                    // Always request the full status here: the JSON that got us here may be a poll
+                    // reply (SystemUnit, cameras, SIP, volume), which already counts as the initial
+                    // status but leaves call, standby and presentation state unloaded. A session
+                    // this program set up already requested it in StartSession.
                     _parent.SendTextWithoutQueue("xStatus");
+                }
 
                 CheckSyncStatus();
             });
@@ -324,10 +329,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return;
             }
 
+            // Time from the last progress, not from when the watchdog started: a step that completes
+            // restarts the wait, so a slow but progressing sync is never retried early.
             var now = DateTime.UtcNow;
-            if (_syncIncompleteSinceUtc == null)
+            var progress = SyncStepsCompleted();
+            if (_syncIncompleteSinceUtc == null || progress != _syncProgressAtLastCheck)
             {
                 _syncIncompleteSinceUtc = now;
+                _syncProgressAtLastCheck = progress;
                 return;
             }
 
@@ -337,9 +346,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _syncIncompleteSinceUtc = now; // next retry no sooner than another SyncRetryAfter
 
             this.LogWarning(
-                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, Configuration={Config}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
+                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, Configuration={Config}, SoftwareVersion={Software}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
                 SyncRetryAfter.TotalSeconds, JsonResponseModeSet, InitialStatusMessageWasReceived,
-                InitialConfigurationMessageWasReceived, FeedbackWasRegistered);
+                InitialConfigurationMessageWasReceived, InitialSoftwareVersionMessageWasReceived, FeedbackWasRegistered);
 
             if (!JsonResponseModeSet)
             {
@@ -358,8 +367,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (!InitialConfigurationMessageWasReceived)
                 _parent.SendTextWithoutQueue("xConfiguration");
 
+            // The software version comes from SystemUnit status, which a custom monitor poll may not include.
+            if (!InitialSoftwareVersionMessageWasReceived)
+                _parent.SendTextWithoutQueue("xStatus SystemUnit");
+
             if (!FeedbackWasRegistered)
                 _parent.SendTextWithoutQueue("xFeedback List");
+        }
+
+        private int _syncProgressAtLastCheck;
+
+        private int SyncStepsCompleted()
+        {
+            var steps = 0;
+            if (JsonResponseModeSet) steps++;
+            if (InitialStatusMessageWasReceived) steps++;
+            if (InitialConfigurationMessageWasReceived) steps++;
+            if (InitialSoftwareVersionMessageWasReceived) steps++;
+            if (FeedbackWasRegistered) steps++;
+            return steps;
         }
 
         void CheckSyncStatus()
