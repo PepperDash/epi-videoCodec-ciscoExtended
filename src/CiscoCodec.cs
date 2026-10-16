@@ -2247,6 +2247,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				// turns echo off and requests JSON mode.
 				if (TextModeOutputPattern.IsMatch(response))
 				{
+					// A JSON response that was mid-stream will never finish now. Release the hold on the
+					// sync queue, or the recovery below waits behind it: each text line would otherwise
+					// keep refreshing the stall timer.
+					ResetJsonReceiveState("codec sent text-mode output");
+
 					_loginMessageReceivedTimer?.Stop();
 					SyncState.TextOutputReceived();
 				}
