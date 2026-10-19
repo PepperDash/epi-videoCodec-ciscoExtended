@@ -4062,21 +4062,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
 		{
-			var tokenString = string.Empty;
+			JToken token = null;
 			try
 			{
-				// this.LogDebug("PopulateObjectWithToken: {0}", tokenSelector);
-				var token = JTokenValidInToken(jToken, tokenSelector); // JObject
+				token = JTokenValidInToken(jToken, tokenSelector); // JObject
 				if (token == null)
 					return;
-				tokenString = token.ToString();
-				JsonConvert.PopulateObject(tokenString, target);
-				//Debug.Console(2, this, "PopulateObject complete");
+
+				// Straight from the parsed token: no ToString() and second parse (#129).
+				CodecJson.PopulateFromToken(token, target);
 			}
 			catch (Exception e)
 			{
-				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
-				this.LogError("Token String: {tokenString}", tokenString);
+				this.LogError("Exception: PopulateObjectWithToken {selector} - {message}", tokenSelector, e.Message);
+				// The token can be large; keep it out of the error log (#95).
+				this.LogDebug("Token String: {tokenString}", token?.ToString());
 				this.LogVerbose(e, "Exception");
 			}
 		}
@@ -4167,8 +4167,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var provisioningToken = statusToken.SelectToken("Provisioning");
 			var diagnosticsToken = statusToken.SelectToken("Diagnostics");
 
-			var serializedToken = statusToken.ToString();
-
 			if (errorToken != null)
 			{
 				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
@@ -4184,7 +4182,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			JsonConvert.PopulateObject(serializedToken, status);
+			CodecJson.PopulateFromToken(statusToken, status);
 
 			if (status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
 			{
@@ -4352,8 +4350,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						}
 						else
 						{
-							JsonConvert.PopulateObject(
-								cam.ToString(),
+							CodecJson.PopulateFromToken(
+								cam,
 								currentCamStatus,
 								new JsonSerializerSettings
 								{
@@ -4364,8 +4362,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					}
 					else
 					{
-						JsonConvert.PopulateObject(
-							cam.ToString(),
+						CodecJson.PopulateFromToken(
+							cam,
 							existingCamStatus,
 							new JsonSerializerSettings
 							{
@@ -5248,24 +5246,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private static string ParseResultId(JObject obj)
-		{
-			try
-			{
-				return obj["ResultId"].ToString();
-			}
-			catch
-			{
-				return Guid.Empty.ToString();
-			}
-		}
+		private static string ParseResultId(JObject obj) => CodecJson.ResultIdOrEmpty(obj);
 
 		private bool DeserializeResponse(string response)
 		{
 			try
 			{
 				using (var sReader = new System.IO.StringReader(response))
-				using (var jReader = new JsonTextReader(sReader))
+				using (var jReader = CodecJson.CreateMessageReader(sReader))
 				{
 					while (jReader.Read())
 					{
@@ -5289,8 +5277,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (JsonReaderException ex)
 			{
-				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition} ({length} characters; payload logged at Debug)", ex.Message, ex.LineNumber, ex.LinePosition, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
 				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
@@ -5305,8 +5293,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Error deserializing feedback from codec: {error} ({length} characters; payload logged at Debug)", ex.Message, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
 
