@@ -190,7 +190,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     folder.FolderId = f.FolderId.Value;
 
                     if (f.ParentFolderId == null)
+                    {
+                        // Essentials Core filters root items on ParentFolderId == "root"
+                        folder.ParentFolderId = "root";
                         rootFolders.Add(folder);
+                    }
 
                     if (Debug.Level > 0)
                         Debug.LogDebug("+ {value}", folder.Name);
@@ -231,6 +235,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         {
                             contact.Name = c.Name.Value;
                             contact.ContactId = c.ContactId.Value;
+                            // Essentials Core filters root items on ParentFolderId == "root"
+                            contact.ParentFolderId = "root";
 
                             if (!string.IsNullOrEmpty(c.Title.Value))
                                 contact.Title = c.Title.Value;
@@ -322,10 +328,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         folder.Name = f.Name.Value;
                         folder.FolderId = f.FolderId.Value;
 
-                        if (f.ParentFolderId != null)
-                        {
-                            folder.ParentFolderId = f.ParentFolderId.Value;
-                        }
+                        // Keep the codec's own value, empty when it supplies none. Do not
+                        // substitute "root" here: Core's non-root view filters on
+                        // ParentFolderId != "root", so a folder returned by a search would
+                        // be excluded from its own results. "root" belongs only to the
+                        // root-specific helpers above.
+                        folder.ParentFolderId =
+                            f.ParentFolderId != null ? f.ParentFolderId.Value : string.Empty;
 
                         folders.Add(folder);
                     }
@@ -350,6 +359,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         {
                             contact.FolderId = c.FolderId.Value;
                         }
+
+                        // A contact's parent is its folder. Search results carry no folder;
+                        // leave those empty rather than "root", because Core's non-root view
+                        // filters on ParentFolderId != "root" and would drop every search
+                        // result. Empty is still non-null, so the root predicate is safe.
+                        contact.ParentFolderId = contact.FolderId ?? string.Empty;
 
                         foreach (ContactMethod m in c.ContactMethod)
                         {
