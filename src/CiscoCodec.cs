@@ -2407,7 +2407,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.Replace("\n", Delimiter)
 				.TrimEnd('\r', '\n');
 
+			if (Communication is ComPortController && !FitsSerialLineLimit(normalized))
+				return;
+
 			Communication.SendText(normalized + Delimiter);
+		}
+
+		// Over RS-232, RoomOS restarts the serial session when it receives a line longer than
+		// 2,048 bytes including the CR LF (#114). SSH accepts longer lines.
+		internal const int MaxSerialLineBytes = 2048;
+
+		private bool FitsSerialLineLimit(string command)
+		{
+			var lines = command.Split(new[] { Delimiter }, StringSplitOptions.None);
+			var longest = lines.Max(line => Encoding.UTF8.GetByteCount(line)) + Delimiter.Length;
+
+			if (longest <= MaxSerialLineBytes)
+				return true;
+
+			var firstLine = lines[0];
+			this.LogError(
+				"Command not sent: a line is {length} bytes, over the codec's RS-232 limit of {limit} bytes, which would reset the serial session. Command: {command}",
+				longest,
+				MaxSerialLineBytes,
+				firstLine.Length > 80 ? firstLine.Substring(0, 80) + "..." : firstLine);
+			return false;
 		}
 
 		public void SendText(string command)
