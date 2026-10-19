@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
@@ -142,6 +143,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // Adopting a session this program did not set up (e.g. after a program restart).
                     LoginMessageWasReceived = true;
+                    MarkSessionDetected();
 
                     // It may still have echo on.
                     _parent.SendTextWithoutQueue("echo off");
@@ -153,6 +155,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _parent.SendTextWithoutQueue("xStatus");
                 }
 
+                MarkSyncPhase("jsonMode");
                 CheckSyncStatus();
             });
 
@@ -199,6 +202,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             var isNewSession = !LoginMessageWasReceived;
             LoginMessageWasReceived = true;
+            MarkSessionDetected();
 
             if (JsonResponseModeSet)
                 return;
@@ -221,6 +225,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Status Message Received.");
 
                 InitialStatusMessageWasReceived = true;
+                MarkSyncPhase("status");
                 CheckSyncStatus();
             });
 
@@ -235,6 +240,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
 
                 InitialConfigurationMessageWasReceived = true;
+                MarkSyncPhase("configuration");
                 CheckSyncStatus();
             });
 
@@ -249,6 +255,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Software Information received");
 
                 InitialSoftwareVersionMessageWasReceived = true;
+                MarkSyncPhase("softwareVersion");
 
                 CheckSyncStatus();
             });
@@ -264,6 +271,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Feedback Registration Successful.");
 
                 FeedbackWasRegistered = true;
+                MarkSyncPhase("feedback");
                 CheckSyncStatus();
             });
 
@@ -293,6 +301,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             FeedbackWasRegistered = false;
             InitialSyncComplete = false;
             _syncIncompleteSinceUtc = null;
+            _sessionDetectedAt = 0;
 
             // A reset sync must not leave the previous sync's periodic timers running while it
             // re-syncs (on RS-232 there is no socket disconnect to stop them).
@@ -404,12 +413,55 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return;
                 }
 
+                RecordSyncComplete();
                 InitialSyncComplete = true;
                 _parent.PollSpeakerTrack();
                 _parent.PollPresenterTrack();
             }
             else
                 InitialSyncComplete = false;
+        }
+
+        // Sync timing (#129): from the moment a session is detected to Initial Sync Complete, plus when
+        // each step completed. Measuring only. All of this runs on the worker thread.
+        private long _sessionDetectedAt;
+        private readonly Dictionary<string, double> _syncPhaseMs = new Dictionary<string, double>();
+
+        private void MarkSessionDetected()
+        {
+            if (_sessionDetectedAt != 0)
+                return;
+
+            _sessionDetectedAt = CodecTimings.Now;
+            _syncPhaseMs.Clear();
+        }
+
+        private void MarkSyncPhase(string phase)
+        {
+            if (_sessionDetectedAt == 0 || _syncPhaseMs.ContainsKey(phase))
+                return;
+
+            var ms = CodecTimings.ElapsedMs(_sessionDetectedAt, CodecTimings.Now);
+            _syncPhaseMs[phase] = ms;
+            _parent.Timings.Record("sync." + phase, ms);
+        }
+
+        private double SyncPhaseMs(string phase) =>
+            _syncPhaseMs.TryGetValue(phase, out var ms) ? Math.Round(ms) : -1;
+
+        private void RecordSyncComplete()
+        {
+            if (_sessionDetectedAt == 0)
+                return;
+
+            var total = CodecTimings.ElapsedMs(_sessionDetectedAt, CodecTimings.Now);
+            _parent.Timings.Record("sync.total", total);
+            _sessionDetectedAt = 0;
+
+            this.LogInformation(
+                "[perf] Initial sync took {total} ms after the session was detected (JSON mode {json} ms, status {status} ms, configuration {config} ms, software version {software} ms, feedback {feedback} ms; -1 = not measured)",
+                Math.Round(total), SyncPhaseMs("jsonMode"), SyncPhaseMs("status"), SyncPhaseMs("configuration"),
+                SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"));
         }
 
         private void Schedule()

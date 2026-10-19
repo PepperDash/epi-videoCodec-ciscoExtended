@@ -21,6 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Plugin classes with no Crestron dependencies, compiled in and tested directly. -->
+    <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
     <ProjectReference Include="..\src\epi-videoCodec-ciscoExtended.4Series.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

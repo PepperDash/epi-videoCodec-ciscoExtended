@@ -675,6 +675,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public CodecSyncState SyncState { get; }
 
+		/// <summary>
+		/// Timings of sync, phonebook, bookings, calls and JSON parsing (#129). See the codecperf console command.
+		/// </summary>
+		internal CodecTimings Timings { get; } = new CodecTimings();
+
+		// When the line being processed arrived from the transport, when the JSON message being
+		// accumulated started, and (while one is being parsed) when that message started (#129).
+		private long _lineReceivedAt;
+		private long _jsonMessageStartedAt;
+		private long _parsingMessageStartedAt;
+
 		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
 
 		private StringBuilder _jsonMessage;
@@ -1769,6 +1780,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		protected override bool CustomActivate()
 		{
+			AddPerfConsoleCommand();
+
 			CrestronConsole.AddNewConsoleCommand(
 				SetCommDebug,
 				"SetCodecCommDebug",
@@ -2200,9 +2213,76 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_retryConnectionTimer = new CTimer(o => Communication.Connect(), 2000);
 		}
 
+		private static readonly object PerfConsoleCommandLock = new object();
+		private static bool _perfConsoleCommandAdded;
+
+		// One console command for every codec instance: codecperf <codecKey> [reset].
+		private static void AddPerfConsoleCommand()
+		{
+			lock (PerfConsoleCommandLock)
+			{
+				if (_perfConsoleCommandAdded)
+					return;
+
+				CrestronConsole.AddNewConsoleCommand(
+					PerfConsoleCommand,
+					"codecperf",
+					"Cisco codec timings (ms): codecperf <codecKey> [reset]",
+					ConsoleAccessLevelEnum.AccessOperator
+				);
+				_perfConsoleCommandAdded = true;
+			}
+		}
+
+		private static void PerfConsoleCommand(string args)
+		{
+			var parts = (args ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length == 0)
+			{
+				CrestronConsole.ConsoleCommandResponse("Usage: codecperf <codecKey> [reset]\r\n");
+				return;
+			}
+
+			if (!(DeviceManager.GetDeviceForKey(parts[0]) is CiscoCodec codec))
+			{
+				CrestronConsole.ConsoleCommandResponse("No Cisco codec with key '{0}'\r\n", parts[0]);
+				return;
+			}
+
+			if (parts.Length > 1 && parts[1].Equals("reset", StringComparison.OrdinalIgnoreCase))
+			{
+				codec.Timings.Reset();
+				CrestronConsole.ConsoleCommandResponse("{0}: timings reset\r\n", codec.Key);
+				return;
+			}
+
+			CrestronConsole.ConsoleCommandResponse("{0}", codec.FormatPerfReport());
+		}
+
+		internal string FormatPerfReport()
+		{
+			var sync = SyncState;
+			return string.Format(
+				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
+					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8}\r\n"
+					+ "{9}",
+				Key, Timings.SinceUtc,
+				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
+				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
+				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
+				Timings.FormatTable()
+			);
+		}
+
 		private void Port_LineReceived(object dev, GenericCommMethodReceiveTextArgs args)
 		{
-			var message = new ProcessStringMessage(args.Text, ProcessResponse);
+			var receivedAt = CodecTimings.Now;
+			var message = new ProcessStringMessage(args.Text, text =>
+			{
+				_lineReceivedAt = receivedAt;
+				Timings.RecordSince("rx.queueDelay", receivedAt);
+				ProcessResponse(text);
+			});
 			_receiveQueue.Enqueue(message);
 		}
 
@@ -2280,6 +2360,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					_jsonMessageLastLineUtc = DateTime.UtcNow;
 					_jsonFeedbackMessageIsIncoming = true;
 					_jsonMessage = new StringBuilder();
+					_jsonMessageStartedAt = _lineReceivedAt;
 				}
 				else if (response == "}" + Delimiter) // Check for the end of a JSON message
 				{
@@ -2289,7 +2370,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					// Enqueue the complete message to be deserialized
 
+					var parseStartedAt = CodecTimings.Now;
+					if (_jsonMessageStartedAt != 0)
+						Timings.Record("json.receive", CodecTimings.ElapsedMs(_jsonMessageStartedAt, parseStartedAt));
+
+					_parsingMessageStartedAt = _jsonMessageStartedAt;
 					var success = DeserializeResponse(_jsonMessage.ToString());
+					_parsingMessageStartedAt = 0;
+					Timings.RecordSince(success ? "parse.document" : "parse.documentFailed", parseStartedAt);
 
 					if (success)
 					{
@@ -3174,6 +3262,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			UpdateLayoutList(layoutToken.SelectToken("AvailableLayouts"));
 		}
 
+		/// <summary>
+		/// Call timings (#129): how long after its JSON message started arriving a call status change
+		/// was raised, and dial to connected.
+		/// </summary>
+		private void RecordCallTimings(CodecActiveCallItem call, eCodecCallStatus previousStatus)
+		{
+			if (_parsingMessageStartedAt != 0)
+				Timings.RecordSince("call.feedbackLatency", _parsingMessageStartedAt);
+
+			if (call != null && call.Status == eCodecCallStatus.Connected && previousStatus != eCodecCallStatus.Connected)
+				Timings.Stop("call.dialToConnected");
+		}
+
 		private void ParseCallArrayToken(JToken callToken)
 		{
 			try
@@ -3217,6 +3318,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							ActiveCalls.Remove(activeCall);
 						}
 
+						var previousStatus = activeCall.Status;
+
 						if (callObject != null)
 							if (!MergeCallData(activeCall, callObject))
 								continue;
@@ -3232,6 +3335,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						);
 
 						OnCallStatusChange(activeCall);
+						RecordCallTimings(activeCall, previousStatus);
 
 						ListCalls();
 
@@ -3256,6 +3360,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						);
 
 					OnCallStatusChange(callObject);
+					RecordCallTimings(callObject, eCodecCallStatus.Unknown);
 
 					CodecPollLayouts();
 				}
@@ -4801,6 +4906,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					OnDirectoryResultReturned(directoryResults);
 					_searchInProgress = false;
 					DirectorySearchInProgress.FireUpdate();
+					Timings.Stop("phonebook.search", resultId);
 				}
 			}
 			catch (Exception ex)
@@ -4979,6 +5085,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var reason = resultToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
 					this.LogError("Phonebook query failed. Reason: {reason}", reason);
 
+					if (!string.IsNullOrEmpty(resultId))
+						Timings.Stop("phonebook.search", resultId, "phonebook.searchFailed");
+
 					// SearchDirectory raised the busy flag and queued this resultId, and only
 					// the normal completion path clears them - a failed query has to do it here
 					// or DirectorySearchInProgress latches on. Startup queries carry no
@@ -5120,6 +5229,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose("There are No Meetings");
 				CodecSchedule.Meetings = new List<Meeting>();
 			}
+
+			Timings.Stop("bookings.list");
+
 			// A bookings response can arrive while the timers are being stopped or recreated, so the
 			// check, create and reset happen under the refresh-timer lock (and never after shutdown).
 			lock (_refreshTimerLock)
@@ -5435,6 +5547,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void GetBookings(object command)
 		{
+			Timings.Start("bookings.list");
 			EnqueueCommand("xCommand Bookings List Days: 1 DayOffset: 0");
 		}
 
@@ -5505,6 +5618,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_searchInProgress = !string.IsNullOrEmpty(searchString);
 			var tag = Guid.NewGuid();
 			_searches.Enqueue(tag.ToString());
+			Timings.Start("phonebook.search", tag.ToString());
 			EnqueueCommand(
 				string.Format(
 					"xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
@@ -5579,6 +5693,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void Dial(string number)
 		{
+			Timings.Start("call.dialToConnected");
 			EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\"", number));
 		}
 
@@ -5606,6 +5721,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			string meetingId
 		)
 		{
+			Timings.Start("call.dialToConnected");
 			EnqueueCommand(
 				string.Format(
 					"xCommand Dial Number: \"{0}\" Protocol: {1} CallRate: {2} CallType: {3} BookingId: {4}",
