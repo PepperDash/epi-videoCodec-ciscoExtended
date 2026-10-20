@@ -77,6 +77,22 @@ public class XapiRequestTrackerTests
     }
 
     [Fact]
+    public void A_Request_Can_Have_Its_Own_Timeout()
+    {
+        var now = new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc);
+        var t = New(() => now);                       // default 20 s
+        var search = t.Begin("phonebook.search");
+        var status = t.Begin("sync.xstatus", TimeSpan.FromSeconds(120));
+
+        now = now.AddSeconds(30);
+
+        t.Expire().Select(e => e.Key).Should().Equal(search);
+        t.TryComplete(status, out var kind).Should().BeTrue("its own timeout is longer");
+        kind.Should().Be("sync.xstatus");
+        ((Action)(() => t.Begin("k", TimeSpan.Zero))).Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void Clear_Drops_Everything()
     {
         var t = New();

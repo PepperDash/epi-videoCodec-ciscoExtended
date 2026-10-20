@@ -52,6 +52,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public bool InitialStatusMessageWasReceived { get; private set; }
 
+        /// <summary>
+        /// The reply to this sync's own full <c>xStatus</c> request (tagged with a resultId) has been
+        /// parsed. <see cref="InitialStatusMessageWasReceived"/> is set by any status message, including
+        /// the communication monitor's poll reply, which carries no call data; sync completion waits for
+        /// this one, so ActiveCalls and cameras are loaded when Initial Sync Complete is raised (#142).
+        /// </summary>
+        public bool FullStatusWasReceived { get; private set; }
+
         public bool InitialConfigurationMessageWasReceived { get; private set; }
 
         public bool InitialSoftwareVersionMessageWasReceived { get; private set; }
@@ -152,7 +160,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     // reply (SystemUnit, cameras, SIP, volume), which already counts as the initial
                     // status but leaves call, standby and presentation state unloaded. A session
                     // this program set up already requested it in StartSession.
-                    _parent.SendTextWithoutQueue("xStatus");
+                    _parent.RequestFullStatus();
                 }
 
                 MarkSyncPhase("jsonMode");
@@ -213,8 +221,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _parent.SendTextWithoutQueue("echo off");
             _parent.SendTextWithoutQueue("xPreferences outputmode json");
 
-            if (isNewSession && !InitialStatusMessageWasReceived)
-                _parent.SendTextWithoutQueue("xStatus");
+            if (isNewSession && !FullStatusWasReceived)
+                _parent.RequestFullStatus();
+        }
+
+        /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
+        public void FullStatusReceived()
+        {
+            _systemActions.Enqueue(() =>
+            {
+                if (!FullStatusWasReceived)
+                    this.LogDebug("Full Codec Status received.");
+
+                FullStatusWasReceived = true;
+                MarkSyncPhase("fullStatus");
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialStatusMessageReceived()
@@ -298,6 +322,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             JsonResponseModeSet = false;
             InitialConfigurationMessageWasReceived = false;
             InitialStatusMessageWasReceived = false;
+            FullStatusWasReceived = false;
             FeedbackWasRegistered = false;
             InitialSyncComplete = false;
             _syncIncompleteSinceUtc = null;
@@ -355,22 +380,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _syncIncompleteSinceUtc = now; // next retry no sooner than another SyncRetryAfter
 
             this.LogWarning(
-                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, Configuration={Config}, SoftwareVersion={Software}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
-                SyncRetryAfter.TotalSeconds, JsonResponseModeSet, InitialStatusMessageWasReceived,
+                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, FullStatus={FullStatus}, Configuration={Config}, SoftwareVersion={Software}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
+                SyncRetryAfter.TotalSeconds, JsonResponseModeSet, InitialStatusMessageWasReceived, FullStatusWasReceived,
                 InitialConfigurationMessageWasReceived, InitialSoftwareVersionMessageWasReceived, FeedbackWasRegistered);
 
             if (!JsonResponseModeSet)
             {
                 _parent.SendTextWithoutQueue("echo off");
                 _parent.SendTextWithoutQueue("xPreferences outputmode json");
-                _parent.SendTextWithoutQueue("xStatus");
+                _parent.RequestFullStatus();
                 return;
             }
 
-            if (!InitialStatusMessageWasReceived)
+            if (!InitialStatusMessageWasReceived || !FullStatusWasReceived)
             {
-                _parent.SendTextWithoutQueue("xStatus");
-                return;
+                _parent.RequestFullStatus();
+                if (!InitialStatusMessageWasReceived)
+                    return;
             }
 
             if (!InitialConfigurationMessageWasReceived)
@@ -391,6 +417,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             var steps = 0;
             if (JsonResponseModeSet) steps++;
             if (InitialStatusMessageWasReceived) steps++;
+            if (FullStatusWasReceived) steps++;
             if (InitialConfigurationMessageWasReceived) steps++;
             if (InitialSoftwareVersionMessageWasReceived) steps++;
             if (FeedbackWasRegistered) steps++;
@@ -400,13 +427,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         void CheckSyncStatus()
         {
             this.LogDebug(
-                "CheckSyncStatus: LoginMessageWasReceived={Login}, JsonResponseModeSet={Json}, InitialConfigurationMessageWasReceived={Config}, InitialStatusMessageWasReceived={Status}, FeedbackWasRegistered={Feedback}, InitialSoftwareVersionMessageWasReceived={Software}, InitialSyncComplete={Sync}",
+                "CheckSyncStatus: LoginMessageWasReceived={Login}, JsonResponseModeSet={Json}, InitialConfigurationMessageWasReceived={Config}, InitialStatusMessageWasReceived={Status}, FullStatusWasReceived={FullStatus}, FeedbackWasRegistered={Feedback}, InitialSoftwareVersionMessageWasReceived={Software}, InitialSyncComplete={Sync}",
                 LoginMessageWasReceived, JsonResponseModeSet, InitialConfigurationMessageWasReceived,
-                InitialStatusMessageWasReceived, FeedbackWasRegistered, InitialSoftwareVersionMessageWasReceived,
-                InitialSyncComplete);
+                InitialStatusMessageWasReceived, FullStatusWasReceived, FeedbackWasRegistered,
+                InitialSoftwareVersionMessageWasReceived, InitialSyncComplete);
 
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
-                InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
+                InitialStatusMessageWasReceived && FullStatusWasReceived && FeedbackWasRegistered &&
+                InitialSoftwareVersionMessageWasReceived)
             {
                 if (InitialSyncComplete)
                 {
@@ -459,9 +487,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _sessionDetectedAt = 0;
 
             this.LogInformation(
-                "[perf] Initial sync took {total} ms after the session was detected (JSON mode {json} ms, status {status} ms, configuration {config} ms, software version {software} ms, feedback {feedback} ms; -1 = not measured)",
+                "[perf] Initial sync took {total} ms after the session was detected (JSON mode {json} ms, status {status} ms, configuration {config} ms, software version {software} ms, feedback {feedback} ms, full status {fullStatus} ms; -1 = not measured)",
                 Math.Round(total), SyncPhaseMs("jsonMode"), SyncPhaseMs("status"), SyncPhaseMs("configuration"),
-                SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"));
+                SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"), SyncPhaseMs("fullStatus"));
         }
 
         private void Schedule()
