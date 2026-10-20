@@ -4936,21 +4936,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParsePhonebookDirectoryResponseTypical(
+		// Shows the result of a search the caller has already matched to its pending request.
+		private void ShowSearchResult(
 			CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject,
 			string resultId
 		)
 		{
 			try
 			{
-				// Only a reply to a pending search is shown. A reply without that id (the start-up
-				// queries, folder contents) used to dequeue and drop pending searches (#109).
-				if (!_requests.TryComplete(resultId, out _))
-				{
-					this.LogDebug("Phonebook result {resultId} answers no pending search; not shown", resultId ?? "(none)");
-					return;
-				}
-
 				var directoryResults = new CodecDirectory();
 
 				var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
@@ -4971,7 +4964,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookDirectoryResponseTypical : {message}\n{stack}", ex.Message, ex.StackTrace);
+				this.LogError("Exception in ShowSearchResult : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -5136,6 +5129,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					phonebookSearchResultResponseToken.SelectToken("PhonebookSearchResult")
 					?? phonebookSearchResultResponseToken;
 
+				// A reply to a pending search (matched by resultId) is a search result, whatever start-up
+				// step the phonebook is on. Only replies without one drive the start-up folder and contact
+				// steps below. Before, those steps took replies in arrival order, so the tagged start-up
+				// search (sent before the untagged folder query) was taken as the folder list and never
+				// completed (#109).
+				var isSearchReply = _requests.TryComplete(resultId, out _);
+
 				var status = resultToken.SelectToken("status")?.ToString();
 				if (
 					!string.IsNullOrEmpty(status)
@@ -5148,11 +5148,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					if (!string.IsNullOrEmpty(resultId))
 						Timings.Stop("phonebook.search", resultId, "phonebook.searchFailed");
 
-					// SearchDirectory raised the busy flag and queued this resultId, and only
-					// the normal completion path clears them - a failed query has to do it here
-					// or DirectorySearchInProgress latches on. Startup queries carry no
-					// resultId; don't drain the queue for those, a user search may be pending.
-					if (_requests.TryComplete(resultId, out _))
+					// SearchDirectory raised the busy flag, and only a completion clears it; a failed
+					// search has to clear it here or DirectorySearchInProgress latches on.
+					if (isSearchReply)
 					{
 						_searchInProgress = false;
 						DirectorySearchInProgress.FireUpdate();
@@ -5169,6 +5167,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					phonebookSearchResultResponseObject
 				);
 
+				if (isSearchReply)
+				{
+					ShowSearchResult(phonebookSearchResultResponseObject, resultId);
+					return;
+				}
+
 				if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
 				{
 					ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
@@ -5179,11 +5183,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
 					PhonebookSyncState.PhonebookRootEntriesReceived();
+					return;
 				}
-				ParsePhonebookDirectoryResponseTypical(
-					phonebookSearchResultResponseObject,
-					resultId
-				);
+
+				// Replies without a pending search id (e.g. folder contents, which are requested without
+				// a resultId) are not shown as search results, as before.
+				this.LogDebug("Phonebook result {resultId} answers no pending search; not shown", resultId ?? "(none)");
 			}
 			catch (Exception ex)
 			{
