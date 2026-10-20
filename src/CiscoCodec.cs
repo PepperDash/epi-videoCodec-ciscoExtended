@@ -684,6 +684,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// touched from the receive queue; its events are handled in the On*Framer* methods.
 		private readonly XapiStreamFramer _framer = new XapiStreamFramer();
 
+		// Routes each framed document to the parsers for the paths it contains (#129, stage 4).
+		private readonly XapiDispatcher _dispatcher = new XapiDispatcher();
+
+		// Matches replies to requests by resultId (#129, stage 4; #109). Phonebook searches use it.
+		private const string PhonebookSearchRequest = "phonebook.search";
+		private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
+		private readonly XapiRequestTracker _requests = new XapiRequestTracker(RequestTimeout);
+		private CTimer _requestExpiryTimer;
+
 		// When the line being processed arrived from the transport, when the JSON message being
 		// accumulated started, and (while one is being parsed) when that message started (#129).
 		private long _lineReceivedAt;
@@ -1047,6 +1056,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 			WireFramer();
+			WireDispatcher();
 
 			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
 
@@ -2306,6 +2316,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogWarning(
 					"A JSON line from the codec ended inside a string (damaged text); closed it to keep framing: {line}",
 					line.Length > 120 ? line.Substring(0, 120) + "..." : line);
+		}
+
+		// The same four parsers, in the same order, as before; each is now only called when its
+		// top-level key is present (they all returned straight away on null before). A parser that
+		// throws no longer stops the others for that message.
+		private void WireDispatcher()
+		{
+			_dispatcher.On("Status", (token, _) => ParseStatusObject(token));
+			_dispatcher.On("Configuration", (token, _) => ParseConfigurationObject(token));
+			_dispatcher.On("Event", (token, _) => ParseEventObject(token));
+			_dispatcher.On("CommandResponse", (token, message) => ParseCommandResponseObject(token, message.ResultId));
+			_dispatcher.HandlerFailed += (path, ex) =>
+			{
+				this.LogError("Error handling {path} from codec: {error}", path, ex.Message);
+				this.LogVerbose(ex, "Stack Trace: ");
+			};
+		}
+
+		private void StartRequestExpiryTimer()
+		{
+			if (_requestExpiryTimer == null)
+				_requestExpiryTimer = new CTimer(
+					_ => _receiveQueue.Enqueue(new ProcessStringMessage("request-expiry", __ => ExpireRequests())),
+					null, 5000, 5000);
+		}
+
+		// Runs on the receive queue, like the replies that complete requests.
+		private void ExpireRequests()
+		{
+			foreach (var expired in _requests.Expire())
+			{
+				this.LogWarning("No reply from the codec to {kind} request {id} within {seconds} s",
+					expired.Value, expired.Key, RequestTimeout.TotalSeconds);
+				Timings.Stop(expired.Value, expired.Key, expired.Value + "Timeout");
+
+				if (expired.Value == PhonebookSearchRequest && _requests.PendingCount(PhonebookSearchRequest) == 0)
+				{
+					_searchInProgress = false;
+					DirectorySearchInProgress.FireUpdate();
+				}
+			}
 		}
 
 		private void FeedFramer(string text)
@@ -4885,44 +4936,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParsePhonebookDirectoryResponseTypical(
+		// Shows the result of a search the caller has already matched to its pending request.
+		private void ShowSearchResult(
 			CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject,
 			string resultId
 		)
 		{
 			try
 			{
-				while (_searches.Count > 0)
-				{
-					var expectedResultId = _searches.Dequeue();
-					this.LogDebug("Expected = {0} ; Parsed = {1}", expectedResultId,
-						resultId
-					);
-					if (resultId != expectedResultId)
-						continue;
+				var directoryResults = new CodecDirectory();
 
-					var directoryResults = new CodecDirectory();
+				var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
+				if (int.TryParse(totalRowsValue, out var totalRows) && totalRows > 0)
+					directoryResults =
+						CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+							phonebookSearchResultResponseObject
+						);
 
-					var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
-					if (int.TryParse(totalRowsValue, out var totalRows) && totalRows > 0)
-						directoryResults =
-							CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-								phonebookSearchResultResponseObject
-							);
+				PrintDirectory(directoryResults);
 
-					PrintDirectory(directoryResults);
+				DirectoryBrowseHistory.Add(directoryResults);
 
-					DirectoryBrowseHistory.Add(directoryResults);
-
-					OnDirectoryResultReturned(directoryResults);
-					_searchInProgress = false;
-					DirectorySearchInProgress.FireUpdate();
-					Timings.Stop("phonebook.search", resultId);
-				}
+				OnDirectoryResultReturned(directoryResults);
+				_searchInProgress = false;
+				DirectorySearchInProgress.FireUpdate();
+				Timings.Stop("phonebook.search", resultId);
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookDirectoryResponseTypical : {message}\n{stack}", ex.Message, ex.StackTrace);
+				this.LogError("Exception in ShowSearchResult : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -5087,6 +5129,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					phonebookSearchResultResponseToken.SelectToken("PhonebookSearchResult")
 					?? phonebookSearchResultResponseToken;
 
+				// A reply to a pending search (matched by resultId) is a search result, whatever start-up
+				// step the phonebook is on. Only replies without one drive the start-up folder and contact
+				// steps below. Before, those steps took replies in arrival order, so the tagged start-up
+				// search (sent before the untagged folder query) was taken as the folder list and never
+				// completed (#109).
+				var isSearchReply = _requests.TryComplete(resultId, out _);
+
 				var status = resultToken.SelectToken("status")?.ToString();
 				if (
 					!string.IsNullOrEmpty(status)
@@ -5099,21 +5148,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					if (!string.IsNullOrEmpty(resultId))
 						Timings.Stop("phonebook.search", resultId, "phonebook.searchFailed");
 
-					// SearchDirectory raised the busy flag and queued this resultId, and only
-					// the normal completion path clears them - a failed query has to do it here
-					// or DirectorySearchInProgress latches on. Startup queries carry no
-					// resultId; don't drain the queue for those, a user search may be pending.
-					if (!string.IsNullOrEmpty(resultId))
+					// SearchDirectory raised the busy flag, and only a completion clears it; a failed
+					// search has to clear it here or DirectorySearchInProgress latches on.
+					if (isSearchReply)
 					{
-						while (_searches.Count > 0)
-						{
-							if (_searches.Dequeue() != resultId)
-								continue;
-
-							_searchInProgress = false;
-							DirectorySearchInProgress.FireUpdate();
-							break;
-						}
+						_searchInProgress = false;
+						DirectorySearchInProgress.FireUpdate();
 					}
 
 					return;
@@ -5127,6 +5167,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					phonebookSearchResultResponseObject
 				);
 
+				if (isSearchReply)
+				{
+					ShowSearchResult(phonebookSearchResultResponseObject, resultId);
+					return;
+				}
+
 				if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
 				{
 					ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
@@ -5137,11 +5183,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
 					PhonebookSyncState.PhonebookRootEntriesReceived();
+					return;
 				}
-				ParsePhonebookDirectoryResponseTypical(
-					phonebookSearchResultResponseObject,
-					resultId
-				);
+
+				// Replies without a pending search id (e.g. folder contents, which are requested without
+				// a resultId) are not shown as search results, as before.
+				this.LogDebug("Phonebook result {resultId} answers no pending search; not shown", resultId ?? "(none)");
 			}
 			catch (Exception ex)
 			{
@@ -5259,33 +5306,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private static string ParseResultId(JObject obj) => CodecJson.ResultIdOrEmpty(obj);
 
 		private bool DeserializeResponse(string response)
 		{
 			try
 			{
-				using (var sReader = new System.IO.StringReader(response))
-				using (var jReader = CodecJson.CreateMessageReader(sReader))
-				{
-					while (jReader.Read())
-					{
-						if (jReader.TokenType != JsonToken.StartObject)
-							continue;
-						var obj = JObject.Load(jReader);
-
-						var resultId = ParseResultId(obj);
-
-						ParseStatusObject(JTokenValidInObject(obj, "Status"));
-						ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
-						ParseEventObject(JTokenValidInObject(obj, "Event"));
-						ParseCommandResponseObject(
-							JTokenValidInObject(obj, "CommandResponse"),
-							resultId
-						);
-					}
-				}
-
+				_dispatcher.Dispatch(response);
 				return true;
 			}
 			catch (JsonReaderException ex)
@@ -5587,7 +5613,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
 		private bool _searchInProgress;
 
 		public void SearchDirectory(string searchString)
@@ -5608,9 +5633,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 
 			_searchInProgress = !string.IsNullOrEmpty(searchString);
-			var tag = Guid.NewGuid();
-			_searches.Enqueue(tag.ToString());
-			Timings.Start("phonebook.search", tag.ToString());
+			var tag = _requests.Begin(PhonebookSearchRequest);
+			Timings.Start("phonebook.search", tag);
+			StartRequestExpiryTimer();
 			EnqueueCommand(
 				string.Format(
 					"xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
