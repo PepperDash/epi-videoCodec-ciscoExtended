@@ -2306,19 +2306,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					ResetJsonReceiveState("codec started a new session");
 				}
 
-				if (
-					!response.StartsWith("/")
-					&& _feedbackListMessage != null
-					&& _feedbackListMessageIncoming
-				)
-				{
-					_feedbackListMessageIncoming = false;
-
-					var feedbackListString = _feedbackListMessage.ToString();
-					_feedbackListMessage = null;
-
-					ProcessFeedbackList(feedbackListString);
-				}
+				if (!response.StartsWith("/"))
+					FinishFeedbackList();
 
 				if (response.StartsWith("/"))
 				{
@@ -2330,6 +2319,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (_feedbackListMessageIncoming && _feedbackListMessage != null)
 				{
 					_feedbackListMessage.Append(response);
+					RestartFeedbackListQuietTimer();
 					return;
 				}
 
@@ -2430,6 +2420,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
+
+		// In JSON mode the xFeedback List reply is a run of "/..." lines with no end marker, so the list
+		// was only finished by the next unrelated line, which on a quiet codec can be many seconds later
+		// and held up the initial sync (#138). Also finish it once no "/" line has arrived for this long.
+		private const long FeedbackListQuietMs = 500;
+		private CTimer _feedbackListQuietTimer;
+
+		private void RestartFeedbackListQuietTimer()
+		{
+			if (_feedbackListQuietTimer == null)
+				_feedbackListQuietTimer = new CTimer(OnFeedbackListQuiet, FeedbackListQuietMs);
+			else
+				_feedbackListQuietTimer.Reset(FeedbackListQuietMs);
+		}
+
+		// Finish on the receive queue, so lines already received are processed first and the list
+		// state is only ever touched by the receive thread. The message text must not be empty:
+		// ProcessStringMessage.Dispatch() silently skips an empty message.
+		private const string FeedbackListQuietMessage = "feedback-list-quiet";
+
+		private void OnFeedbackListQuiet(object _) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage(FeedbackListQuietMessage, __ => FinishFeedbackList()));
+
+		private void FinishFeedbackList()
+		{
+			if (!_feedbackListMessageIncoming || _feedbackListMessage == null)
+				return;
+
+			_feedbackListMessageIncoming = false;
+
+			var feedbackListString = _feedbackListMessage.ToString();
+			_feedbackListMessage = null;
+
+			ProcessFeedbackList(feedbackListString);
+		}
 
 		private void ProcessFeedbackList(string data)
 		{
@@ -4062,21 +4087,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
 		{
-			var tokenString = string.Empty;
+			JToken token = null;
 			try
 			{
-				// this.LogDebug("PopulateObjectWithToken: {0}", tokenSelector);
-				var token = JTokenValidInToken(jToken, tokenSelector); // JObject
+				token = JTokenValidInToken(jToken, tokenSelector); // JObject
 				if (token == null)
 					return;
-				tokenString = token.ToString();
-				JsonConvert.PopulateObject(tokenString, target);
-				//Debug.Console(2, this, "PopulateObject complete");
+
+				// Straight from the parsed token: no ToString() and second parse (#129).
+				CodecJson.PopulateFromToken(token, target);
 			}
 			catch (Exception e)
 			{
-				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
-				this.LogError("Token String: {tokenString}", tokenString);
+				this.LogError("Exception: PopulateObjectWithToken {selector} - {message}", tokenSelector, e.Message);
+				// The token can be large; keep it out of the error log (#95).
+				this.LogDebug("Token String: {tokenString}", token?.ToString());
 				this.LogVerbose(e, "Exception");
 			}
 		}
@@ -4167,8 +4192,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var provisioningToken = statusToken.SelectToken("Provisioning");
 			var diagnosticsToken = statusToken.SelectToken("Diagnostics");
 
-			var serializedToken = statusToken.ToString();
-
 			if (errorToken != null)
 			{
 				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
@@ -4184,7 +4207,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			JsonConvert.PopulateObject(serializedToken, status);
+			CodecJson.PopulateFromToken(statusToken, status);
 
 			if (status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
 			{
@@ -4352,8 +4375,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						}
 						else
 						{
-							JsonConvert.PopulateObject(
-								cam.ToString(),
+							CodecJson.PopulateFromToken(
+								cam,
 								currentCamStatus,
 								new JsonSerializerSettings
 								{
@@ -4364,8 +4387,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					}
 					else
 					{
-						JsonConvert.PopulateObject(
-							cam.ToString(),
+						CodecJson.PopulateFromToken(
+							cam,
 							existingCamStatus,
 							new JsonSerializerSettings
 							{
@@ -5248,24 +5271,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private static string ParseResultId(JObject obj)
-		{
-			try
-			{
-				return obj["ResultId"].ToString();
-			}
-			catch
-			{
-				return Guid.Empty.ToString();
-			}
-		}
+		private static string ParseResultId(JObject obj) => CodecJson.ResultIdOrEmpty(obj);
 
 		private bool DeserializeResponse(string response)
 		{
 			try
 			{
 				using (var sReader = new System.IO.StringReader(response))
-				using (var jReader = new JsonTextReader(sReader))
+				using (var jReader = CodecJson.CreateMessageReader(sReader))
 				{
 					while (jReader.Read())
 					{
@@ -5289,8 +5302,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (JsonReaderException ex)
 			{
-				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition} ({length} characters; payload logged at Debug)", ex.Message, ex.LineNumber, ex.LinePosition, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
 				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
@@ -5305,8 +5318,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Error deserializing feedback from codec: {error} ({length} characters; payload logged at Debug)", ex.Message, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
 

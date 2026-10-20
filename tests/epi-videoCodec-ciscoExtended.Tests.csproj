@@ -23,6 +23,7 @@
   <ItemGroup>
     <!-- Plugin classes with no Crestron dependencies, compiled in and tested directly. -->
     <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
+    <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
   </ItemGroup>
 
   <ItemGroup>
