@@ -2436,9 +2436,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		}
 
 		// Finish on the receive queue, so lines already received are processed first and the list
-		// state is only ever touched by the receive thread.
+		// state is only ever touched by the receive thread. The message text must not be empty:
+		// ProcessStringMessage.Dispatch() silently skips an empty message.
+		private const string FeedbackListQuietMessage = "feedback-list-quiet";
+
 		private void OnFeedbackListQuiet(object _) =>
-			_receiveQueue.Enqueue(new ProcessStringMessage(string.Empty, __ => FinishFeedbackList()));
+			_receiveQueue.Enqueue(new ProcessStringMessage(FeedbackListQuietMessage, __ => FinishFeedbackList()));
 
 		private void FinishFeedbackList()
 		{
