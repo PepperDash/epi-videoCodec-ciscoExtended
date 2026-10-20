@@ -167,6 +167,29 @@ public class XapiStreamFramerTests
     }
 
     [Fact]
+    public void DocumentStarted_Fires_Once_Per_Document_Before_It_Is_Received()
+    {
+        var f = new XapiStreamFramer();
+        var order = new List<string>();
+        f.DocumentStarted += () => order.Add("started");
+        f.DocumentReceived += _ => order.Add("received");
+
+        f.Feed(Volume + Lines("{}"));
+
+        order.Should().Equal("started", "received", "started", "received");
+    }
+
+    [Fact]
+    public void A_Login_Banner_Inside_A_Document_Abandons_It()
+    {
+        var c = Run(Lines("{", "  \"Status\": {", "Login successful") + Volume);
+
+        c.Abandoned.Should().ContainSingle();
+        c.Lines.Should().ContainSingle().Which.Text.Should().Be("Login successful");
+        c.Documents.Should().ContainSingle();
+    }
+
+    [Fact]
     public void Text_After_A_Document_On_The_Same_Line_Is_Its_Own_Line()
     {
         var c = Run(Lines("{ \"A\": 1 }xStatus Audio"));
