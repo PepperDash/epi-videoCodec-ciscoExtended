@@ -680,10 +680,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		/// </summary>
 		internal CodecTimings Timings { get; } = new CodecTimings();
 
-		// The stream framer (#129, stage 2), run alongside the current line-based framing and compared
-		// with it. Only touched from the receive queue. See codecperf for the counts.
-		private readonly FramingShadow _framingShadow = new FramingShadow();
-		private long _framingMismatchesLogged;
+		// Frames the codec's output into JSON documents and the lines between them (#129). Only
+		// touched from the receive queue; its events are handled in the On*Framer* methods.
+		private readonly XapiStreamFramer _framer = new XapiStreamFramer();
 
 		// When the line being processed arrived from the transport, when the JSON message being
 		// accumulated started, and (while one is being parsed) when that message started (#129).
@@ -692,8 +691,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private long _parsingMessageStartedAt;
 
 		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
-
-		private StringBuilder _jsonMessage;
 
 		private volatile bool _jsonFeedbackMessageIsIncoming;
 
@@ -720,9 +717,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if ((DateTime.UtcNow - _jsonMessageLastLineUtc).TotalMilliseconds < JsonMessageStallTimeoutMs)
 					return true;
 
-				ResetJsonReceiveState(
-					$"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received"
-				);
+				var reason = $"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received";
+				ResetJsonReceiveState(reason);
+				ResetFramerFromAnotherThread(reason);
 				return false;
 			}
 		}
@@ -1049,6 +1046,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
+			WireFramer();
 
 			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
 
@@ -2191,8 +2189,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Any response that was mid-stream is gone with the old connection; release the
 			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
 			ResetJsonReceiveState("connection to codec changed");
-			_receiveQueue.Enqueue(new ProcessStringMessage("framing-shadow-reset",
-				_ => _framingShadow.Reset("connection to codec changed")));
+			ResetFramerFromAnotherThread("connection to codec changed");
 
 			if (e.Client.IsConnected)
 			{
@@ -2272,61 +2269,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8}\r\n"
-					+ "Framer shadow: {10}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
 				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
-				Timings.FormatTable(),
-				_framingShadow.Summary()
+				Timings.FormatTable()
 			);
-		}
-
-		private void FeedFramingShadow(string line)
-		{
-			try
-			{
-				_framingShadow.Feed(line);
-			}
-			catch (Exception ex)
-			{
-				// Measuring only: never let the shadow framer affect the codec connection.
-				this.LogDebug("Framing shadow failed on a line: {message}", ex.Message);
-				_framingShadow.Reset("exception");
-			}
-		}
-
-		private void CompareFramingShadow(string document)
-		{
-			try
-			{
-				string difference = null;
-				Action<string, string> onMismatch = (current, framer) => difference = FramingShadow.Difference(current, framer);
-				_framingShadow.Mismatch += onMismatch;
-				bool same;
-				try
-				{
-					same = _framingShadow.Compare(document);
-				}
-				finally
-				{
-					_framingShadow.Mismatch -= onMismatch;
-				}
-
-				if (same)
-					return;
-
-				// The first few differences, then every 100th, so a systematic one can't flood the log.
-				var n = ++_framingMismatchesLogged;
-				if (n <= 5 || n % 100 == 0)
-					this.LogWarning("Stream framer differs from the current framing ({summary}); document of {length} characters; {difference}",
-						_framingShadow.Summary(), document.Length, difference);
-			}
-			catch (Exception ex)
-			{
-				this.LogDebug("Framing shadow compare failed: {message}", ex.Message);
-			}
 		}
 
 		private void Port_LineReceived(object dev, GenericCommMethodReceiveTextArgs args)
@@ -2336,146 +2285,127 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				_lineReceivedAt = receivedAt;
 				Timings.RecordSince("rx.queueDelay", receivedAt);
-				FeedFramingShadow(text);
-				ProcessResponse(text);
+				FeedFramer(text);
 			});
 			_receiveQueue.Enqueue(message);
 		}
 
-		private void ProcessResponse(string response)
+		// ---- Receive path (#129, stage 3) --------------------------------------------------------
+		// CommunicationGather delivers lines; XapiStreamFramer turns them into complete JSON documents
+		// and classified lines between them, independent of how the codec split its output.
+
+		private void WireFramer()
+		{
+			_framer.DocumentStarted += OnFramerDocumentStarted;
+			_framer.DocumentReceived += OnFramerDocument;
+			_framer.LineReceived += OnFramerLine;
+			_framer.DocumentAbandoned += reason => ResetJsonReceiveState(reason);
+			_framer.EchoDropped += line =>
+				this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", line);
+			_framer.UnterminatedString += line =>
+				this.LogWarning(
+					"A JSON line from the codec ended inside a string (damaged text); closed it to keep framing: {line}",
+					line.Length > 120 ? line.Substring(0, 120) + "..." : line);
+		}
+
+		private void FeedFramer(string text)
 		{
 			try
 			{
-				// Discard a bare echoed 'xCommand ...' line (SSH command echo) only when we're not
-				// accumulating a JSON message and the line actually begins with the token, so we don't
-				// throw away legitimate JSON/feedback content that merely contains the substring.
-				if (!_jsonFeedbackMessageIsIncoming
-					&& response.TrimStart().StartsWith("xcommand", StringComparison.OrdinalIgnoreCase))
-				{
-					return;
-				}
-
-				// A login banner means the codec started a new session (e.g. it restarted, or the
-				// serial session was reset), so a response that was mid-stream will never finish.
-				if (response.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
-				{
-					ResetJsonReceiveState("codec started a new session");
-				}
-
-				if (!response.StartsWith("/"))
-					FinishFeedbackList();
-
-				if (response.StartsWith("/"))
-				{
-					_feedbackListMessageIncoming = true;
-					if (_feedbackListMessage == null)
-						_feedbackListMessage = new StringBuilder();
-				}
-
-				if (_feedbackListMessageIncoming && _feedbackListMessage != null)
-				{
-					_feedbackListMessage.Append(response);
-					RestartFeedbackListQuietTimer();
-					return;
-				}
-
-				// Text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner) means a
-				// session exists that is not in JSON mode: a new one to set up, or - once JSON mode was
-				// confirmed - one the codec restarted, which needs a full re-sync (#113). SyncState
-				// turns echo off and requests JSON mode.
-				if (TextModeOutputPattern.IsMatch(response))
-				{
-					// A JSON response that was mid-stream will never finish now. Release the hold on the
-					// sync queue, or the recovery below waits behind it: each text line would otherwise
-					// keep refreshing the stall timer.
-					ResetJsonReceiveState("codec sent text-mode output");
-
-					_loginMessageReceivedTimer?.Stop();
-					SyncState.TextOutputReceived();
-				}
-				else if (!SyncState.InitialSyncComplete
-					&& response.IndexOf("xstatus systemunit", StringComparison.OrdinalIgnoreCase) >= 0)
-				{
-					// The plugin's poll echoed back: a session with echo on exists.
-					_loginMessageReceivedTimer?.Stop();
-					SyncState.LoginMessageReceived();
-				}
-
-				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
-				{
+				_framer.Feed(text);
+				if (_framer.InDocument)
 					_jsonMessageLastLineUtc = DateTime.UtcNow;
-					_jsonFeedbackMessageIsIncoming = true;
-					_jsonMessage = new StringBuilder();
-					_jsonMessageStartedAt = _lineReceivedAt;
-				}
-				else if (response == "}" + Delimiter) // Check for the end of a JSON message
-				{
-					_jsonFeedbackMessageIsIncoming = false;
-
-					_jsonMessage.Append(response);
-
-					// Enqueue the complete message to be deserialized
-
-					var parseStartedAt = CodecTimings.Now;
-					if (_jsonMessageStartedAt != 0)
-						Timings.Record("json.receive", CodecTimings.ElapsedMs(_jsonMessageStartedAt, parseStartedAt));
-
-					_parsingMessageStartedAt = _jsonMessageStartedAt;
-					var document = _jsonMessage.ToString();
-					CompareFramingShadow(document);
-					var success = DeserializeResponse(document);
-					_parsingMessageStartedAt = 0;
-					Timings.RecordSince(success ? "parse.document" : "parse.documentFailed", parseStartedAt);
-
-					if (success)
-					{
-						_jsonMessage = null;
-
-						// JSON can only arrive from a logged-in session in JSON mode. This is what
-						// confirms JSON mode, and it also covers a session that was already set up
-						// before a program restart, which sends no banner and no echo (#113).
-						_loginMessageReceivedTimer?.Stop();
-						SyncState.JsonMessageReceived();
-					}
-
-					return;
-				}
-
-				if (!_jsonFeedbackMessageIsIncoming)
-					return;
-
-				_jsonMessageLastLineUtc = DateTime.UtcNow;
-
-				// The codec can echo an in-flight command (xStatus, xConfiguration, xFeedback,
-				// xPreferences, xCommand) back on the same session while a JSON message is being
-				// accumulated. Drop a line that is wholly such an echo (no JSON structural characters),
-				// but never strip substrings out of a line that carries real JSON - a legitimate JSON
-				// string value can contain tokens like "xStatus", and stripping would corrupt it.
-				if (EchoedCommandLinePattern.IsMatch(response))
-				{
-					this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", response);
-					return;
-				}
-
-				_jsonMessage.Append(response);
 			}
 			catch (Exception ex)
 			{
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
+				_framer.Reset("exception while framing");
+				ResetJsonReceiveState("exception while framing");
 			}
 		}
 
-		// RoomOS text-mode output: status (*s), command results (*r, including the login banner),
-		// events (*e) and configuration (*c). In JSON mode the codec sends none of these.
-		private static readonly Regex TextModeOutputPattern = new Regex(@"^\*[srec] ");
+		// The framer is only touched from the receive queue, so other threads queue the reset.
+		private void ResetFramerFromAnotherThread(string reason) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage("framer-reset", _ => _framer.Reset(reason)));
 
-		// Matches a line that is wholly an echoed xAPI command (leading command keyword, then text
-		// containing no JSON structural characters {, }, [, ], "), so only standalone echo lines are
-		// dropped and any line carrying real JSON is left untouched.
-		private static readonly Regex EchoedCommandLinePattern = new Regex(
-			@"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*$",
-			RegexOptions.IgnoreCase
-		);
+		private void OnFramerDocumentStarted()
+		{
+			// A JSON line ends a feedback list, as any other non-path line does.
+			FinishFeedbackList();
+
+			_jsonMessageLastLineUtc = DateTime.UtcNow;
+			_jsonFeedbackMessageIsIncoming = true;
+			_jsonMessageStartedAt = _lineReceivedAt;
+		}
+
+		private void OnFramerDocument(string document)
+		{
+			_jsonFeedbackMessageIsIncoming = false;
+
+			// "{}" is the codec's reply to each xFeedback register; there is nothing in it.
+			if (document.Trim() == "{}")
+				return;
+
+			var parseStartedAt = CodecTimings.Now;
+			if (_jsonMessageStartedAt != 0)
+				Timings.Record("json.receive", CodecTimings.ElapsedMs(_jsonMessageStartedAt, parseStartedAt));
+
+			_parsingMessageStartedAt = _jsonMessageStartedAt;
+			var success = DeserializeResponse(document);
+			_parsingMessageStartedAt = 0;
+			Timings.RecordSince(success ? "parse.document" : "parse.documentFailed", parseStartedAt);
+
+			if (!success)
+				return;
+
+			// JSON can only arrive from a logged-in session in JSON mode. This is what confirms JSON
+			// mode, and it also covers a session that was already set up before a program restart,
+			// which sends no banner and no echo (#113).
+			_loginMessageReceivedTimer?.Stop();
+			SyncState.JsonMessageReceived();
+		}
+
+		private void OnFramerLine(XapiLineKind kind, string line)
+		{
+			if (kind == XapiLineKind.FeedbackListPath)
+			{
+				_feedbackListMessageIncoming = true;
+				if (_feedbackListMessage == null)
+					_feedbackListMessage = new StringBuilder();
+				_feedbackListMessage.Append(line).Append(Delimiter);
+				RestartFeedbackListQuietTimer();
+				return;
+			}
+
+			FinishFeedbackList();
+
+			// A login banner means the codec started a new session (e.g. it restarted, or the serial
+			// session was reset), so a response that was mid-stream will never finish.
+			if (line.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
+				ResetJsonReceiveState("codec started a new session");
+
+			if (kind == XapiLineKind.TextModeOutput)
+			{
+				// Text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner) means a
+				// session exists that is not in JSON mode: a new one to set up, or - once JSON mode was
+				// confirmed - one the codec restarted, which needs a full re-sync (#113). SyncState
+				// turns echo off and requests JSON mode. Any JSON response that was mid-stream will never
+				// finish, so the hold on the sync queue is released first.
+				ResetJsonReceiveState("codec sent text-mode output");
+
+				_loginMessageReceivedTimer?.Stop();
+				SyncState.TextOutputReceived();
+				return;
+			}
+
+			if (!SyncState.InitialSyncComplete
+				&& line.IndexOf("xstatus systemunit", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				// The plugin's poll echoed back: a session with echo on exists.
+				_loginMessageReceivedTimer?.Stop();
+				SyncState.LoginMessageReceived();
+			}
+		}
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
 
@@ -5363,15 +5293,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition} ({length} characters; payload logged at Debug)", ex.Message, ex.LineNumber, ex.LinePosition, response.Length);
 				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
-
-				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
-				{
-					var responseWithLastBraceRemoved = response.LastIndexOf('}') > 0
-						? response.Remove(response.LastIndexOf('}'))
-						: response;
-
-					DeserializeResponse(responseWithLastBraceRemoved);
-				}
 				return false;
 			}
 			catch (Exception ex)

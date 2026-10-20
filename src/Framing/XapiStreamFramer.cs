@@ -53,6 +53,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private bool _inString;
         private bool _escape;
 
+        /// <summary>A document has started (its first line has arrived).</summary>
+        public event Action? DocumentStarted;
+
         /// <summary>A complete document, lines joined with "\n".</summary>
         public event Action<string>? DocumentReceived;
 
@@ -124,6 +127,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 var first = FirstNonBlank(line);
                 if (first >= 0 && line[first] == '{')
                 {
+                    DocumentStarted?.Invoke();
                     ScanDocumentText(line, first);
                     return;
                 }
@@ -141,7 +145,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
 
                 var trimmed = line.TrimStart();
-                if (TextModeLine.IsMatch(trimmed) || CommandEndLine.IsMatch(trimmed))
+                if (TextModeLine.IsMatch(trimmed) || CommandEndLine.IsMatch(trimmed)
+                    || trimmed.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     AbandonDocument("codec sent text-mode output in the middle of a JSON document");
                     LineReceived?.Invoke(Classify(line), line);

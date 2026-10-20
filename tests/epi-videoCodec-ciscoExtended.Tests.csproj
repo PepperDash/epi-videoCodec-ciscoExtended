@@ -24,9 +24,7 @@
     <!-- Plugin classes with no Crestron dependencies, compiled in and tested directly. -->
     <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
     <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
-    <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />
-    <Compile Include="..\src\Framing\FramingShadow.cs" Link="Linked\FramingShadow.cs" />
-  </ItemGroup>
+    <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />  </ItemGroup>
 
   <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
