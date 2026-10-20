@@ -4242,7 +4242,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			var status = new CiscoCodecStatus.Status();
 			var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
@@ -4277,11 +4276,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			CodecJson.PopulateFromToken(statusToken, status);
-
-			if (status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
+			// Each area below reads its own token. The whole document is no longer populated into a
+			// throwaway Status object first (#129, stage 6): only UserInterface and RoomPreset were read
+			// from it, and one bad area threw and stopped every other area from being parsed.
+			var userInterface = new CiscoCodecStatus.UserInterface();
+			PopulateObjectWithToken(statusToken, "UserInterface", userInterface);
+			if (userInterface.WebViews != null && userInterface.WebViews.Count > 0)
 			{
-				UiExtensionsHandler?.ParseStatus(status.UserInterface.WebViews);
+				UiExtensionsHandler?.ParseStatus(userInterface.WebViews);
 			}
 
 			var standbyToken = statusToken.SelectToken("Standby");
@@ -4527,14 +4529,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMediaChannelsTokenArray(mediaChannelsToken);
 			}
-			if (status.Audio != null)
-			{
-				PopulateObjectWithToken(statusToken, "Audio", CodecStatus.Status.Audio);
-			}
-			if (status.RoomPresets != null)
-			{
-				ParseRoomPresetList(status.RoomPresets);
-			}
+			// Returns straight away when the document has no Audio.
+			PopulateObjectWithToken(statusToken, "Audio", CodecStatus.Status.Audio);
+			var roomPresets = new List<CiscoCodecStatus.RoomPreset>();
+			PopulateObjectWithToken(statusToken, "RoomPreset", roomPresets);
+			ParseRoomPresetList(roomPresets);
 			if (webViewStatusToken != null)
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
