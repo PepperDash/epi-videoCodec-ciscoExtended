@@ -2301,14 +2301,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
-				if (_framingShadow.Compare(document))
+				string difference = null;
+				Action<string, string> onMismatch = (current, framer) => difference = FramingShadow.Difference(current, framer);
+				_framingShadow.Mismatch += onMismatch;
+				bool same;
+				try
+				{
+					same = _framingShadow.Compare(document);
+				}
+				finally
+				{
+					_framingShadow.Mismatch -= onMismatch;
+				}
+
+				if (same)
 					return;
 
 				// The first few differences, then every 100th, so a systematic one can't flood the log.
 				var n = ++_framingMismatchesLogged;
 				if (n <= 5 || n % 100 == 0)
-					this.LogWarning("Stream framer differs from the current framing ({summary}); document of {length} characters",
-						_framingShadow.Summary(), document.Length);
+					this.LogWarning("Stream framer differs from the current framing ({summary}); document of {length} characters; {difference}",
+						_framingShadow.Summary(), document.Length, difference);
 			}
 			catch (Exception ex)
 			{

@@ -27,7 +27,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _framer.DocumentReceived += OnDocument;
             _framer.DocumentAbandoned += _ => Abandoned++;
             _framer.EchoDropped += _ => EchoesDropped++;
+            _framer.UnterminatedString += _ => UnterminatedStrings++;
         }
+
+        /// <summary>Lines that ended inside a string (damaged text); see XapiStreamFramer.UnterminatedString.</summary>
+        public long UnterminatedStrings { get; private set; }
 
         /// <summary>Documents both framings produced identically.</summary>
         public long Matches { get; private set; }
@@ -95,7 +99,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>One line for the console.</summary>
         public string Summary() =>
             $"match={Matches} mismatch={Mismatches} missing={Missing} extra={Extra} " +
-            $"empty={EmptyDocuments} abandoned={Abandoned} echoesDropped={EchoesDropped}";
+            $"empty={EmptyDocuments} abandoned={Abandoned} echoesDropped={EchoesDropped} " +
+            $"unterminatedStrings={UnterminatedStrings}";
+
+        /// <summary>Where two normalised documents first differ, with some context from each (for logs).</summary>
+        public static string Difference(string current, string? framer, int context = 120)
+        {
+            if (framer == null)
+                return $"only the current framing produced it; starts: {Clip(current, 0, context)}";
+
+            var i = 0;
+            while (i < current.Length && i < framer.Length && current[i] == framer[i])
+                i++;
+            var from = Math.Max(0, i - context / 2);
+            return $"first difference at character {i} (lengths {current.Length} / {framer.Length}); " +
+                   $"current: {Clip(current, from, context)} | framer: {Clip(framer, from, context)}";
+        }
+
+        private static string Clip(string s, int from, int length) =>
+            from >= s.Length ? "" : s.Substring(from, Math.Min(length, s.Length - from));
 
         /// <summary>The form both framings' documents are compared in: line endings removed.</summary>
         public static string Normalize(string document) => document.Replace("\r", "").Replace("\n", "");

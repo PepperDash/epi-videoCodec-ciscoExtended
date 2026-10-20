@@ -65,6 +65,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>An echoed command line was dropped from inside a document.</summary>
         public event Action<string>? EchoDropped;
 
+        /// <summary>
+        /// A line inside a document ended inside a string. JSON strings can't contain a raw line
+        /// break, so the text was damaged (e.g. a lost quote on a serial link). The string is closed
+        /// at the line end, so the brace count stays right and framing recovers.
+        /// </summary>
+        public event Action<string>? UnterminatedString;
+
         /// <summary>True while a document has started and not yet ended.</summary>
         public bool InDocument => _depth > 0;
 
@@ -190,6 +197,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
 
             _document.Append(line, from, line.Length - from).Append('\n');
+            if (_inString)
+            {
+                _inString = false;
+                _escape = false;
+                UnterminatedString?.Invoke(line);
+            }
+
             if (_document.Length > MaxDocumentChars)
                 AbandonDocument($"document larger than {MaxDocumentChars} characters");
         }

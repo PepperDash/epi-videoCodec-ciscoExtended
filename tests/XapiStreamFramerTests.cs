@@ -150,6 +150,23 @@ public class XapiStreamFramerTests
     }
 
     [Fact]
+    public void A_Lost_Quote_Does_Not_Throw_Framing_Out_Of_Step()
+    {
+        // A quote lost on the wire leaves a string open at the end of its line. JSON strings can't
+        // contain a raw line break, so the framer closes it there and keeps counting braces.
+        var unterminated = new List<string>();
+        var f = new XapiStreamFramer();
+        var c = new Capture(f);
+        f.UnterminatedString += unterminated.Add;
+
+        f.Feed(Lines("{", "  \"Booking\": {", "    \"Title\": \"Stand-up,", "    \"Extension\": {}", "  }", "}") + Volume);
+
+        unterminated.Should().ContainSingle().Which.Should().Contain("Stand-up");
+        c.Documents.Should().HaveCount(2, "the damaged document still ends on its closing brace, and the next one is found");
+        c.Documents[1].Should().Contain("\"49\"");
+    }
+
+    [Fact]
     public void Text_After_A_Document_On_The_Same_Line_Is_Its_Own_Line()
     {
         var c = Run(Lines("{ \"A\": 1 }xStatus Audio"));

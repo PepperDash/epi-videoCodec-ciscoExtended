@@ -87,6 +87,15 @@ public class FramingShadowTests
     }
 
     [Fact]
+    public void Difference_Shows_Where_And_Both_Sides()
+    {
+        var d = FramingShadow.Difference("{\"A\": {\"B\": 1}}", "{\"A\" {\"B\": 1}}", 40);
+
+        d.Should().Contain("first difference at character 4").And.Contain("current: ").And.Contain("framer: ");
+        FramingShadow.Difference("{}", null).Should().StartWith("only the current framing produced it");
+    }
+
+    [Fact]
     public void Reset_Clears_What_Is_Pending()
     {
         var s = new FramingShadow();
