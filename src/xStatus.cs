@@ -9,23 +9,6 @@ using PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
-    // Helper Classes for Proerties
-    public abstract class ValueProperty
-    {
-        /// <summary>
-        /// Triggered when Value is set
-        /// </summary>
-        public Action ValueChangedAction { get; set; }
-
-        protected void OnValueChanged()
-        {
-            var a = ValueChangedAction;
-            if (a != null)
-                a();
-        }
-
-    }
-
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
     /// </summary>
@@ -70,7 +53,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value == "On";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -127,7 +110,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -153,7 +136,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value.ToLower() == "on";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -334,7 +317,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _value = value;
 
                     BoolValue = value.ToLower() == "available";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -356,7 +339,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     // If the incoming value is "Active" it sets the BoolValue true, otherwise sets it false
                     _value = value;
                     BoolValue = value.ToLower() == "connected";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -382,7 +365,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _value = value;
                     BoolValue = value.ToLower() == "active";
                     StringValue = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -438,7 +421,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _value = value;
                     StringValue = value;
                     BoolValue = value.ToLower() == "off";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -621,7 +604,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _value = value;
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value.ToLower() == "on" || value.ToLower() == "active";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -658,7 +641,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     SendingBoolValue = value.ToLower() == "sending";
                     ActiveBoolValue = value.ToLower() != "off";
                     ReceivingBoolValue = value.ToLower() == "receiving";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -742,7 +725,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     if (value == null) return;
                     _presentationLocalInstances = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -778,7 +761,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _presentation = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -1020,7 +1003,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1350,7 +1333,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -1387,7 +1370,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "Yes" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value == "Yes";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1442,7 +1425,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1559,7 +1542,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1625,7 +1608,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _value = value;
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value.ToLower() == "on" || value.ToLower() == "standby";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1656,7 +1639,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     if (string.IsNullOrEmpty(value)) return;
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1723,7 +1706,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     if (string.IsNullOrEmpty(value)) return;
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1788,7 +1771,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     if (value == null) return;
                     _firmwareValue = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -1926,7 +1909,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value == "On";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -2013,7 +1996,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2129,7 +2112,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "On" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value == "On";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2153,7 +2136,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2233,7 +2216,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -2266,7 +2249,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "True" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value == "True";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2338,7 +2321,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2353,7 +2336,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 {
                     // If the incoming value is "True" it sets the BoolValue true, otherwise sets it false
                     BoolValue = value.ToLower() == "true";
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2472,7 +2455,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -2491,7 +2474,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2581,7 +2564,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -2599,7 +2582,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
