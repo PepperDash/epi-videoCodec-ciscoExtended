@@ -680,6 +680,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		/// </summary>
 		internal CodecTimings Timings { get; } = new CodecTimings();
 
+		// The stream framer (#129, stage 2), run alongside the current line-based framing and compared
+		// with it. Only touched from the receive queue. See codecperf for the counts.
+		private readonly FramingShadow _framingShadow = new FramingShadow();
+		private long _framingMismatchesLogged;
+
 		// When the line being processed arrived from the transport, when the JSON message being
 		// accumulated started, and (while one is being parsed) when that message started (#129).
 		private long _lineReceivedAt;
@@ -2186,6 +2191,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Any response that was mid-stream is gone with the old connection; release the
 			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
 			ResetJsonReceiveState("connection to codec changed");
+			_receiveQueue.Enqueue(new ProcessStringMessage("framing-shadow-reset",
+				_ => _framingShadow.Reset("connection to codec changed")));
 
 			if (e.Client.IsConnected)
 			{
@@ -2265,13 +2272,48 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8}\r\n"
+					+ "Framer shadow: {10}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
 				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
-				Timings.FormatTable()
+				Timings.FormatTable(),
+				_framingShadow.Summary()
 			);
+		}
+
+		private void FeedFramingShadow(string line)
+		{
+			try
+			{
+				_framingShadow.Feed(line);
+			}
+			catch (Exception ex)
+			{
+				// Measuring only: never let the shadow framer affect the codec connection.
+				this.LogDebug("Framing shadow failed on a line: {message}", ex.Message);
+				_framingShadow.Reset("exception");
+			}
+		}
+
+		private void CompareFramingShadow(string document)
+		{
+			try
+			{
+				if (_framingShadow.Compare(document))
+					return;
+
+				// The first few differences, then every 100th, so a systematic one can't flood the log.
+				var n = ++_framingMismatchesLogged;
+				if (n <= 5 || n % 100 == 0)
+					this.LogWarning("Stream framer differs from the current framing ({summary}); document of {length} characters",
+						_framingShadow.Summary(), document.Length);
+			}
+			catch (Exception ex)
+			{
+				this.LogDebug("Framing shadow compare failed: {message}", ex.Message);
+			}
 		}
 
 		private void Port_LineReceived(object dev, GenericCommMethodReceiveTextArgs args)
@@ -2281,6 +2323,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				_lineReceivedAt = receivedAt;
 				Timings.RecordSince("rx.queueDelay", receivedAt);
+				FeedFramingShadow(text);
 				ProcessResponse(text);
 			});
 			_receiveQueue.Enqueue(message);
@@ -2365,7 +2408,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						Timings.Record("json.receive", CodecTimings.ElapsedMs(_jsonMessageStartedAt, parseStartedAt));
 
 					_parsingMessageStartedAt = _jsonMessageStartedAt;
-					var success = DeserializeResponse(_jsonMessage.ToString());
+					var document = _jsonMessage.ToString();
+					CompareFramingShadow(document);
+					var success = DeserializeResponse(document);
 					_parsingMessageStartedAt = 0;
 					Timings.RecordSince(success ? "parse.document" : "parse.documentFailed", parseStartedAt);
 
