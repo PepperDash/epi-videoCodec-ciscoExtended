@@ -2306,19 +2306,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					ResetJsonReceiveState("codec started a new session");
 				}
 
-				if (
-					!response.StartsWith("/")
-					&& _feedbackListMessage != null
-					&& _feedbackListMessageIncoming
-				)
-				{
-					_feedbackListMessageIncoming = false;
-
-					var feedbackListString = _feedbackListMessage.ToString();
-					_feedbackListMessage = null;
-
-					ProcessFeedbackList(feedbackListString);
-				}
+				if (!response.StartsWith("/"))
+					FinishFeedbackList();
 
 				if (response.StartsWith("/"))
 				{
@@ -2330,6 +2319,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (_feedbackListMessageIncoming && _feedbackListMessage != null)
 				{
 					_feedbackListMessage.Append(response);
+					RestartFeedbackListQuietTimer();
 					return;
 				}
 
@@ -2430,6 +2420,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		);
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
+
+		// In JSON mode the xFeedback List reply is a run of "/..." lines with no end marker, so the list
+		// was only finished by the next unrelated line, which on a quiet codec can be many seconds later
+		// and held up the initial sync (#138). Also finish it once no "/" line has arrived for this long.
+		private const long FeedbackListQuietMs = 500;
+		private CTimer _feedbackListQuietTimer;
+
+		private void RestartFeedbackListQuietTimer()
+		{
+			if (_feedbackListQuietTimer == null)
+				_feedbackListQuietTimer = new CTimer(OnFeedbackListQuiet, FeedbackListQuietMs);
+			else
+				_feedbackListQuietTimer.Reset(FeedbackListQuietMs);
+		}
+
+		// Finish on the receive queue, so lines already received are processed first and the list
+		// state is only ever touched by the receive thread.
+		private void OnFeedbackListQuiet(object _) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage(string.Empty, __ => FinishFeedbackList()));
+
+		private void FinishFeedbackList()
+		{
+			if (!_feedbackListMessageIncoming || _feedbackListMessage == null)
+				return;
+
+			_feedbackListMessageIncoming = false;
+
+			var feedbackListString = _feedbackListMessage.ToString();
+			_feedbackListMessage = null;
+
+			ProcessFeedbackList(feedbackListString);
+		}
 
 		private void ProcessFeedbackList(string data)
 		{
