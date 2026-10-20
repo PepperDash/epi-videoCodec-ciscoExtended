@@ -2266,6 +2266,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (parts.Length > 1 && parts[1].Equals("reset", StringComparison.OrdinalIgnoreCase))
 			{
 				codec.Timings.Reset();
+				ValueProperty.ResetCounts();
 				CrestronConsole.ConsoleCommandResponse("{0}: timings reset\r\n", codec.Key);
 				return;
 			}
@@ -2279,12 +2280,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8}\r\n"
+					+ "Model values (all codecs): notified={10} unchanged={11}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
 				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
-				Timings.FormatTable()
+				Timings.FormatTable(),
+				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount
 			);
 		}
 
