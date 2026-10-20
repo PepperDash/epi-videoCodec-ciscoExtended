@@ -687,9 +687,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// Routes each framed document to the parsers for the paths it contains (#129, stage 4).
 		private readonly XapiDispatcher _dispatcher = new XapiDispatcher();
 
-		// Matches replies to requests by resultId (#129, stage 4; #109). Phonebook searches use it.
+		// Matches replies to requests by resultId (#129, stage 4; #109). Phonebook searches and the
+		// sync's full xStatus (#142) use it. The full status is about 13 s over RS-232 at 115200, so
+		// it gets a longer timeout; the sync watchdog re-requests it if it never arrives.
 		private const string PhonebookSearchRequest = "phonebook.search";
+		private const string SyncStatusRequest = "sync.xstatus";
 		private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
+		private static readonly TimeSpan SyncStatusTimeout = TimeSpan.FromSeconds(120);
 		private readonly XapiRequestTracker _requests = new XapiRequestTracker(RequestTimeout);
 		private CTimer _requestExpiryTimer;
 
@@ -2279,7 +2283,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var sync = SyncState;
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
-					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8}\r\n"
+					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8} FullStatus={12}\r\n"
 					+ "Model values (all codecs): notified={10} unchanged={11}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
@@ -2287,7 +2291,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
 				Timings.FormatTable(),
-				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount
+				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount,
+				sync.FullStatusWasReceived
 			);
 		}
 
@@ -2326,7 +2331,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// throws no longer stops the others for that message.
 		private void WireDispatcher()
 		{
-			_dispatcher.On("Status", (token, _) => ParseStatusObject(token));
+			_dispatcher.On("Status", (token, message) =>
+			{
+				ParseStatusObject(token);
+				// Only the reply to the sync's own tagged xStatus completes the full-status step (#142);
+				// poll replies and status feedback carry no resultId, or another request's.
+				if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+				{
+					Timings.Stop(SyncStatusRequest, message.ResultId);
+					SyncState.FullStatusReceived();
+				}
+			});
 			_dispatcher.On("Configuration", (token, _) => ParseConfigurationObject(token));
 			_dispatcher.On("Event", (token, _) => ParseEventObject(token));
 			_dispatcher.On("CommandResponse", (token, message) => ParseCommandResponseObject(token, message.ResultId));
@@ -2335,6 +2350,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogError("Error handling {path} from codec: {error}", path, ex.Message);
 				this.LogVerbose(ex, "Stack Trace: ");
 			};
+		}
+
+		/// <summary>
+		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
+		/// the full-status step done (#142).
+		/// </summary>
+		internal void RequestFullStatus()
+		{
+			var id = _requests.Begin(SyncStatusRequest, SyncStatusTimeout);
+			Timings.Start(SyncStatusRequest, id);
+			StartRequestExpiryTimer();
+			SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id));
 		}
 
 		private void StartRequestExpiryTimer()
@@ -2351,7 +2378,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			foreach (var expired in _requests.Expire())
 			{
 				this.LogWarning("No reply from the codec to {kind} request {id} within {seconds} s",
-					expired.Value, expired.Key, RequestTimeout.TotalSeconds);
+					expired.Value, expired.Key,
+					(expired.Value == SyncStatusRequest ? SyncStatusTimeout : RequestTimeout).TotalSeconds);
 				Timings.Stop(expired.Value, expired.Key, expired.Value + "Timeout");
 
 				if (expired.Value == PhonebookSearchRequest && _requests.PendingCount(PhonebookSearchRequest) == 0)

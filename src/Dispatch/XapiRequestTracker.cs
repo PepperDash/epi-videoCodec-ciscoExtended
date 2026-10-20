@@ -30,12 +30,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public TimeSpan Timeout { get; }
 
-        /// <summary>Registers a new request of the given kind and returns its id, for <c>| resultId="…"</c>.</summary>
-        public string Begin(string kind)
+        /// <summary>
+        /// Registers a new request of the given kind and returns its id, for <c>| resultId="…"</c>.
+        /// <paramref name="timeout"/> overrides <see cref="Timeout"/> for this request (a large reply
+        /// over a serial link, for example).
+        /// </summary>
+        public string Begin(string kind, TimeSpan? timeout = null)
         {
+            if (timeout.HasValue && timeout.Value <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+
             var id = Guid.NewGuid().ToString();
             lock (_lock)
-                _pending[id] = new Pending(kind, _utcNow());
+                _pending[id] = new Pending(kind, _utcNow(), timeout ?? Timeout);
             return id;
         }
 
@@ -72,7 +79,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
-        /// <summary>Removes and returns requests older than <see cref="Timeout"/>: (id, kind).</summary>
+        /// <summary>Removes and returns requests older than their timeout: (id, kind).</summary>
         public IReadOnlyList<KeyValuePair<string, string>> Expire()
         {
             var now = _utcNow();
@@ -80,7 +87,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             lock (_lock)
             {
                 foreach (var entry in _pending)
-                    if (now - entry.Value.StartedUtc >= Timeout)
+                    if (now - entry.Value.StartedUtc >= entry.Value.Timeout)
                         expired.Add(new KeyValuePair<string, string>(entry.Key, entry.Value.Kind));
                 foreach (var e in expired)
                     _pending.Remove(e.Key);
@@ -98,14 +105,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private sealed class Pending
         {
-            public Pending(string kind, DateTime startedUtc)
+            public Pending(string kind, DateTime startedUtc, TimeSpan timeout)
             {
                 Kind = kind;
                 StartedUtc = startedUtc;
+                Timeout = timeout;
             }
 
             public string Kind { get; }
             public DateTime StartedUtc { get; }
+            public TimeSpan Timeout { get; }
         }
     }
 }
