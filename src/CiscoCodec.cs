@@ -2233,12 +2233,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (_commDebugConsoleCommandAdded)
 					return;
 
-				CrestronConsole.AddNewConsoleCommand(
-					CommDebugConsoleCommand,
-					"SetCodecCommDebug",
-					"Stream debug on a Cisco codec's connection: SetCodecCommDebug <codecKey> <0|1> (or <0|1> with one codec)",
-					ConsoleAccessLevelEnum.AccessOperator
-				);
+				// Short, plain help text: on the CP4N bench a longer one stopped this registration, and the
+				// commands registered after it (GetCodecPhonebook, GetCodecBookings) were missing. A
+				// failure here must never skip the rest of CustomActivate.
+				try
+				{
+					if (!CrestronConsole.AddNewConsoleCommand(
+						CommDebugConsoleCommand,
+						"SetCodecCommDebug",
+						"Codec comm debug: codecKey 0 or 1",
+						ConsoleAccessLevelEnum.AccessOperator
+					))
+						Debug.LogWarning("SetCodecCommDebug console command could not be registered");
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError("SetCodecCommDebug console command could not be registered: {message}", ex.Message);
+				}
 				_commDebugConsoleCommandAdded = true;
 			}
 		}
