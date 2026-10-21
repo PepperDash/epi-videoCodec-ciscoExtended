@@ -346,7 +346,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private CiscoCodecStatus.RootObject CodecStatus;
 
-		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
 
 		public CodecCallHistory CallHistory { get; private set; }
 
@@ -1902,7 +1901,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				RegisterRoomPresetEvents();
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
-				RegisterDisconnectEvents();
 
 				if (Communication is ISocketStatus socket)
 				{
@@ -2908,39 +2906,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose(e, "Exception");
 
 			}
-		}
-
-		private void RegisterDisconnectEvents()
-		{
-			CodecEvents.Event.CallDisconnect.ValueChangedAction += () =>
-			{
-				//For Future Use
-			};
-		}
-
-		private void RegisterUserInterfaceEvents()
-		{
-			CodecEvents
-				.Event
-				.UserInterface
-				.Presentation
-				.ExternalSource
-				.Selected
-				.SourceIdentifier
-				.ValueChangedAction += () =>
-				{
-					//For Future Use
-				};
-
-			// triggered when CodecEvents.Event.UserInterface.Extensions is updated
-			/*
-             * CodecEvents.Event.UserInterface.Extensions.ValueChangedAction +=
-                () =>
-                {
-                    var act_ = CodecEvents.Event.UserInterface.Extensions.Action;
-                    Debug.Console(1, this, "UserInterface.Extensions.ValueChangedAction: /{0} /{1} /{2}", act_.Type, act_.Id, act_.Value);
-                };
-             * */
 		}
 
 		private void RegisterAutoAnswer()
@@ -3978,8 +3943,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				//var _userInterfaceObject = userInterfaceObject.SelectToken("Presentation.ExternalSource.Selected.SourceIdentifier");
 
-				var val_ = JsonConvert.SerializeObject(userInterfaceObject);
-				//Debug.Console(1, this, "userInterfaceObject val: {0}", val_);
 
 				if (RunRouteAction != null && !_externalSourceChangeRequested)
 				{
@@ -4002,7 +3965,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				//Debug.Console(2, this, "Extensions Event");
 				try
 				{
-					var val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions);
 
 					this.LogVerbose(
 						"*** Got an Extensions Event {0}",
@@ -4019,8 +3981,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							"*** Got an Extensions Widget Action {0}",
 							userInterfaceObject.Extensions.Widget
 						);
-						val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions.Widget);
-						//Debug.Console(1, this, "Widget val: {0}", val_);
 						UIExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.Widget);
 					}
 
@@ -4031,10 +3991,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						this.LogVerbose(
 							"*** Got an Extensions Widget Event {0}",
-							userInterfaceObject.Extensions.WidgetEvent
-						);
-
-						val_ = JsonConvert.SerializeObject(
 							userInterfaceObject.Extensions.WidgetEvent
 						);
 
@@ -4604,10 +4560,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
-			// if (webViewDisplayToken != null)
-			// {
-			// 	ParseWebviewDisplayToken(webViewDisplayToken[0]);
-			// }
 			if (provisioningToken != null)
 			{
 				ParseProvisioningToken(provisioningToken);
@@ -4620,9 +4572,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMainSourceToken(mainSourceToken);
 			}
-
-			// we don't want to do this... this will expand lists infinitely
-			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
 
 			if (SyncState.InitialStatusMessageWasReceived)
 				return;
