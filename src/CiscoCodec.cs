@@ -5528,8 +5528,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void ExecuteSwitch(object selector)
 		{
-			if (!(selector is int input))
+			// Selectors from JSON arrive as long or string, not int (#121).
+			if (!RoutingSelector.TryGetInput(selector, out var input))
 			{
+				this.LogWarning("ExecuteSwitch: selector {selector} ({type}) is not an input number; ignored",
+					selector, selector?.GetType().Name ?? "null");
 				return;
 			}
 
