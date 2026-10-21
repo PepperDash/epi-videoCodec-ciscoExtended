@@ -28,6 +28,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>Triggered when the value changes (status/configuration), or on every set (events).</summary>
         public Action? ValueChangedAction { get; set; }
 
+        /// <summary>
+        /// A <see cref="ValueChangedAction"/> threw: (the value, the exception). Actions run inside a
+        /// populate of the whole state model (#129, stage 6d), so an exception is reported here
+        /// instead of stopping the rest of the document being populated.
+        /// </summary>
+        public static event Action<ValueProperty, Exception>? ActionFailed;
+
         /// <summary>Actions run because a status/configuration value changed (all instances).</summary>
         public static long NotifiedCount => Interlocked.Read(ref _notified);
 
@@ -44,7 +51,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>Runs the action every time. For event values.</summary>
         protected void OnValueChanged()
         {
-            ValueChangedAction?.Invoke();
+            var action = ValueChangedAction;
+            if (action != null)
+                Run(action);
         }
 
         /// <summary>
@@ -68,7 +77,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
 
             Interlocked.Increment(ref _notified);
-            action();
+            Run(action);
+        }
+
+        private void Run(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                var failed = ActionFailed;
+                if (failed == null)
+                    throw;
+                failed(this, ex);
+            }
         }
     }
 }

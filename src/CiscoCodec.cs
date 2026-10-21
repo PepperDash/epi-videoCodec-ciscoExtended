@@ -697,6 +697,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private readonly XapiRequestTracker _requests = new XapiRequestTracker(RequestTimeout);
 		private CTimer _requestExpiryTimer;
 
+		// Populates the long-lived CodecStatus / CodecConfiguration from every document (#129, stage 6d).
+		// Lists merge by id instead of growing. Cameras.CameraList, Status.Calls and Status.RoomPresets
+		// are left to the code that maintains them.
+		private static readonly StateModelContractResolver ModelResolver = new StateModelContractResolver(new[]
+		{
+			(typeof(CiscoCodecStatus.Cameras), nameof(CiscoCodecStatus.Cameras.CameraList)),
+			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.Calls)),
+			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.RoomPresets)),
+		});
+		private static readonly JsonSerializerSettings ModelSettings = ModelResolver.Settings;
+		private static int _modelPrepared;
+
 		// When the line being processed arrived from the transport, when the JSON message being
 		// accumulated started, and (while one is being parsed) when that message started (#129).
 		private long _lineReceivedAt;
@@ -811,6 +823,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			: base(config)
 		{
 			CodecStatus = new CiscoCodecStatus.RootObject();
+			PrepareStateModel();
 			DeviceInfo = new DeviceInfo();
 			CodecInfo = new CiscoCodecInfo(this);
 			_lastSearched = string.Empty;
@@ -4165,6 +4178,51 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			HandleWebViewClearedByCommand(this, args);
 		}
 
+		/// <summary>
+		/// Once per program: logs model actions that throw, and builds the model's JSON contracts on a
+		/// background thread. Building them on the first status document cost ~630 ms at every
+		/// program start on an RMC4 (#129, stage 6a).
+		/// </summary>
+		private void PrepareStateModel()
+		{
+			if (System.Threading.Interlocked.Exchange(ref _modelPrepared, 1) == 1)
+				return;
+
+			ValueProperty.ActionFailed += (value, ex) =>
+			{
+				Debug.LogError("Error in codec feedback action for {value}: {message}", value.GetType().Name, ex.Message);
+				Debug.LogVerbose(ex, "Stack Trace: ");
+			};
+
+			System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+			{
+				var started = CodecTimings.Now;
+				var failed = ModelResolver.Warm<CiscoCodecStatus.Status>()
+					?? ModelResolver.Warm<CiscoCodecConfiguration.Configuration>();
+				Timings.RecordSince("model.warmup", started);
+				if (failed != null)
+					this.LogWarning("Preparing the codec state model failed (first documents will be slower): {message}", failed.Message);
+				else
+					this.LogDebug("Codec state model prepared");
+			});
+		}
+
+		/// <summary>Populates the long-lived model from a whole Status or Configuration document.</summary>
+		private void PopulateStateModel(JToken documentToken, object model, string documentName)
+		{
+			var started = CodecTimings.Now;
+			try
+			{
+				CodecJson.PopulateFromToken(documentToken, model, ModelSettings);
+			}
+			catch (Exception e)
+			{
+				this.LogError("Error updating the codec {document} model: {message}", documentName, e.Message);
+				this.LogVerbose(e, "Exception");
+			}
+			Timings.RecordSince("model.populate", started);
+		}
+
 		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
 		{
 			JToken token = null;
@@ -4285,6 +4343,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				return;
 			}
+
+			// The long-lived model takes every value; feedbacks wired to it fire on real changes (#129,
+			// stage 6d). It replaces the SystemUnit and Audio populates that were the only model updates.
+			PopulateStateModel(statusToken, CodecStatus.Status, "status");
 
 			// Each area below reads its own token. The whole document is no longer populated into a
 			// throwaway Status object first (#129, stage 6): only UserInterface and RoomPreset were read
@@ -4530,7 +4592,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			if (systemUnitStateToken != null)
 			{
-				PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
 				this.LogVerbose("SystemUnit State updated: NumberOfActiveCalls={n} IsAnyCallActive={inCall}",
 					CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value,
 					IsAnyCallActive);
@@ -4539,8 +4600,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMediaChannelsTokenArray(mediaChannelsToken);
 			}
-			// Returns straight away when the document has no Audio.
-			PopulateObjectWithToken(statusToken, "Audio", CodecStatus.Status.Audio);
 			var roomPresets = new List<CiscoCodecStatus.RoomPreset>();
 			PopulateObjectWithToken(statusToken, "RoomPreset", roomPresets);
 			ParseRoomPresetList(roomPresets);
@@ -4885,41 +4944,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					configurationToken.SelectToken("Video.Input.Connector")
 				);
 
-				var configuration = new CiscoCodecConfiguration.Configuration();
-				try
-				{
-					if (configuration.H323.H323Alias != null)
-					{
-						PopulateObjectWithToken(
-							configurationToken,
-							"H323.H323Alias",
-							CodecConfiguration.Configuration.H323.H323Alias
-						);
-					}
-				}
-				catch (Exception e)
-				{
-					this.LogError("Exception in ParseConfigurationObject H323 : {message}", e.Message);
-					this.LogVerbose(e, "Exception");
-				}
+				PopulateStateModel(configurationToken, CodecConfiguration.Configuration, "configuration");
 
-				try
-				{
-					if (configuration.Conference.AutoAnswer != null)
-					{
-						PopulateObjectWithToken(
-							configurationToken,
-							"Conference.AutoAnswer",
-							CodecConfiguration.Configuration.Conference.AutoAnswer
-						);
-					}
-				}
-				catch (Exception e)
-				{
-					this.LogError("Exception in ParseConfigurationObject.Populat Autoanswer: {message}", e.Message);
-					this.LogVerbose(e, "Exception");
-					throw;
-				}
 				if (SyncState.InitialConfigurationMessageWasReceived)
 					return;
 				this.LogVerbose("InitialConfig Received");
