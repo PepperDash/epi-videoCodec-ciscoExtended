@@ -698,11 +698,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CTimer _requestExpiryTimer;
 
 		// Populates the long-lived CodecStatus / CodecConfiguration from every document (#129, stage 6d).
-		// Lists merge by id instead of growing. Status.Calls and Status.RoomPresets are left to the code
-		// that maintains them. Cameras.CameraList is merged by the model too (#129, stage 6e).
+		// Lists merge by id instead of growing. Status.RoomPresets is left to ParseRoomPresetList.
+		// Cameras.CameraList (stage 6e) and Status.Calls (stage 6f) are merged by the model too; the
+		// active calls Essentials sees are still ActiveCalls, built by ParseCallArrayToken.
 		private static readonly StateModelContractResolver ModelResolver = new StateModelContractResolver(new[]
 		{
-			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.Calls)),
 			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.RoomPresets)),
 		});
 		private static readonly JsonSerializerSettings ModelSettings = ModelResolver.Settings;
@@ -2300,6 +2300,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8} FullStatus={12}\r\n"
 					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
 					+ "Cameras: listed={14} connected={15} devices={16}\r\n"
+					+ "Calls: listed={17} active={18}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
@@ -2310,7 +2311,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				sync.FullStatusWasReceived, _modelWarmupMs,
 				cameraList.Count,
 				cameraList.Count(c => string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase)),
-				Cameras?.Count ?? 0
+				Cameras?.Count ?? 0,
+				CodecStatus.Status.Calls?.Count ?? 0,
+				ActiveCalls?.Count ?? 0
 			);
 		}
 
@@ -3436,12 +3439,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						this.LogDebug("Processing active call with id {id}", activeCall.Id);
 
+						var previousStatus = activeCall.Status;
+
 						if (callGhost)
 						{
+							// The CallDisconnect event normally removes the call first (~70 ms before this ghost on
+							// the bench). If it didn't arrive (its feedback registration is one of many, #14), the
+							// ghost is the only notice. Before, the call was removed and its status change raised
+							// with its last status (e.g. Connected), so Disconnected was never reported (#129, 6f).
+							this.LogDebug("Call {id} removed by the codec (ghost) without a CallDisconnect event", activeCall.Id);
 							ActiveCalls.Remove(activeCall);
+							ListCalls();
+							SetSelfViewMode();
+							SetNewCallStatusAndFireCallStatusChange(eCodecCallStatus.Disconnected, activeCall);
+							RecordCallTimings(activeCall, previousStatus);
+							GetCallHistory();
+							continue;
 						}
-
-						var previousStatus = activeCall.Status;
 
 						if (callObject != null)
 							if (!MergeCallData(activeCall, callObject))
@@ -3478,8 +3492,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					this.LogDebug(
 							"On Call ID {id} Status Change - Status == {status}",
-							activeCall?.Id,
-							activeCall?.Status
+							callObject.Id,
+							callObject.Status
 						);
 
 					OnCallStatusChange(callObject);
