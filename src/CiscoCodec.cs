@@ -690,6 +690,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// sync's full xStatus (#142) use it. The full status is about 13 s over RS-232 at 115200, so
 		// it gets a longer timeout; the sync watchdog re-requests it if it never arrives.
 		private const string PhonebookSearchRequest = "phonebook.search";
+		private const string PhonebookFolderRequest = "phonebook.folder";
 		private const string SyncStatusRequest = "sync.xstatus";
 		private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
 		private static readonly TimeSpan SyncStatusTimeout = TimeSpan.FromSeconds(120);
@@ -4971,7 +4972,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// Shows the result of a search the caller has already matched to its pending request.
 		private void ShowSearchResult(
 			CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject,
-			string resultId
+			string resultId,
+			bool isSearch = true
 		)
 		{
 			try
@@ -4990,6 +4992,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				DirectoryBrowseHistory.Add(directoryResults);
 
 				OnDirectoryResultReturned(directoryResults);
+				if (!isSearch)
+					return; // folder contents: no search busy flag or search timing to stop
 				_searchInProgress = false;
 				DirectorySearchInProgress.FireUpdate();
 				Timings.Stop("phonebook.search", resultId);
@@ -5131,7 +5135,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				// steps below. Before, those steps took replies in arrival order, so the tagged start-up
 				// search (sent before the untagged folder query) was taken as the folder list and never
 				// completed (#109).
-				var isSearchReply = _requests.TryComplete(resultId, out _);
+				// A folder browse (#146) is shown the same way; only a search clears the search busy flag.
+				var isSearchReply = _requests.TryComplete(resultId, out var requestKind);
+				var isSearch = isSearchReply && requestKind == PhonebookSearchRequest;
 
 				var status = resultToken.SelectToken("status")?.ToString();
 				if (
@@ -5142,12 +5148,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					var reason = resultToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
 					this.LogError("Phonebook query failed. Reason: {reason}", reason);
 
-					if (!string.IsNullOrEmpty(resultId))
+					if (isSearch)
 						Timings.Stop("phonebook.search", resultId, "phonebook.searchFailed");
 
 					// SearchDirectory raised the busy flag, and only a completion clears it; a failed
 					// search has to clear it here or DirectorySearchInProgress latches on.
-					if (isSearchReply)
+					if (isSearch)
 					{
 						_searchInProgress = false;
 						DirectorySearchInProgress.FireUpdate();
@@ -5166,7 +5172,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (isSearchReply)
 				{
-					ShowSearchResult(phonebookSearchResultResponseObject, resultId);
+					ShowSearchResult(phonebookSearchResultResponseObject, resultId, isSearch);
 					return;
 				}
 
@@ -5630,12 +5636,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void GetDirectoryFolderContents(string folderId)
 		{
+			// Tagged so the reply is shown (#146): untagged replies are only used by the start-up
+			// phonebook sync, so folder contents were logged as "answers no pending search" and dropped.
+			var tag = _requests.Begin(PhonebookFolderRequest);
+			StartRequestExpiryTimer();
 			EnqueueCommand(
 				string.Format(
-					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2}",
+					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2} | resultId=\"{3}\"",
 					folderId,
 					_phonebookMode,
-					_phonebookResultsLimit
+					_phonebookResultsLimit,
+					tag
 				)
 			);
 		}
