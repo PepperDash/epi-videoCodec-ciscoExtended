@@ -698,11 +698,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CTimer _requestExpiryTimer;
 
 		// Populates the long-lived CodecStatus / CodecConfiguration from every document (#129, stage 6d).
-		// Lists merge by id instead of growing. Cameras.CameraList, Status.Calls and Status.RoomPresets
-		// are left to the code that maintains them.
+		// Lists merge by id instead of growing. Status.Calls and Status.RoomPresets are left to the code
+		// that maintains them. Cameras.CameraList is merged by the model too (#129, stage 6e).
 		private static readonly StateModelContractResolver ModelResolver = new StateModelContractResolver(new[]
 		{
-			(typeof(CiscoCodecStatus.Cameras), nameof(CiscoCodecStatus.Cameras.CameraList)),
 			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.Calls)),
 			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.RoomPresets)),
 		});
@@ -2295,10 +2294,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		internal string FormatPerfReport()
 		{
 			var sync = SyncState;
+			var cameraList = CodecStatus.Status.Cameras.CameraList.ToList();
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8} FullStatus={12}\r\n"
 					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
+					+ "Cameras: listed={14} connected={15} devices={16}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
@@ -2306,7 +2307,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
 				Timings.FormatTable(),
 				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount,
-				sync.FullStatusWasReceived, _modelWarmupMs
+				sync.FullStatusWasReceived, _modelWarmupMs,
+				cameraList.Count,
+				cameraList.Count(c => string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase)),
+				Cameras?.Count ?? 0
 			);
 		}
 
@@ -4253,9 +4257,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return false;
 			}
 
+			// The state model has already added the camera to CameraList (#129, stage 6e).
 			this.LogDebug("Camera {camId} is connected.", cameraId);
-			var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-			CodecStatus.Status.Cameras.CameraList.Add(newCam);
 
 			CameraConnected?.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
 
@@ -4347,6 +4350,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			// The long-lived model takes every value; feedbacks wired to it fire on real changes (#129,
 			// stage 6d). It replaces the SystemUnit and Audio populates that were the only model updates.
+			// The populate below merges cameras into the model's list, so the camera code further down
+			// can't use "not in the list" to mean "new camera" any more: it uses this snapshot (#129, stage 6e).
+			var camerasBefore = new HashSet<string>(CodecStatus.Status.Cameras.CameraList.Select(c => c.CameraId));
+
 			PopulateStateModel(statusToken, CodecStatus.Status, "status");
 
 			// Each area below reads its own token. The whole document is no longer populated into a
@@ -4431,8 +4438,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					UInt16.TryParse(camId, out UInt16 camIdInt);
 
-					var existingCamStatus =
-						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+					var existingCamStatus = camerasBefore.Contains(camId)
+						? CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId)
+						: null;
 
 					if (string.IsNullOrEmpty(serialNumber))
 						serialNumber = existingCamStatus?.SerialNumber?.Value ?? "Unknown";
@@ -4452,6 +4460,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							serialNumber = existingCameraDevice.SerialNumber ?? serialNumber;
 							this.LogDebug("Camera {camId}: resolved device by camera ID: {device} serial={serial}", camId, existingCameraDevice.Key, serialNumber);
 						}
+					}
+
+					// {"ghost": "True", "id": "2"}: the camera is gone. The model has already dropped it; treat
+					// it as disconnected so the device and listeners hear about it. This used to be ignored.
+					if (string.Equals(cam.SelectToken("ghost")?.ToString(), "True", StringComparison.OrdinalIgnoreCase))
+					{
+						this.LogDebug("Camera {camId} was removed by the codec (ghost).", camId);
+						existingCameraDevice?.SetOnlineStatus(false);
+						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
+						removedCameraIds.Add(camIdInt);
+						continue;
 					}
 
 					var lenses = cam.SelectToken("Lenses");
@@ -4503,43 +4522,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 							listWasUpdated = true;
 						}
-					}
-
-
-					if (existingCamStatus == null)
-					{
-						// Add only if the status list still does not contain this camera ID.
-						var currentCamStatus =
-							CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
-
-						if (currentCamStatus == null)
-						{
-							var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-							CodecStatus.Status.Cameras.CameraList.Add(newCam);
-							listWasUpdated = true;
-						}
-						else
-						{
-							CodecJson.PopulateFromToken(
-								cam,
-								currentCamStatus,
-								new JsonSerializerSettings
-								{
-									NullValueHandling = NullValueHandling.Ignore,
-									MissingMemberHandling = MissingMemberHandling.Ignore,
-								});
-						}
-					}
-					else
-					{
-						CodecJson.PopulateFromToken(
-							cam,
-							existingCamStatus,
-							new JsonSerializerSettings
-							{
-								NullValueHandling = NullValueHandling.Ignore,
-								MissingMemberHandling = MissingMemberHandling.Ignore,
-							});
 					}
 				}
 
