@@ -1821,12 +1821,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			AddPerfConsoleCommand();
 
-			CrestronConsole.AddNewConsoleCommand(
-				SetCommDebug,
-				"SetCodecCommDebug",
-				"0 for Off, 1 for on",
-				ConsoleAccessLevelEnum.AccessOperator
-			);
+			AddCommDebugConsoleCommand();
 			CrestronConsole.AddNewConsoleCommand(
 				GetPhonebook,
 				"GetCodecPhonebook",
@@ -1934,7 +1929,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
 
-				CommDebuggingIsOn = config.EnableCommDebugOnStartup;
+				if (config.EnableCommDebugOnStartup)
+					SetCommDebug(true);
 
 				Communication.Connect();
 
@@ -2211,18 +2207,85 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ReplaceTimer(ref _registrationCheckTimer, new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000));
 		}
 
-		public void SetCommDebug(string s)
+		/// <summary>
+		/// Turns comm debug on or off: Essentials stream debug (both directions, default timeout) on
+		/// this codec's communication device. CommDebuggingIsOn used to be set and never read (#120).
+		/// </summary>
+		public void SetCommDebug(bool on)
 		{
-			if (s == "1")
+			CommDebuggingIsOn = on;
+			if (Communication is IStreamDebugging streamDebugging)
+				streamDebugging.StreamDebugging.SetDebuggingWithDefaultTimeout(
+					on ? eStreamDebuggingSetting.Both : eStreamDebuggingSetting.Off);
+			else
+				this.LogWarning("Comm debug: {comm} does not support stream debugging", Communication?.Key);
+		}
+
+		private static readonly object CommDebugConsoleCommandLock = new object();
+		private static bool _commDebugConsoleCommandAdded;
+
+		// Registered once for all codecs, like codecperf: a per-instance registration under one name
+		// only ever reached the first codec (#120).
+		private static void AddCommDebugConsoleCommand()
+		{
+			lock (CommDebugConsoleCommandLock)
 			{
-				CommDebuggingIsOn = true;
-				CrestronConsole.ConsoleCommandResponse($"${Key} Codec Comm Debug Enabled.");
+				if (_commDebugConsoleCommandAdded)
+					return;
+
+				CrestronConsole.AddNewConsoleCommand(
+					CommDebugConsoleCommand,
+					"SetCodecCommDebug",
+					"Stream debug on a Cisco codec's connection: SetCodecCommDebug <codecKey> <0|1> (or <0|1> with one codec)",
+					ConsoleAccessLevelEnum.AccessOperator
+				);
+				_commDebugConsoleCommandAdded = true;
+			}
+		}
+
+		private static void CommDebugConsoleCommand(string args)
+		{
+			const string usage = "Usage: SetCodecCommDebug <codecKey> <0|1>, or SetCodecCommDebug <0|1> when there is one codec\r\n";
+			var parts = (args ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			CiscoCodec codec;
+			string value;
+			if (parts.Length == 2)
+			{
+				codec = DeviceManager.GetDeviceForKey(parts[0]) as CiscoCodec;
+				value = parts[1];
+				if (codec == null)
+				{
+					CrestronConsole.ConsoleCommandResponse("No Cisco codec with key '{0}'\r\n", parts[0]);
+					return;
+				}
+			}
+			else if (parts.Length == 1)
+			{
+				var codecs = DeviceManager.AllDevices.OfType<CiscoCodec>().ToList();
+				if (codecs.Count != 1)
+				{
+					CrestronConsole.ConsoleCommandResponse("{0} Cisco codecs configured; give the codec key. {1}", codecs.Count, usage);
+					return;
+				}
+				codec = codecs[0];
+				value = parts[0];
 			}
 			else
 			{
-				CommDebuggingIsOn = false;
-				CrestronConsole.ConsoleCommandResponse($"${Key} Codec Comm Debug Disabled.");
+				CrestronConsole.ConsoleCommandResponse(usage);
+				return;
 			}
+
+			if (value != "0" && value != "1")
+			{
+				CrestronConsole.ConsoleCommandResponse(usage);
+				return;
+			}
+
+			var on = value == "1";
+			codec.SetCommDebug(on);
+			CrestronConsole.ConsoleCommandResponse("{0} codec comm debug {1} (stream debug on {2})\r\n",
+				codec.Key, on ? "on" : "off", codec.Communication?.Key);
 		}
 
 		private void Socket_ConnectionChange(object sender, GenericSocketStatusChageEventArgs e)
