@@ -160,7 +160,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		public readonly WebexPinRequestHandler WebexPinRequestHandler;
+		public WebexPinRequestHandler WebexPinRequestHandler { get; }
 		public readonly DoNotDisturbHandler DoNotDisturbHandler;
 		public readonly UIExtensionsHandler UIExtensionsHandler;
 
