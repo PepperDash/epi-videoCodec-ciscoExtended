@@ -1626,6 +1626,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// CurrentLayoutChanged was never raised from a layout change (#145).
 			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
 			{
+				// Layouts are only exposed while presenting (ParseLayoutToken clears them otherwise).
+				if (!_IsInPresentation)
+					return;
 				var activeLayout = CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value;
 				this.LogVerbose("ActiveLayout = {layout}", activeLayout);
 				OnCurrentLayoutChanged(activeLayout);
@@ -2749,11 +2752,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void ClearLayouts()
 		{
-			// Reset the existing object rather than replace it: a new CurrentLayouts dropped the
-			// ActiveLayout action wired in SetFeedbackActions after the first presentation stop (#145).
-			var currentLayouts = CodecStatus.Status.Video.Layout.CurrentLayouts;
-			currentLayouts.AvailableLayouts = new List<CiscoCodecStatus.LayoutData>();
-			currentLayouts.ActiveLayout.Value = "";
+			// Clears the plugin's layout state only. The status model mirrors the codec (stage 6d) and is
+			// left alone: replacing its CurrentLayouts dropped the ActiveLayout action wired in
+			// SetFeedbackActions (#145), and resetting its values fought the next status update.
 
 			AvailableLayouts = new List<CodecCommandWithLabel>();
 			AvailableLayoutsFeedback.FireUpdate();
