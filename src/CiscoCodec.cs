@@ -2348,7 +2348,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_dispatcher.On("Event/Bookings", (token, _) => GetBookings(null));
 			_dispatcher.On("Event/UserInterface", (token, _) => OnUserInterfaceEvent(token));
 			_dispatcher.On("Event/Conference", (token, _) => WebexPinRequestHandler.ParseAuthenticationResponse(token));
-			_dispatcher.On("CommandResponse", (token, message) => ParseCommandResponseObject(token, message.ResultId));
+			// Command replies: one handler per result type (#129, stage 6c). Each reply carries one result,
+			// and the parsers take the whole CommandResponse object.
+			OnCommandResult("CallHistoryRecentsResult", (response, _) => ParseCallHistoryResponseToken(response));
+			OnCommandResult("CallHistoryDeleteEntryResult", (response, _) => GetCallHistory());
+			OnCommandResult("BookingsListResult", (response, _) => ParseBookingsListResultToken(response));
+			OnCommandResult("PhonebookSearchResult", (response, message) => ParsePhonebookSearchResultResponse(response, message.ResultId));
+			OnCommandResult("PresentationStopResult", (response, _) => OnPresentationStopResult(response));
 			_dispatcher.HandlerFailed += (path, ex) =>
 			{
 				this.LogError("Error handling {path} from codec: {error}", path, ex.Message);
@@ -5197,66 +5203,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
+		/// <summary>
+		/// Registers a handler for one command result type, called with the whole CommandResponse object.
+		/// A response whose own status is an error is logged and not handled, as before.
+		/// </summary>
+		private void OnCommandResult(string resultName, Action<JToken, XapiMessage> handler)
 		{
-			if (commandResponseToken == null || (commandResponseToken.Type == JTokenType.Object && !commandResponseToken.HasValues))
-				return;
-			var callHistoryRecentsResultResponse = commandResponseToken.SelectToken(
-				"CallHistoryRecentsResult"
-			);
-			var callHistoryDeleteEntryResultResponse = commandResponseToken.SelectToken(
-				"CallHistoryDeleteEntryResult"
-			);
-			var phonebookSearchResultResponse = commandResponseToken.SelectToken(
-				"PhonebookSearchResult"
-			);
-			var bookingsListResultResponse = commandResponseToken.SelectToken("BookingsListResult");
-			var presentationStatus = commandResponseToken.SelectToken(
-				"PresentationStopResult.status"
-			);
+			_dispatcher.On("CommandResponse/" + resultName, (_, message) =>
+			{
+				var response = message.Root["CommandResponse"];
+				if (CommandResponseFailed(response))
+					return;
+				handler(response, message);
+			});
+		}
+
+		private bool CommandResponseFailed(JToken commandResponseToken)
+		{
 			var statusToken = commandResponseToken.SelectToken("status");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
-
 			if (errorToken != null)
 			{
 				this.LogError("Error in command response: {error}", errorToken.ToString());
-				return;
+				return true;
 			}
 
-			if (statusToken != null)
-			{
-				if (statusToken.ToString().ToLower() == "error")
-					//do Something
-					return;
-			}
-			if (callHistoryRecentsResultResponse != null)
-			{
-				ParseCallHistoryResponseToken(commandResponseToken);
-				return;
-			}
-			if (callHistoryDeleteEntryResultResponse != null)
-			{
-				GetCallHistory();
-				return;
-			}
-			if (bookingsListResultResponse != null)
-			{
-				ParseBookingsListResultToken(commandResponseToken);
-				return;
-			}
-			if (phonebookSearchResultResponse != null)
-			{
+			return statusToken != null && statusToken.ToString().ToLower() == "error";
+		}
 
-				ParsePhonebookSearchResultResponse(commandResponseToken, resultId);
-				return;
-			}
-			if (presentationStatus != null)
+		private void OnPresentationStopResult(JToken commandResponseToken)
+		{
+			var presentationStatus = commandResponseToken.SelectToken("PresentationStopResult.status");
+			if (presentationStatus != null && presentationStatus.ToString().ToLower() == "ok")
 			{
-				if (presentationStatus.ToString().ToLower() == "ok")
-				{
-					_presentationSource = 0;
-					ClearLayouts();
-				}
+				_presentationSource = 0;
+				ClearLayouts();
 			}
 		}
 
