@@ -85,4 +85,44 @@ public class WebexAuthenticationTests
         ((Action)(() => WebexAuthentication.ResponseCommand("", "Host", "1"))).Should().Throw<ArgumentException>();
         ((Action)(() => WebexAuthentication.ResponseCommand("9", "Presenter", null))).Should().Throw<ArgumentOutOfRangeException>();
     }
+
+    private static JObject Entered(string role) =>
+        JObject.Parse(@"{""Call"":{""AuthenticationResponse"":{""PinEntered"":{""ParticipantRole"":{""Value"":""" + role + @"""}}}}}");
+
+    private static readonly JObject Rejected =
+        JObject.Parse(@"{""Call"":{""AuthenticationResponse"":{""PinError"":{""CallId"":{""Value"":""16""}}}}}");
+
+    [Fact]
+    public void A_Rejected_Pin_Is_An_Error_And_Never_A_Join()
+    {
+        // Webinar bench 2026-10-21, call 16: a host key at a PanelistPinOrAttendeePin prompt gave
+        // PinEntered (Host) then PinError 0.5 s later; the call stayed at the prompt. #42's handler
+        // reported "joined as Host" on PinEntered.
+        var flow = new WebexAuthentication.PinFlow();
+        flow.OnRequest("16", "PanelistPinOrAttendeePin").Should().BeNull();
+
+        flow.OnResponse(WebexAuthentication.ReadResponse(Entered("Host"))).Should().BeFalse();
+        flow.PendingRole.Should().Be("Host");
+        flow.OnResponse(WebexAuthentication.ReadResponse(Rejected)).Should().BeTrue("the PIN was rejected");
+        flow.PendingRole.Should().BeNull();
+
+        flow.OnRequest("16", "PanelistPinOrAttendeePin").Should().BeNull("still at the prompt");
+        flow.OnRequest("16", "None").Should().BeNull("hanging up clears the request, but nobody joined");
+    }
+
+    [Fact]
+    public void An_Accepted_Pin_Joins_When_The_Codec_Clears_The_Request()
+    {
+        // Webinar bench 2026-10-21, call 17: the panelist PIN gave PinEntered (Panelist), then 1.1 s
+        // later AuthenticationRequest None and the call Connected.
+        var flow = new WebexAuthentication.PinFlow();
+        flow.OnRequest("17", "None");
+        flow.OnRequest("17", "PanelistPinOrAttendeePin").Should().BeNull();
+        flow.Requested.Should().BeTrue();
+
+        flow.OnResponse(WebexAuthentication.ReadResponse(Entered("Panelist"))).Should().BeFalse();
+        flow.OnRequest("17", "None").Should().Be("Panelist");
+        flow.Requested.Should().BeFalse();
+        flow.OnRequest("17", "None").Should().BeNull("reported once");
+    }
 }

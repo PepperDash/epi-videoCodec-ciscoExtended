@@ -108,9 +108,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         // The codec call id of the call asking for a PIN (#111: was its list index, so every reply
         // targeted CallId 0 and the codec never admitted the call, which is also why #42's "joined as"
         // feedback never fired).
-        private string _authRequestedCallId = string.Empty;
-        private string _authRequestType = WebexAuthentication.None;
-        private bool _authRequested;
+        private readonly WebexAuthentication.PinFlow _flow = new WebexAuthentication.PinFlow();
+        private string _authRequestedCallId => _flow.CallId;
+        private string _authRequestType => _flow.RequestType;
+        private bool _authRequested => _flow.Requested;
         private string _hostPin;
         public readonly BoolFeedback AuthRequested;
         public readonly BoolFeedback WebinarPinRequested;
@@ -159,14 +160,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (request == null)
                 return;
 
-            _authRequestedCallId = request.Value.CallId;
-            _authRequestType = request.Value.RequestType;
-            _authRequested = WebexAuthentication.IsRequested(_authRequestType);
+            var joined = _flow.OnRequest(request.Value.CallId, request.Value.RequestType);
             _parent.LogInformation("Webex PIN request: call {callId} | {type}", _authRequestedCallId, _authRequestType);
             AuthRequestedCallInstance.FireUpdate();
             AuthRequestType.FireUpdate();
             AuthRequested.FireUpdate();
             WebinarPinRequested.FireUpdate();
+            if (joined != null)
+                OnJoined(joined);
+        }
+
+        private void OnJoined(string role)
+        {
+            switch (role)
+            {
+                case "Host": JoinedAsHost.Start(); break;
+                case "Guest": JoinedAsGuest.Start(); break;
+                case "Panelist": JoinedAsPanelist.Start(); break;
+                case "Attendee": JoinedAsAttendee.Start(); break;
+            }
+            _parent.LogInformation("Joined as {role} | call {callId}", role, _authRequestedCallId);
         }
 
         public void ParseAuthenticationResponse(JToken token)
@@ -176,19 +189,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return;
 
             _hostPin = string.Empty;
-            switch (result)
+            if (_flow.OnResponse(result))
             {
-                case "PinError":
-                    PinIncorrect.Start();
-                    _parent.LogError("Webex PIN error | call {callId}", _authRequestedCallId);
-                    return;
-                case "Host": JoinedAsHost.Start(); break;
-                case "Guest": JoinedAsGuest.Start(); break;
-                case "Panelist": JoinedAsPanelist.Start(); break;
-                case "Attendee": JoinedAsAttendee.Start(); break;
+                PinIncorrect.Start();
+                _parent.LogError("Webex PIN error | call {callId}", _authRequestedCallId);
+                return;
             }
-            _parent.LogInformation("Joined as {role} | call {callId}", result, _authRequestedCallId);
+            // Submitted only; "joined" is reported when the codec clears the request (PinFlow).
+            _parent.LogDebug("Webex PIN submitted as {role} | call {callId}", result, _authRequestedCallId);
         }
+
+        /// <summary>Sets the PIN the next JoinAs... sends, as the bridge's WebexSendPin serial does.</summary>
+        public void SetPin(string pin) => _hostPin = pin ?? string.Empty;
 
         private void Respond(string role, bool withPin)
         {

@@ -68,6 +68,48 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
+        /// Tracks one PIN prompt from request to outcome. <c>PinEntered</c> only means a PIN was
+        /// submitted: the codec follows it with <c>PinError</c> when the PIN is wrong, or clears the
+        /// call's AuthenticationRequest to <c>None</c> when it was accepted (~1 s later, with the call
+        /// going Connected). "Joined" is reported only then (#42: it fired on <c>PinEntered</c>, so a
+        /// rejected host key still showed as joined).
+        /// </summary>
+        public sealed class PinFlow
+        {
+            public string CallId { get; private set; } = string.Empty;
+            public string RequestType { get; private set; } = None;
+            /// <summary>The role of a PIN submitted and not yet accepted or rejected.</summary>
+            public string? PendingRole { get; private set; }
+            public bool Requested => IsRequested(RequestType);
+
+            /// <summary>A Status AuthenticationRequest. Returns the role that has now joined, or null.</summary>
+            public string? OnRequest(string callId, string requestType)
+            {
+                CallId = callId;
+                RequestType = requestType;
+                if (IsRequested(requestType) || PendingRole == null)
+                    return null;
+                var joined = PendingRole;
+                PendingRole = null;
+                return joined;
+            }
+
+            /// <summary>An AuthenticationResponse event (from <see cref="ReadResponse"/>). True when the PIN was rejected.</summary>
+            public bool OnResponse(string? result)
+            {
+                if (result == null)
+                    return false;
+                if (result == "PinError")
+                {
+                    PendingRole = null;
+                    return true;
+                }
+                PendingRole = result;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// The <c>AuthenticationResponse</c> command for a call and role, with the PIN when one is given.
         /// Host and Panelist need a PIN; Guest and Attendee may join without one.
         /// </summary>
