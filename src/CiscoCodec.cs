@@ -1014,10 +1014,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 
 			PresentationSourceFeedback = new IntFeedback(() => _presentationSource);
-			PresentationSendingLocalOnlyFeedback = new BoolFeedback(() => _presentationLocalOnly);
-			PresentationSendingLocalRemoteFeedback = new BoolFeedback(
-				() => _presentationLocalRemote
-			);
+			// While presenting, these show the codec's actual sending mode. While nothing is shared the
+			// codec reports Off, so they show the selected mode instead, so a panel can show the choice
+			// before presenting (#40).
+			PresentationSendingLocalOnlyFeedback = new BoolFeedback(() =>
+				_presentationActive ? _presentationLocalOnly : PresentationStates == eCodecPresentationStates.LocalOnly);
+			PresentationSendingLocalRemoteFeedback = new BoolFeedback(() =>
+				_presentationActive ? _presentationLocalRemote : PresentationStates == eCodecPresentationStates.LocalRemote);
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
 
@@ -2948,6 +2951,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			_presentationActive = state;
 			PresentationActiveFeedback.FireUpdate();
+			// The sending-mode feedbacks switch between actual and selected mode on this (#40).
+			FirePresentationSendingModeFeedback();
 			if (!state)
 			{
 				SetPresentationSource(0);
@@ -6498,6 +6503,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			PresentationStates = eCodecPresentationStates.LocalOnly;
 			if (_presentationActive)
 				StartSharing();
+			else
+				FirePresentationSendingModeFeedback();
 		}
 
 		public void SetPresentationLocalRemote()
@@ -6505,6 +6512,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			PresentationStates = eCodecPresentationStates.LocalRemote;
 			if (_presentationActive)
 				StartSharing();
+			else
+				FirePresentationSendingModeFeedback();
+		}
+
+		// Out of a presentation the feedbacks show the selected mode (#40).
+		private void FirePresentationSendingModeFeedback()
+		{
+			PresentationSendingLocalOnlyFeedback.FireUpdate();
+			PresentationSendingLocalRemoteFeedback.FireUpdate();
 		}
 
 		public void SetPresentationLocalRemoteToggle()
