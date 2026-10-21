@@ -49,7 +49,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             var property = base.CreateProperty(member, memberSerialization);
 
-            if (member.DeclaringType != null && _excluded.Contains(Key(member.DeclaringType, member.Name)))
+            // Delegates (ValueChangedAction) are wiring, not codec data. Writing one out follows its
+            // Target back into the model: a self-referencing loop (seen in Warm on the bench).
+            var isDelegate = property.PropertyType != null && typeof(Delegate).IsAssignableFrom(property.PropertyType);
+            if (isDelegate || (member.DeclaringType != null && _excluded.Contains(Key(member.DeclaringType, member.Name))))
             {
                 property.Ignored = true;
                 return property;

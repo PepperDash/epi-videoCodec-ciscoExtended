@@ -183,4 +183,26 @@ public class StateModelPopulateTests
         resolver.Warm<Model>().Should().BeNull();
         resolver.Warm<ThrowsOnRead>().Should().NotBeNull();
     }
+
+    // Like CiscoCodecStatus.SystemUnitSoftware: the constructor wires an action that captures `this`.
+    private sealed class WiresItself
+    {
+        public WiresItself() => DisplayName.ValueChangedAction = () => Version = DisplayName.Raw;
+        public Value DisplayName { get; set; } = new();
+        public string? Version { get; private set; }
+    }
+
+    [Fact]
+    public void Wiring_Is_Not_Codec_Data_So_A_Self_Wired_Model_Warms_And_Keeps_Its_Action()
+    {
+        // On the bench, Warm serialized ValueChangedAction, followed its Target back into the model
+        // and failed with "Self referencing loop detected" on every program start.
+        var resolver = new StateModelContractResolver();
+        resolver.Warm<WiresItself>().Should().BeNull();
+
+        var model = new WiresItself();
+        CodecJson.PopulateFromToken(JToken.Parse(@"{ ""DisplayName"": { ""Value"": ""ce 26.10"" } }"), model, resolver.Settings);
+
+        model.Version.Should().Be("ce 26.10", "the constructor's wiring survives a populate");
+    }
 }

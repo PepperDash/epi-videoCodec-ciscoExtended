@@ -708,6 +708,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		});
 		private static readonly JsonSerializerSettings ModelSettings = ModelResolver.Settings;
 		private static int _modelPrepared;
+		private static double _modelWarmupMs = -1;
 
 		// When the line being processed arrived from the transport, when the JSON message being
 		// accumulated started, and (while one is being parsed) when that message started (#129).
@@ -2297,7 +2298,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return string.Format(
 				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
 					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8} FullStatus={12}\r\n"
-					+ "Model values (all codecs): notified={10} unchanged={11}\r\n"
+					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
@@ -2305,7 +2306,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
 				Timings.FormatTable(),
 				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount,
-				sync.FullStatusWasReceived
+				sync.FullStatusWasReceived, _modelWarmupMs
 			);
 		}
 
@@ -4196,14 +4197,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			System.Threading.ThreadPool.QueueUserWorkItem(_ =>
 			{
-				var started = CodecTimings.Now;
-				var failed = ModelResolver.Warm<CiscoCodecStatus.Status>()
-					?? ModelResolver.Warm<CiscoCodecConfiguration.Configuration>();
-				Timings.RecordSince("model.warmup", started);
-				if (failed != null)
-					this.LogWarning("Preparing the codec state model failed (first documents will be slower): {message}", failed.Message);
-				else
-					this.LogDebug("Codec state model prepared");
+				var watch = System.Diagnostics.Stopwatch.StartNew();
+				var statusFailed = ModelResolver.Warm<CiscoCodecStatus.Status>();
+				var configurationFailed = ModelResolver.Warm<CiscoCodecConfiguration.Configuration>();
+				_modelWarmupMs = watch.Elapsed.TotalMilliseconds;
+				foreach (var failed in new[] { statusFailed, configurationFailed })
+					if (failed != null)
+						this.LogWarning("Preparing the codec state model failed (first documents will be slower): {message}", failed.Message);
+				this.LogDebug("Codec state model prepared in {ms} ms", Math.Round(_modelWarmupMs));
 			});
 		}
 
