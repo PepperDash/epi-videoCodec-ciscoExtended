@@ -1622,12 +1622,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CodecStatus.Status.RoomAnalytics.PeopleCount.CurrentPeopleCount.ValueChangedAction =
 				PeopleCountFeedback.FireUpdate;
 
+			// One action for both jobs: a second "=" assignment below used to replace this one, so
+			// CurrentLayoutChanged was never raised from a layout change (#145).
 			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
 			{
-				this.LogVerbose("CurrentLayout = {layout}", CurrentLayout);
-				OnCurrentLayoutChanged(
-					CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value
-				);
+				var activeLayout = CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value;
+				this.LogVerbose("ActiveLayout = {layout}", activeLayout);
+				OnCurrentLayoutChanged(activeLayout);
+				LocalLayoutFeedback.FireUpdate();
 			};
 
 			CodecStatus.Status.Video.Selfview.SelfViewMode.ValueChangedAction =
@@ -1635,9 +1637,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CodecStatus.Status.Video.Selfview.PipPosition.ValueChangedAction =
 				ComputeSelfviewPipStatus;
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction =
-				LocalLayoutFeedback.FireUpdate;
 
 			CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction =
 				ComputeLegacyLayout;
@@ -2750,14 +2749,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void ClearLayouts()
 		{
-			var nullLayout = new CiscoCodecStatus.CurrentLayouts()
-			{
-				AvailableLayouts = new List<CiscoCodecStatus.LayoutData>(),
-				AvailableLayoutsCount = new CiscoCodecStatus.AvailableLayoutsCount() { Value = 0 },
-				ActiveLayout = new CiscoCodecStatus.ActiveLayout() { Value = "" }
-			};
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts = nullLayout;
+			// Reset the existing object rather than replace it: a new CurrentLayouts dropped the
+			// ActiveLayout action wired in SetFeedbackActions after the first presentation stop (#145).
+			var currentLayouts = CodecStatus.Status.Video.Layout.CurrentLayouts;
+			currentLayouts.AvailableLayouts = new List<CiscoCodecStatus.LayoutData>();
+			currentLayouts.ActiveLayout.Value = "";
 
 			AvailableLayouts = new List<CodecCommandWithLabel>();
 			AvailableLayoutsFeedback.FireUpdate();
