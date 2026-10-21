@@ -797,6 +797,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CTimer BookingsRefreshTimer;
 		private CTimer PhonebookRefreshTimer;
 
+		// The start-up search waits for the phonebook sync instead of overlapping it (#109). 1 while it
+		// is waiting; the fallback timer runs it anyway if the phonebook sync never completes.
+		private int _startupSearchPending;
+		private CTimer _startupSearchFallback;
+		private const long StartupSearchFallbackMs = 30000;
+
 		// **___________________________________________________________________**
 
 		//public RoutingInputPort CodecOsdIn { get; private set; }
@@ -1251,6 +1257,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ReplaceTimer(ref PhonebookRefreshTimer, null);
 			ReplaceTimer(ref BookingsRefreshTimer, null);
 			ReplaceTimer(ref _registrationCheckTimer, null);
+			ReplaceTimer(ref _startupSearchFallback, null);
 		}
 
 		// Guards every create/replace/stop/reset of the refresh timers, which happen on the socket
@@ -1886,6 +1893,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
 		{
 			this.LogVerbose("Phonebook Initial Sync Completed");
+			RunStartupSearch("the phonebook sync completed");
 			if (DirectoryRoot == null)
 				return;
 			OnDirectoryResultReturned(DirectoryRoot);
@@ -2074,7 +2082,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
-				SearchDirectory("");
+				// Sent once the phonebook sync below (folders, then root contacts) completes, not alongside
+				// it: against a large corporate directory the overlapping blank search timed out on every
+				// restart (#109, Codec Pro bench), while the same search on its own succeeds.
+				System.Threading.Interlocked.Exchange(ref _startupSearchPending, 1);
+				ReplaceTimer(ref _startupSearchFallback, new CTimer(_ =>
+					_receiveQueue.Enqueue(new ProcessStringMessage("startup-search",
+						__ => RunStartupSearch("the phonebook sync did not complete in time"))),
+					StartupSearchFallbackMs));
 			}
 
 			if (ActiveCalls.Count < 1)
@@ -5527,6 +5542,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					PhonebookRefreshTimer?.Reset(3600000, 3600000);
 				}
 			}
+		}
+
+		/// <summary>Sends the start-up search once, when it is waiting (#109).</summary>
+		private void RunStartupSearch(string reason)
+		{
+			if (System.Threading.Interlocked.Exchange(ref _startupSearchPending, 0) == 0)
+				return;
+			ReplaceTimer(ref _startupSearchFallback, null);
+			this.LogDebug("Sending the start-up phonebook search: {reason}", reason);
+			SearchDirectory("");
 		}
 
 		public void GetPhonebook(string command)
