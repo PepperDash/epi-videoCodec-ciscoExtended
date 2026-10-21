@@ -1622,12 +1622,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CodecStatus.Status.RoomAnalytics.PeopleCount.CurrentPeopleCount.ValueChangedAction =
 				PeopleCountFeedback.FireUpdate;
 
+			// One action for both jobs: a second "=" assignment below used to replace this one, so
+			// CurrentLayoutChanged was never raised from a layout change (#145).
 			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
 			{
-				this.LogVerbose("CurrentLayout = {layout}", CurrentLayout);
-				OnCurrentLayoutChanged(
-					CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value
-				);
+				// Layouts are only exposed while presenting (ParseLayoutToken clears them otherwise).
+				if (!_IsInPresentation)
+					return;
+				var activeLayout = CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value;
+				this.LogVerbose("ActiveLayout = {layout}", activeLayout);
+				OnCurrentLayoutChanged(activeLayout);
+				LocalLayoutFeedback.FireUpdate();
 			};
 
 			CodecStatus.Status.Video.Selfview.SelfViewMode.ValueChangedAction =
@@ -1635,9 +1640,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CodecStatus.Status.Video.Selfview.PipPosition.ValueChangedAction =
 				ComputeSelfviewPipStatus;
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction =
-				LocalLayoutFeedback.FireUpdate;
 
 			CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction =
 				ComputeLegacyLayout;
@@ -2824,14 +2826,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void ClearLayouts()
 		{
-			var nullLayout = new CiscoCodecStatus.CurrentLayouts()
-			{
-				AvailableLayouts = new List<CiscoCodecStatus.LayoutData>(),
-				AvailableLayoutsCount = new CiscoCodecStatus.AvailableLayoutsCount() { Value = 0 },
-				ActiveLayout = new CiscoCodecStatus.ActiveLayout() { Value = "" }
-			};
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts = nullLayout;
+			// Clears the plugin's layout state only. The status model mirrors the codec (stage 6d) and is
+			// left alone: replacing its CurrentLayouts dropped the ActiveLayout action wired in
+			// SetFeedbackActions (#145), and resetting its values fought the next status update.
 
 			AvailableLayouts = new List<CodecCommandWithLabel>();
 			AvailableLayoutsFeedback.FireUpdate();
