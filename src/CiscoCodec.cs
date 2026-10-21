@@ -2343,7 +2343,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 			});
 			_dispatcher.On("Configuration", (token, _) => ParseConfigurationObject(token));
-			_dispatcher.On("Event", (token, _) => ParseEventObject(token));
+			// Events are one-off notices, not state: each area has its own handler (#129, stage 6b).
+			_dispatcher.On("Event/CallDisconnect", (token, _) => OnCallDisconnectEvent(token));
+			_dispatcher.On("Event/Bookings", (token, _) => GetBookings(null));
+			_dispatcher.On("Event/UserInterface", (token, _) => OnUserInterfaceEvent(token));
+			_dispatcher.On("Event/Conference", (token, _) => WebexPinRequestHandler.ParseAuthenticationResponse(token));
 			_dispatcher.On("CommandResponse", (token, message) => ParseCommandResponseObject(token, message.ResultId));
 			_dispatcher.HandlerFailed += (path, ex) =>
 			{
@@ -5061,53 +5065,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParseEventObject(JToken eventToken)
+		private void OnCallDisconnectEvent(JToken callDisconnectToken)
 		{
-			if (
-				eventToken == null
-				|| (eventToken.Type == JTokenType.Object && !eventToken.HasValues)
-			)
-			{
-				return;
-			}
+			var callDisconnect = new CiscoCodecEvents.CallDisconnect();
+			CodecJson.PopulateFromToken(callDisconnectToken, callDisconnect);
+			EvalutateDisconnectEvent(callDisconnect);
+		}
 
-			try
-			{
-				var codecEvent = new CiscoCodecEvents.EventObject();
-				var bookingsEvent = eventToken.SelectToken("Bookings");
-				//var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
-				var userInterfaceEvent = eventToken.SelectToken("UserInterface");
-				var conferenceEvent = eventToken.SelectToken("Conference");
-
-				if (codecEvent.CallDisconnect != null)
-				{
-					PopulateObjectWithToken(
-						eventToken,
-						"CallDisconnect",
-						codecEvent.CallDisconnect
-					);
-					EvalutateDisconnectEvent(codecEvent);
-				}
-				if (bookingsEvent != null)
-				{
-					GetBookings(null);
-				}
-				if (userInterfaceEvent != null)
-				{
-					PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
-
-					ParseUserInterfaceEvent(codecEvent.UserInterface);
-				}
-				if (conferenceEvent != null)
-				{
-					WebexPinRequestHandler.ParseAuthenticationResponse(conferenceEvent);
-				}
-			}
-			catch (Exception ex)
-			{
-				this.LogError("Exception parsing event: {message}", ex.Message);
-				this.LogVerbose(ex, "Exception");
-			}
+		private void OnUserInterfaceEvent(JToken userInterfaceToken)
+		{
+			var userInterface = new CiscoCodecEvents.UserInterface();
+			CodecJson.PopulateFromToken(userInterfaceToken, userInterface);
+			ParseUserInterfaceEvent(userInterface);
 		}
 
 		private void ParseCallHistoryResponseToken(JToken callHistoryResponseToken)
@@ -5484,16 +5453,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private void EvalutateDisconnectEvent(CiscoCodecEvents.EventObject eventReceived)
+		private void EvalutateDisconnectEvent(CiscoCodecEvents.CallDisconnect callDisconnect)
 		{
-			if (
-				eventReceived == null
-				|| eventReceived.CallDisconnect == null
-				|| eventReceived.CallDisconnect.CallId == null
-			)
+			if (callDisconnect?.CallId == null)
 				return;
 			var tempActiveCall = ActiveCalls.FirstOrDefault(c =>
-				c.Id.Equals(eventReceived.CallDisconnect.CallId.Value)
+				c.Id.Equals(callDisconnect.CallId.Value)
 			);
 
 			if (tempActiveCall == null)
