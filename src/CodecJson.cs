@@ -42,6 +42,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
+        /// A codec timestamp as local time. RoomOS sends times in UTC (<c>2026-10-21T18:00:00Z</c>), which
+        /// deserialize as <see cref="DateTimeKind.Utc"/>; used as-is they show at the UTC clock time and
+        /// compare wrongly with <see cref="DateTime.Now"/> (#139). Local and unspecified times are
+        /// returned unchanged.
+        /// </summary>
+        public static DateTime ToLocal(DateTime codecTime) =>
+            codecTime.Kind == DateTimeKind.Utc ? codecTime.ToLocalTime() : codecTime;
+
+        /// <summary>
         /// The message's top-level <c>ResultId</c> (the request's <c>| resultId="…"</c>), or an empty
         /// GUID when it has none, which is most messages. No exception on the common path.
         /// </summary>

@@ -191,4 +191,31 @@ public class CodecJsonTests
         act1.Should().Throw<ArgumentNullException>();
         act2.Should().Throw<ArgumentNullException>();
     }
+
+    private sealed class BookingTime { public DateTime Value { get; set; } }
+
+    [Fact]
+    public void Booking_Times_From_The_Codec_Are_Utc_And_Are_Shown_In_Local_Time()
+    {
+        // #139: the codec sends "2026-10-21T18:00:00Z". Read through the parse path it is a UTC
+        // DateTime; used as-is, meetings showed at the UTC clock time (4 h off in Eastern time).
+        var time = new BookingTime();
+        CodecJson.PopulateFromToken(JToken.Parse(@"{ ""Value"": ""2026-10-21T18:00:00Z"" }"), time);
+
+        time.Value.Kind.Should().Be(DateTimeKind.Utc);
+        var local = CodecJson.ToLocal(time.Value);
+        local.Kind.Should().Be(DateTimeKind.Local);
+        local.Should().Be(new DateTime(2026, 10, 21, 18, 0, 0, DateTimeKind.Utc).ToLocalTime());
+    }
+
+    [Fact]
+    public void Local_And_Unspecified_Times_Are_Left_Alone()
+    {
+        var local = new DateTime(2026, 10, 21, 14, 0, 0, DateTimeKind.Local);
+        var unspecified = new DateTime(2026, 10, 21, 14, 0, 0, DateTimeKind.Unspecified);
+
+        CodecJson.ToLocal(local).Should().Be(local);
+        CodecJson.ToLocal(unspecified).Should().Be(unspecified);
+        CodecJson.ToLocal(unspecified).Kind.Should().Be(DateTimeKind.Unspecified);
+    }
 }

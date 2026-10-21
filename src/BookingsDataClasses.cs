@@ -372,9 +372,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 if (b.Time == null) continue;
 
-                meeting.StartTime = b.Time.StartTime.Value;
+                // The codec sends UTC; meetings are shown and compared in local time (#139).
+                meeting.StartTime = CodecJson.ToLocal(b.Time.StartTime.Value);
                 meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
-                meeting.EndTime = b.Time.EndTime.Value;
+                meeting.EndTime = CodecJson.ToLocal(b.Time.EndTime.Value);
 
                 if (meeting.EndTime <= DateTime.Now) continue;
 
