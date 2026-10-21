@@ -105,12 +105,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private readonly IBasicCommunication _coms;
         private readonly GenericQueue _handler;
 
-        private int _authRequestedCallInstance;
+        // The codec call id of the call asking for a PIN (#111: was its list index, so every reply
+        // targeted CallId 0 and the codec never admitted the call, which is also why #42's "joined as"
+        // feedback never fired).
+        private string _authRequestedCallId = string.Empty;
+        private string _authRequestType = WebexAuthentication.None;
         private bool _authRequested;
         private string _hostPin;
         public readonly BoolFeedback AuthRequested;
+        public readonly BoolFeedback WebinarPinRequested;
+        public readonly StringFeedback AuthRequestType;
         public readonly BoolFeedbackPulse JoinedAsGuest;
         public readonly BoolFeedbackPulse JoinedAsHost;
+        public readonly BoolFeedbackPulse JoinedAsPanelist;
+        public readonly BoolFeedbackPulse JoinedAsAttendee;
         public readonly BoolFeedbackPulse PinIncorrect;
         public readonly IntFeedback AuthRequestedCallInstance;
 
@@ -120,10 +128,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _coms = coms;
             _handler = handler;
             AuthRequested = new BoolFeedback(() => _authRequested);
+            WebinarPinRequested = new BoolFeedback(() => _authRequested && WebexAuthentication.IsWebinar(_authRequestType));
+            AuthRequestType = new StringFeedback(() => _authRequested ? _authRequestType : string.Empty);
             JoinedAsGuest = new BoolFeedbackPulse(25, true);
             JoinedAsHost = new BoolFeedbackPulse(25, true);
+            JoinedAsPanelist = new BoolFeedbackPulse(25, true);
+            JoinedAsAttendee = new BoolFeedbackPulse(25, true);
             PinIncorrect = new BoolFeedbackPulse(25, true);
-            AuthRequestedCallInstance = new IntFeedback(() => _authRequestedCallInstance);
+            AuthRequestedCallInstance = new IntFeedback(() => int.TryParse(_authRequestedCallId, out var id) ? id : 0);
         }
 
         class ProcessActionMethod : IQueueMessage
@@ -143,72 +155,60 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void ParseAuthenticationRequest(JToken token)
         {
-            var request = token.ToObject<AuthenticationRequestObject>();
-            if (request.Call == null)
+            var request = WebexAuthentication.ReadRequest(token);
+            if (request == null)
                 return;
 
-            var authRequest = request.Call.FirstOrDefault(x => x.AuthenticationRequest != null);
-            if (authRequest != null)
-            {
-                _authRequested = authRequest.AuthenticationRequest.Value != "None";
-                _authRequestedCallInstance = request.Call.IndexOf(authRequest);
-                _parent.LogInformation("Auth Requested Call Instance: {instance} | {value}", _authRequestedCallInstance,
-                    authRequest.AuthenticationRequest.Value);
-                AuthRequestedCallInstance.FireUpdate();
-                AuthRequested.FireUpdate();
-            }
+            _authRequestedCallId = request.Value.CallId;
+            _authRequestType = request.Value.RequestType;
+            _authRequested = WebexAuthentication.IsRequested(_authRequestType);
+            _parent.LogInformation("Webex PIN request: call {callId} | {type}", _authRequestedCallId, _authRequestType);
+            AuthRequestedCallInstance.FireUpdate();
+            AuthRequestType.FireUpdate();
+            AuthRequested.FireUpdate();
+            WebinarPinRequested.FireUpdate();
         }
 
         public void ParseAuthenticationResponse(JToken token)
         {
-            var request = token.ToObject<AuthenticationResponseObject>();
-            if (request.Call == null || request.Call.AuthenticationResponse == null)
+            var result = WebexAuthentication.ReadResponse(token);
+            if (result == null)
                 return;
 
-            var pinEntered = request.Call.AuthenticationResponse.PinEntered;
-
-            if (pinEntered != null)
+            _hostPin = string.Empty;
+            switch (result)
             {
-                var role = request.Call.AuthenticationResponse.PinEntered.ParticipantRole.Value;
-                if (!string.IsNullOrEmpty(role) && role == "Guest")
-                {
-                    JoinedAsGuest.Start();
-                    _hostPin = string.Empty;
-                    _parent.LogInformation("Joined as {instance} | {role}", _authRequestedCallInstance, role);
+                case "PinError":
+                    PinIncorrect.Start();
+                    _parent.LogError("Webex PIN error | call {callId}", _authRequestedCallId);
                     return;
-                }
-
-                if (!string.IsNullOrEmpty(role) && role == "Host")
-                {
-                    JoinedAsHost.Start();
-                    _hostPin = string.Empty;
-                    _parent.LogInformation("Joined as {instance} | {role}", _authRequestedCallInstance, role);
-                    return;
-                }
+                case "Host": JoinedAsHost.Start(); break;
+                case "Guest": JoinedAsGuest.Start(); break;
+                case "Panelist": JoinedAsPanelist.Start(); break;
+                case "Attendee": JoinedAsAttendee.Start(); break;
             }
+            _parent.LogInformation("Joined as {role} | call {callId}", result, _authRequestedCallId);
+        }
 
-            var pinError = request.Call.AuthenticationResponse.PinError;
-            if (pinError != null)
+        private void Respond(string role, bool withPin)
+        {
+            if (string.IsNullOrEmpty(_authRequestedCallId))
             {
-                PinIncorrect.Start();
-                _hostPin = string.Empty;
-                _parent.LogError("Pin error | {instance}", _authRequestedCallInstance);
+                _parent.LogWarning("Webex PIN: no call is asking for a PIN; not sending {role}", role);
+                return;
             }
+            _parent.SendText(WebexAuthentication.ResponseCommand(_authRequestedCallId, role, withPin ? _hostPin : null));
         }
 
-        public void JoinAsGuest()
-        {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Guest{1}";
-            var command = string.Format(commandFormat, _authRequestedCallInstance, string.IsNullOrEmpty(_hostPin) ? string.Empty : string.Format(" Pin: {0}#", _hostPin));
-            _parent.SendText(command);
-        }
+        public void JoinAsGuest() => Respond("Guest", true);
 
-        public void JoinAsHost()
-        {
-            const string commandFormat = "xCommand Conference Call AuthenticationResponse CallId: {0} ParticipantRole: Host Pin: {1}#";
-            var command = string.Format(commandFormat, _authRequestedCallInstance, _hostPin);
-            _parent.SendText(command);
-        }
+        public void JoinAsHost() => Respond("Host", true);
+
+        /// <summary>Webinar: joins as a panelist with the PIN set on WebexSendPin (#111).</summary>
+        public void JoinAsPanelist() => Respond("Panelist", true);
+
+        /// <summary>Webinar: joins as an attendee, with the PIN when one was set (#111).</summary>
+        public void JoinAsAttendee() => Respond("Attendee", true);
 
         public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
         {
@@ -216,10 +216,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             trilist.SetSigTrueAction(joinMap.WebexPinClear.JoinNumber, () => _hostPin = string.Empty);
             trilist.SetSigTrueAction(joinMap.WebexSendPin.JoinNumber, JoinAsHost);
             trilist.SetSigTrueAction(joinMap.WebexJoinAsGuest.JoinNumber, JoinAsGuest);
+            trilist.SetSigTrueAction(joinMap.WebexJoinAsPanelist.JoinNumber, JoinAsPanelist);
+            trilist.SetSigTrueAction(joinMap.WebexJoinAsAttendee.JoinNumber, JoinAsAttendee);
 
             AuthRequested.LinkInputSig(trilist.BooleanInput[joinMap.WebexPinRequested.JoinNumber]);
+            WebinarPinRequested.LinkInputSig(trilist.BooleanInput[joinMap.WebexWebinarPinRequested.JoinNumber]);
+            AuthRequestType.LinkInputSig(trilist.StringInput[joinMap.WebexPinRequestType.JoinNumber]);
             JoinedAsGuest.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsGuest.JoinNumber]);
             JoinedAsHost.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsHost.JoinNumber]);
+            JoinedAsPanelist.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsPanelist.JoinNumber]);
+            JoinedAsAttendee.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexJoinedAsAttendee.JoinNumber]);
             PinIncorrect.Feedback.LinkInputSig(trilist.BooleanInput[joinMap.WebexPinError.JoinNumber]);
         }
     }

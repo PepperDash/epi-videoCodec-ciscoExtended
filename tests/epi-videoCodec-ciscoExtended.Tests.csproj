@@ -29,7 +29,8 @@
     <Compile Include="..\src\Dispatch\XapiRequestTracker.cs" Link="Linked\XapiRequestTracker.cs" />
     <Compile Include="..\src\Model\ValueProperty.cs" Link="Linked\ValueProperty.cs" />
     <Compile Include="..\src\Model\IdKeyedListConverter.cs" Link="Linked\IdKeyedListConverter.cs" />
-    <Compile Include="..\src\Model\StateModelContractResolver.cs" Link="Linked\StateModelContractResolver.cs" />  </ItemGroup>
+    <Compile Include="..\src\Model\StateModelContractResolver.cs" Link="Linked\StateModelContractResolver.cs" />
+    <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />  </ItemGroup>
 
   <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
