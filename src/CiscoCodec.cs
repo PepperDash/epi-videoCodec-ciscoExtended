@@ -1661,18 +1661,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					PresenterTrackFeedbackGroup.FireUpdate();
 					CameraAutoModeIsOnFeedback.FireUpdate();
 				};
+			// Availability is set by ParseSpeakerTrackToken / ParsePresenterTrackToken, which run after the
+			// model populate that fires these, so the capabilities are updated there (#117).
 			CodecStatus.Status.Cameras.SpeakerTrack.Availability.ValueChangedAction += () =>
 			{
 				SpeakerTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
-				OnCameraTrackingCapabilitiesChanged();
 			};
 			CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction += () =>
 			{
-				PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
 				PresenterTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
-				OnCameraTrackingCapabilitiesChanged();
 			};
 
 			#endregion
@@ -1839,7 +1838,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 
 			PhonebookSyncState.InitialSyncCompleted += PhonebookSyncState_InitialSyncCompleted;
-			CameraTrackingCapabilitiesChanged += CiscoCodec_CameraTrackingCapabilitiesChanged;
 
 			//Reserved for future use
 			CodecSchedule.MeetingsListHasChanged += (sender, args) => { };
@@ -1859,17 +1857,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			mc.AddDeviceMessenger(presenterTrackMessenger);
 
 			return base.CustomActivate();
-		}
-
-		private void CiscoCodec_CameraTrackingCapabilitiesChanged(
-			object sender,
-			CameraTrackingCapabilitiesArgs e
-		)
-		{
-			if (e == null)
-				return;
-			CameraTrackingCapabilities = e.CameraTrackingCapabilites;
-			SupportsCameraAutoMode = CameraTrackingCapabilities != eCameraTrackingCapabilities.None;
 		}
 
 		private void CiscoCodec_AvailableLayoutsChanged(
@@ -3306,6 +3293,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
 
 				UpdateCameraAutoModeFeedbacks();
+				UpdateCameraTrackingCapabilities();
 			}
 			catch (Exception e)
 			{
@@ -3351,6 +3339,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					}
 				}
 				UpdateCameraAutoModeFeedbacks();
+				UpdateCameraTrackingCapabilities();
 			}
 			catch (Exception e)
 			{
@@ -4399,11 +4388,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
 				var isWebViewError = xPath != null && xPath.StartsWith(UserInterface.WebView.WebViewDisplay.xStatusPath);
+				// Models without SpeakerTrack or PresenterTrack answer "No match on address expression" (#117).
+				var isUnsupportedTrackingError = xPath != null
+					&& (xPath.StartsWith("Status/Cameras/PresenterTrack") || xPath.StartsWith("Status/Cameras/SpeakerTrack"));
 
 				UiExtensionsHandler?.ParseErrorStatus(statusToken);
 
 				if (isWebViewError)
 					this.LogDebug("WebView Status Error (expected when no WebView active): {error}", statusToken.ToString());
+				else if (isUnsupportedTrackingError)
+					this.LogDebug("Camera tracking not supported on this model: {error}", statusToken.ToString());
 				else
 					this.LogError("Error in Status Response: {error}", statusToken.ToString());
 
@@ -6651,18 +6645,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private void OnCameraTrackingCapabilitiesChanged()
+		/// <summary>
+		/// Sets CameraTrackingCapabilities and SupportsCameraAutoMode from the parsed availability and
+		/// raises CameraTrackingCapabilitiesChanged when they change (#117).
+		/// </summary>
+		private void UpdateCameraTrackingCapabilities()
 		{
-			var handler = CameraTrackingCapabilitiesChanged;
-			if (handler == null)
+			var args = new CameraTrackingCapabilitiesArgs(SpeakerTrackAvailability, PresenterTrackAvailability);
+			if (args.CameraTrackingCapabilites == CameraTrackingCapabilities)
 				return;
-			handler(
-				this,
-				new CameraTrackingCapabilitiesArgs(
-					SpeakerTrackAvailableFeedbackFunc,
-					PresenterTrackAvailableFeedbackFunc
-				)
-			);
+
+			CameraTrackingCapabilities = args.CameraTrackingCapabilites;
+			SupportsCameraAutoMode = CameraTrackingCapabilities != eCameraTrackingCapabilities.None;
+			this.LogInformation("Camera tracking capabilities: {capabilities}", CameraTrackingCapabilities);
+
+			CameraTrackingCapabilitiesChanged?.Invoke(this, args);
 		}
 
 		private void OnCurrentLayoutChanged(string currentLayout)
