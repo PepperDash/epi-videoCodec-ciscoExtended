@@ -71,24 +71,77 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
-        /// Builds the contracts and property accessors for <typeparamref name="T"/>'s whole tree, by
-        /// writing out a new instance and populating another from it, so the first codec document
-        /// isn't slowed by that one-off work. Best effort: failures are returned, not thrown.
+        /// Builds the contracts, creators and property accessors for <typeparamref name="T"/>'s whole
+        /// type tree, so the first codec document isn't slowed by that one-off work (~0.5–1 s on a
+        /// 4-series processor). Returns the first contract that could not be built, or null.
         /// </summary>
-        public Exception? Warm<T>() where T : new()
+        /// <remarks>
+        /// Walks the types rather than round-tripping a default instance: a default model is full of
+        /// nulls, and some of its getters and setters throw on them, which stopped a round trip at the
+        /// first one (seen on the bench). Each accessor is called once on a throwaway instance; its
+        /// delegate is compiled before the call, so an accessor that throws is still prepared.
+        /// <see cref="ValueProperty"/> actions don't run while warming.
+        /// </remarks>
+        public Exception? Warm<T>() => Warm(typeof(T));
+
+        /// <inheritdoc cref="Warm{T}"/>
+        public Exception? Warm(Type root)
         {
-            try
+            Exception? failure = null;
+            var seen = new HashSet<Type>();
+            var pending = new Stack<Type>();
+            pending.Push(root);
+
+            ValueProperty.WithoutActions(() =>
             {
-                var serializer = JsonSerializer.Create(Settings);
-                var sample = JObject.FromObject(new T(), serializer);
-                using (var reader = sample.CreateReader())
-                    serializer.Populate(reader, new T());
-                return null;
-            }
-            catch (Exception ex)
-            {
-                return ex;
-            }
+                while (pending.Count > 0)
+                {
+                    var type = pending.Pop();
+                    if (!seen.Add(type))
+                        continue;
+
+                    JsonContract contract;
+                    try
+                    {
+                        contract = ResolveContract(type);
+                    }
+                    catch (Exception ex)
+                    {
+                        failure ??= ex;
+                        continue;
+                    }
+
+                    if (contract is JsonArrayContract array && array.CollectionItemType != null)
+                    {
+                        pending.Push(array.CollectionItemType);
+                        continue;
+                    }
+
+                    if (!(contract is JsonObjectContract obj))
+                        continue;
+
+                    object? sample = null;
+                    try { sample = obj.DefaultCreator?.Invoke(); }
+                    catch { /* a constructor that needs data; its properties are still walked */ }
+
+                    foreach (var property in obj.Properties)
+                    {
+                        if (property.Ignored || property.PropertyType == null)
+                            continue;
+                        pending.Push(property.PropertyType);
+                        if (sample == null || property.ValueProvider == null)
+                            continue;
+
+                        object? value = null;
+                        if (property.Readable)
+                            try { value = property.ValueProvider.GetValue(sample); } catch { /* prepared anyway */ }
+                        if (property.Writable)
+                            try { property.ValueProvider.SetValue(sample, value); } catch { /* prepared anyway */ }
+                    }
+                }
+            });
+
+            return failure;
         }
 
         private static string Key(Type declaringType, string property) => declaringType.FullName + "." + property;

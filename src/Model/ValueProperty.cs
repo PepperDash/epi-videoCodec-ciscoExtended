@@ -22,6 +22,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private static long _notified;
         private static long _unchanged;
 
+        [ThreadStatic] private static int _actionsSuppressed;
+
         private bool _hasValue;
         private object? _lastValue;
 
@@ -48,9 +50,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Interlocked.Exchange(ref _unchanged, 0);
         }
 
+        /// <summary>
+        /// Runs <paramref name="body"/> with no actions run and nothing counted for values set on this
+        /// thread. For preparing the model on throwaway instances (<see cref="StateModelContractResolver.Warm"/>).
+        /// </summary>
+        public static void WithoutActions(Action body)
+        {
+            _actionsSuppressed++;
+            try
+            {
+                body();
+            }
+            finally
+            {
+                _actionsSuppressed--;
+            }
+        }
+
         /// <summary>Runs the action every time. For event values.</summary>
         protected void OnValueChanged()
         {
+            if (_actionsSuppressed > 0)
+                return;
             var action = ValueChangedAction;
             if (action != null)
                 Run(action);
@@ -62,6 +83,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         protected void OnValueChanged(object? newValue)
         {
+            if (_actionsSuppressed > 0)
+                return;
             var unchanged = _hasValue && Equals(_lastValue, newValue);
             _hasValue = true;
             _lastValue = newValue;

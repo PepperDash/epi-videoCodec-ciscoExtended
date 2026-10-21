@@ -175,13 +175,49 @@ public class StateModelPopulateTests
         public string Bad => throw new InvalidOperationException("getter");
     }
 
-    [Fact]
-    public void Warm_Prepares_The_Model_And_Reports_Failures_Instead_Of_Throwing()
+    private sealed class ThrowsOnWrite : ValueProperty
     {
+        public string? Value { set => OnValueChanged(value!.ToLowerInvariant()); } // like Availability
+    }
+
+    private sealed class NullUnsafe
+    {
+        public ThrowsOnRead Read { get; set; } = new();
+        public ThrowsOnWrite Write { get; set; } = new();
+        public Model After { get; set; } = new();
+    }
+
+    [Fact]
+    public void Warm_Walks_Past_Accessors_That_Throw_On_Default_Values()
+    {
+        // On the bench, a round trip of a default model stopped at Availability.Value's setter and
+        // RingVolume.Volume's getter, both of which throw on null.
         var resolver = new StateModelContractResolver();
 
+        ((Func<Exception?>)(() => resolver.Warm<NullUnsafe>())).Should().NotThrow()
+            .Which.Should().BeNull("accessor exceptions on throwaway instances are expected");
         resolver.Warm<Model>().Should().BeNull();
-        resolver.Warm<ThrowsOnRead>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Warm_Runs_No_Actions_And_Counts_Nothing()
+    {
+        ValueProperty.ResetCounts();
+        var failures = 0;
+        void OnFailed(ValueProperty _, Exception __) => failures++;
+        ValueProperty.ActionFailed += OnFailed;
+        try
+        {
+            new StateModelContractResolver().Warm<WiresItself>().Should().BeNull();
+        }
+        finally
+        {
+            ValueProperty.ActionFailed -= OnFailed;
+        }
+
+        failures.Should().Be(0);
+        ValueProperty.NotifiedCount.Should().Be(0);
+        ValueProperty.UnchangedCount.Should().Be(0);
     }
 
     // Like CiscoCodecStatus.SystemUnitSoftware: the constructor wires an action that captures `this`.
