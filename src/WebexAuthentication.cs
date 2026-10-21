@@ -20,8 +20,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         public const string None = "None";
 
-        /// <summary>The roles the codec accepts in an AuthenticationResponse.</summary>
+        /// <summary>
+        /// The roles the plugin offers. The codec's AuthenticationResponse accepts only Host, Guest and
+        /// Panelist: a webinar attendee joins as Guest with the webinar password (bench 2026-10-21:
+        /// <c>ParticipantRole: Attendee</c> gave "Invalid value"; Guest connected and was reported as Guest).
+        /// </summary>
         public static readonly string[] Roles = { "Host", "Guest", "Panelist", "Attendee" };
+
+        /// <summary>The ParticipantRole value the codec expects for a role.</summary>
+        public static string CodecRole(string role) => role == "Attendee" ? "Guest" : role;
 
         /// <summary>
         /// The first call in a <c>Status Conference</c> token that carries an AuthenticationRequest:
@@ -80,6 +87,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string RequestType { get; private set; } = None;
             /// <summary>The role of a PIN submitted and not yet accepted or rejected.</summary>
             public string? PendingRole { get; private set; }
+            private bool _pendingAtWebinar;
             public bool Requested => IsRequested(RequestType);
 
             /// <summary>A Status AuthenticationRequest. Returns the role that has now joined, or null.</summary>
@@ -91,7 +99,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return null;
                 var joined = PendingRole;
                 PendingRole = null;
-                return joined;
+                // The codec reports a webinar attendee as Guest.
+                return joined == "Guest" && _pendingAtWebinar ? "Attendee" : joined;
             }
 
             /// <summary>An AuthenticationResponse event (from <see cref="ReadResponse"/>). True when the PIN was rejected.</summary>
@@ -105,6 +114,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return true;
                 }
                 PendingRole = result;
+                _pendingAtWebinar = IsWebinar(RequestType);
                 return false;
             }
         }
@@ -118,7 +128,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(callId)) throw new ArgumentException("A call id is required.", nameof(callId));
             if (!Roles.Contains(role)) throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown participant role.");
             var pinPart = string.IsNullOrEmpty(pin) ? string.Empty : " Pin: " + pin!.TrimEnd('#') + "#";
-            return "xCommand Conference Call AuthenticationResponse CallId: " + callId + " ParticipantRole: " + role + pinPart;
+            return "xCommand Conference Call AuthenticationResponse CallId: " + callId + " ParticipantRole: " + CodecRole(role) + pinPart;
         }
     }
 }

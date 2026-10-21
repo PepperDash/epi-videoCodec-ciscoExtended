@@ -78,7 +78,8 @@ public class WebexAuthenticationTests
         WebexAuthentication.ResponseCommand("9", "Panelist", "123456")
             .Should().Be("xCommand Conference Call AuthenticationResponse CallId: 9 ParticipantRole: Panelist Pin: 123456#");
         WebexAuthentication.ResponseCommand("9", "Attendee", null)
-            .Should().Be("xCommand Conference Call AuthenticationResponse CallId: 9 ParticipantRole: Attendee");
+            .Should().Be("xCommand Conference Call AuthenticationResponse CallId: 9 ParticipantRole: Guest",
+                "the codec rejects ParticipantRole: Attendee; an attendee joins as Guest");
         WebexAuthentication.ResponseCommand("9", "Host", "4321#")
             .Should().EndWith("ParticipantRole: Host Pin: 4321#", "a trailing # is not doubled");
 
@@ -108,6 +109,22 @@ public class WebexAuthenticationTests
 
         flow.OnRequest("16", "PanelistPinOrAttendeePin").Should().BeNull("still at the prompt");
         flow.OnRequest("16", "None").Should().BeNull("hanging up clears the request, but nobody joined");
+    }
+
+    [Fact]
+    public void A_Guest_Join_At_A_Webinar_Prompt_Is_An_Attendee_And_At_A_Meeting_Prompt_A_Guest()
+    {
+        // Webinar bench 2026-10-21, call 21: Guest with the webinar password connected; the codec
+        // reported ParticipantRole Guest.
+        var webinar = new WebexAuthentication.PinFlow();
+        webinar.OnRequest("21", "PanelistPinOrAttendeePin");
+        webinar.OnResponse(WebexAuthentication.ReadResponse(Entered("Guest")));
+        webinar.OnRequest("21", "None").Should().Be("Attendee");
+
+        var meeting = new WebexAuthentication.PinFlow();
+        meeting.OnRequest("5", "HostPinOrGuest");
+        meeting.OnResponse(WebexAuthentication.ReadResponse(Entered("Guest")));
+        meeting.OnRequest("5", "None").Should().Be("Guest");
     }
 
     [Fact]
