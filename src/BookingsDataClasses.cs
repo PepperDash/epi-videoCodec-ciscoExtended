@@ -352,6 +352,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
+        /// A codec timestamp as local time. RoomOS sends booking times in UTC ("...Z"), which
+        /// deserialize as DateTimeKind.Utc; used as-is they show at the UTC clock time (#139).
+        /// Local and unspecified times are returned unchanged.
+        /// </summary>
+        private static DateTime ToLocal(DateTime codecTime)
+        {
+            return codecTime.Kind == DateTimeKind.Utc ? codecTime.ToLocalTime() : codecTime;
+        }
+
+        /// <summary>
         /// Extracts the necessary meeting values from the Cisco bookings response and converts them to the generic class
         /// </summary>
         /// <param name="bookings"></param>
@@ -372,9 +382,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 if (b.Time == null) continue;
 
-                meeting.StartTime = b.Time.StartTime.Value;
+                // The codec sends UTC; meetings are shown and compared in local time (#139).
+                meeting.StartTime = ToLocal(b.Time.StartTime.Value);
                 meeting.MinutesBeforeMeeting = Int32.Parse(b.Time.StartTimeBuffer.Value) / 60;
-                meeting.EndTime = b.Time.EndTime.Value;
+                meeting.EndTime = ToLocal(b.Time.EndTime.Value);
 
                 if (meeting.EndTime <= DateTime.Now) continue;
 
