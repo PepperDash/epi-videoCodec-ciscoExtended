@@ -30,6 +30,7 @@
     <Compile Include="..\src\Model\ValueProperty.cs" Link="Linked\ValueProperty.cs" />
     <Compile Include="..\src\Model\IdKeyedListConverter.cs" Link="Linked\IdKeyedListConverter.cs" />
     <Compile Include="..\src\Model\StateModelContractResolver.cs" Link="Linked\StateModelContractResolver.cs" />
+    <Compile Include="..\src\RoutingSelector.cs" Link="Linked\RoutingSelector.cs" />
     <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />  </ItemGroup>
 
   <ItemGroup>
