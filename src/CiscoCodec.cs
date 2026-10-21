@@ -6930,6 +6930,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Persistent");
 		}
 
+		/// <summary>
+		/// Sets each Cisco camera device online or offline from the status camera list. The camera's
+		/// status arrives in the full xStatus, before the devices exist, so the connect handling in
+		/// ParseStatusObject had no device to update and camera1 stayed offline (#153).
+		/// </summary>
+		private void SetCameraOnlineStatusFromStatus()
+		{
+			var cameraList = CodecStatus.Status.Cameras.CameraList;
+			foreach (var camera in Cameras.OfType<CiscoCamera>())
+			{
+				var status = cameraList.FirstOrDefault(c => c.CameraId == camera.CameraId.ToString());
+				var online = string.Equals(status?.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase);
+				camera.SetOnlineStatus(online);
+				this.LogDebug("Camera {key} (id {id}) online: {online}", camera.Key, camera.CameraId, online);
+			}
+		}
+
 		private void SetUpCameras(List<CameraInfo> cameraInfo)
 		{
 			// Add the internal camera
@@ -7086,6 +7103,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			SelectedCamera = Cameras.First();
+			SetCameraOnlineStatusFromStatus();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 
 			if (NearEndPresets != null)
@@ -7167,6 +7185,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			SelectedCamera = Cameras.First();
+			SetCameraOnlineStatusFromStatus();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 
 			if (NearEndPresets != null)
