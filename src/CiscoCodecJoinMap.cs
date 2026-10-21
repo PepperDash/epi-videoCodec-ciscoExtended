@@ -494,6 +494,90 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 JoinType = eJoinType.Digital
             });
 
+        [JoinName("WebexJoinedAsPanelist")]
+        public JoinDataComplete WebexJoinedAsPanelist = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 315,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex webinar: joined as panelist (pulse)",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinedAsAttendee")]
+        public JoinDataComplete WebexJoinedAsAttendee = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 316,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex webinar: joined as attendee (pulse)",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexWebinarPinRequested")]
+        public JoinDataComplete WebexWebinarPinRequested = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 317,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex webinar PIN requested (panelist or attendee)",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinAsPanelist")]
+        public JoinDataComplete WebexJoinAsPanelist = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 315,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex webinar: join as panelist with the PIN set on WebexSendPin",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexJoinAsAttendee")]
+        public JoinDataComplete WebexJoinAsAttendee = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 316,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex webinar: join as attendee (PIN optional, from WebexSendPin)",
+                JoinCapabilities = eJoinCapabilities.FromSIMPL,
+                JoinType = eJoinType.Digital
+            });
+
+        [JoinName("WebexPinRequestType")]
+        public JoinDataComplete WebexPinRequestType = new JoinDataComplete(
+            new JoinData
+            {
+                JoinNumber = 312,
+                JoinSpan = 1
+            },
+            new JoinMetadata
+            {
+                Description = "Webex PIN request type from the codec, e.g. HostPinOrGuest or PanelistPinOrAttendeePin; empty when none",
+                JoinCapabilities = eJoinCapabilities.ToSIMPL,
+                JoinType = eJoinType.Serial
+            });
+
         [JoinName("WebexSendPin")]
         public JoinDataComplete WebexSendPin = new JoinDataComplete(
             new JoinData
