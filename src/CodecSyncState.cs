@@ -302,6 +302,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Schedule();
         }
 
+        /// <summary>
+        /// The session is gone and anything sent now would be taken as a login: the RS-232 session
+        /// dropped to a login prompt (#115). Drops the queued commands and resets the sync.
+        /// </summary>
+        public void SessionLost()
+        {
+            _commandActions.Clear();
+
+            _systemActions.Enqueue(() =>
+            {
+                this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
+                _commandActions.Clear();
+                ResetSync();
+            });
+
+            Schedule();
+        }
+
         public void CodecDisconnected()
         {
             _systemActions.Enqueue(() =>

@@ -25,6 +25,7 @@
     <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
     <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
     <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />
+    <Compile Include="..\src\Framing\SerialLoginDetector.cs" Link="Linked\SerialLoginDetector.cs" />
     <Compile Include="..\src\Dispatch\XapiDispatcher.cs" Link="Linked\XapiDispatcher.cs" />
     <Compile Include="..\src\Dispatch\XapiRequestTracker.cs" Link="Linked\XapiRequestTracker.cs" />
     <Compile Include="..\src\Model\ValueProperty.cs" Link="Linked\ValueProperty.cs" />
