@@ -20,7 +20,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombin
             //company room null check
             if (ui == null)
             {
-                Debug.LogError($"{ui.Key} is not a companyRoom", ui);
+                Debug.LogError("RoomCombinerHandler: no user interface to attach to");
                 return;
             }
             try
@@ -29,7 +29,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.RoomCombin
 
                 if (combiners == null || combiners.Count == 0)
                 {
-                    Debug.LogWarning("{uiKey} could not find RoomCombiner", ui);
+                    // The normal case: most systems have no room combiner (#119).
+                    Debug.LogDebug("{uiKey} could not find RoomCombiner", ui);
                     return;
                 }
 
