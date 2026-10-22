@@ -2472,7 +2472,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Command replies: one handler per result type (#129, stage 6c). Each reply carries one result,
 			// and the parsers take the whole CommandResponse object.
 			OnCommandResult("CallHistoryRecentsResult", (response, _) => ParseCallHistoryResponseToken(response));
-			OnCommandResult("CallHistoryDeleteEntryResult", (response, _) => GetCallHistory());
+			OnCommandResult("CallHistoryDeleteEntryResult", (response, _) => OnCallHistoryDeleteEntryResult(response));
 			OnCommandResult("BookingsListResult", (response, _) => ParseBookingsListResultToken(response));
 			OnCommandResult("PhonebookSearchResult", (response, message) => ParsePhonebookSearchResultResponse(response, message.ResultId));
 			OnCommandResult("PresentationStopResult", (response, _) => OnPresentationStopResult(response));
@@ -6953,12 +6953,28 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
 		{
+			// A recents entry groups consecutive calls to the same number, so delete them all (#5). The
+			// parameter is DeleteConsecutiveDuplicates; AcknowledgeConsecutiveDuplicates belongs to
+			// AcknowledgeMissedCall, and the codec rejected every delete with a ParameterError.
 			EnqueueCommand(
 				string.Format(
-					"xCommand CallHistory DeleteEntry CallHistoryId: {0} AcknowledgeConsecutiveDuplicates: True",
+					"xCommand CallHistory DeleteEntry CallHistoryId: {0} DeleteConsecutiveDuplicates: True",
 					entry.OccurrenceHistoryId
 				)
 			);
+		}
+
+		private void OnCallHistoryDeleteEntryResult(JToken response)
+		{
+			// The codec reports a rejected delete inside the result, which CommandResponseFailed doesn't see.
+			var status = (string)response.SelectToken("CallHistoryDeleteEntryResult.status");
+			if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase))
+			{
+				this.LogWarning("The codec did not delete the call history entry: {status}", status ?? "no status");
+				return;
+			}
+
+			GetCallHistory();
 		}
 
 		#region IHasCameraSpeakerTrack
