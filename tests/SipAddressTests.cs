@@ -41,6 +41,26 @@ public class SipAddressTests
         SipAddress.Resolve(registrationUri, contactAddress).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("sip:5551234@pbx.example.com", "5551234")]
+    [InlineData("sip:+14155551234@pbx.example.com", "14155551234")]
+    [InlineData("sip:room@pbx.example.com", "Unknown")]
+    [InlineData("", "Unknown")]
+    [InlineData(null, "Unknown")]
+    public void Phone_Number_Comes_From_The_Registration_Uri_Only(string registrationUri, string expected)
+    {
+        SipAddress.PhoneNumber(registrationUri).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Webex_Address_Digits_Are_Not_A_Phone_Number()
+    {
+        // A Webex room address with digits in the room name: the URI falls back to it, the number does not.
+        const string webexAddress = "room_da03_test@example.rooms.webex.com";
+        SipAddress.Resolve("", webexAddress).Should().Be(webexAddress);
+        SipAddress.PhoneNumber("").Should().Be("Unknown");
+    }
+
     [Fact]
     public void Document_With_The_Address_Is_Authoritative()
     {

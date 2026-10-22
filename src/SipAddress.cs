@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -53,6 +54,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
             address = FromContactInfo(status);
             return true;
+        }
+
+        /// <summary>
+        /// The codec's phone number: the first run of digits in its SIP registration URI, or "Unknown".
+        /// Never taken from the Webex contact address, whose digits are part of the room name (#12).
+        /// </summary>
+        public static string PhoneNumber(string registrationUri)
+        {
+            if (string.IsNullOrWhiteSpace(registrationUri))
+                return "Unknown";
+
+            var match = Regex.Match(registrationUri, @"(\d+)");
+            return match.Success ? match.Groups[1].Value : "Unknown";
         }
 
         /// <summary>The SIP registration URI if there is one, else the contact address, else "Unknown".</summary>
