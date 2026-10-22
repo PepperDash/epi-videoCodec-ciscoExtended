@@ -2176,6 +2176,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			else
 			{
+				// The next session's full status reports the address again.
+				_contactSipAddress = null;
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
 				StopRefreshTimers();
@@ -2936,11 +2938,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (registrationItem != null)
 				{
-					sipUri =
-						registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
-						?? "Unknown";
-					var match = Regex.Match(sipUri, @"(\d+)");
-					sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+					var registrationUri = (string)registrationItem.SelectToken("URI.Value");
+					sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+					sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 				}
 
 				OnCodecInfoChanged(
@@ -3118,13 +3118,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// The codec's own address from UserInterface/ContactInfo or Webex/Account (#12), used when the SIP
+		// registration has no URI.
+		private string _contactSipAddress;
+
 		private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
 		{
 			if (sipObject.Registrations.Count <= 0)
 				return;
-			var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
-			var match = Regex.Match(sipUri, @"(\d+)");
-			var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+			var registrationUri = sipObject.Registrations.First().Uri.Value;
+			var sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+			var sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 			OnCodecInfoChanged(
 				new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
 				{
@@ -4042,6 +4046,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
+			// A Webex-registered codec has no SIP registration URI; its address is in the contact info (#12).
+			// A document that carries the address fields replaces the cached address, including with
+			// none; a partial update that doesn't mention them keeps it.
+			if (SipAddress.TryGetContactAddress(statusToken, out var contactSipAddress))
+				_contactSipAddress = contactSipAddress;
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
