@@ -793,6 +793,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private CTimer _loginMessageReceivedTimer;
 		private CTimer _retryConnectionTimer;
 
+		// RS-232 login prompt handling (#115). Only set on a serial connection.
+		private SerialLoginDetector _serialLogin;
+		private volatile bool _atSerialLoginPrompt;
+		private bool _serialWakeProbeSent;
+		private CTimer _serialWakeProbeTimer;
+
 		// **___________________________________________________________________**
 		//  Timers to be moved to the global system timer at a later point....
 		private CTimer BookingsRefreshTimer;
@@ -1040,13 +1046,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var monitorConfig = props.CommunicationMonitorProperties;
 				var pollString = monitorConfig.PollString;
 
-				CommunicationMonitor = new GenericCommunicationMonitor(
+				CommunicationMonitor = new CiscoCommunicationMonitor(
 					this,
 					Communication,
 					monitorConfig.PollInterval,
 					monitorConfig.TimeToWarning,
 					monitorConfig.TimeToError,
-					() => SendTextWithoutQueue(pollString)
+					() => PollCodec(pollString)
 				);
 			}
 			else
@@ -1060,13 +1066,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ Delimiter
 					+ "xStatus Audio Volume";
 
-				CommunicationMonitor = new GenericCommunicationMonitor(
+				CommunicationMonitor = new CiscoCommunicationMonitor(
 					this,
 					Communication,
 					30000,
 					120000,
 					300000,
-					() => SendTextWithoutQueue(pollString)
+					() => PollCodec(pollString)
 				);
 			}
 
@@ -1093,6 +1099,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				IncludeDelimiter = true
 			};
 			PortGather.LineReceived += Port_LineReceived;
+
+			// The login prompts have no line ending, so they never reach the line gather (#115). The
+			// detector runs on the port's receive thread (one port raises TextReceived on one thread);
+			// queuing every raw RS-232 chunk instead slowed the whole program during a sync. Only a
+			// signal goes on the receive queue, behind the lines already received.
+			if (Communication is ComPortController)
+			{
+				_serialLogin = new SerialLoginDetector();
+				_serialLogin.SignalReceived += signal =>
+					_receiveQueue.Enqueue(new ProcessStringMessage(signal.ToString(), _ => OnSerialLoginSignal(signal)));
+				Communication.TextReceived += (sender, args) => _serialLogin.Feed(args.Text);
+			}
 
 			CallHistory = new CodecCallHistory();
 
@@ -1233,6 +1251,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				_refreshTimersDisabled = true;
 			}
 			StopRefreshTimers();
+			_serialWakeProbeTimer?.Dispose();
+
 			if (_loginMessageReceivedTimer != null)
 			{
 				_loginMessageReceivedTimer.Stop();
@@ -2555,6 +2575,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// mode, and it also covers a session that was already set up before a program restart,
 			// which sends no banner and no echo (#113).
 			_loginMessageReceivedTimer?.Stop();
+			LeaveSerialLoginPrompt("JSON received");
 			SyncState.JsonMessageReceived();
 		}
 
@@ -2587,11 +2608,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ResetJsonReceiveState("codec sent text-mode output");
 
 				_loginMessageReceivedTimer?.Stop();
+				LeaveSerialLoginPrompt("text-mode output received");
 				SyncState.TextOutputReceived();
 				return;
 			}
 
-			if (!SyncState.InitialSyncComplete
+			// Not over RS-232: at a serial login prompt the codec echoes the poll as the typed username
+			// (#115). A serial session with echo on also answers the poll with text-mode output or JSON,
+			// which is what starts the sync there.
+			if (_serialLogin == null
+				&& !SyncState.InitialSyncComplete
 				&& line.IndexOf("xstatus systemunit", StringComparison.OrdinalIgnoreCase) >= 0)
 			{
 				// The plugin's poll echoed back: a session with echo on exists.
@@ -2692,6 +2718,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (string.IsNullOrEmpty(command))
 				return;
 
+			// At a serial login prompt anything sent is taken as a username or password (#115).
+			if (_atSerialLoginPrompt)
+			{
+				this.LogVerbose("Not sent, the RS-232 session is at a login prompt: {command}", command);
+				return;
+			}
+
 			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
 			// concatenating multiple commands into a single malformed expression.
 			var normalized = command
@@ -2717,6 +2750,76 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		}
 
 		private readonly object _sendLock = new object();
+
+		// ---- RS-232 login prompt (#115) ------------------------------------------------------------
+		// With xConfiguration SerialPort LoginRequired: On the serial session drops to a login prompt.
+		// The plugin can't log in there, and everything it sends is taken as a username or password;
+		// after a few failures the codec locks out serial logins. So at a prompt the plugin stops
+		// sending, holds the comm monitor in error and resets the sync, until the codec shows a
+		// logged-in session again (the "*r Login successful" banner, any text-mode output or JSON).
+
+		private void PollCodec(string pollString)
+		{
+			// The first poll over RS-232 could land on a login prompt left from before a program
+			// restart and be typed in as a username and password. An empty line only shows the prompt
+			// again, so send that first and poll a second later, unless a prompt came back.
+			if (_serialLogin != null && !_serialWakeProbeSent)
+			{
+				_serialWakeProbeSent = true;
+				lock (_sendLock)
+				{
+					if (Communication.IsConnected)
+						Communication.SendText(Delimiter);
+				}
+				_serialWakeProbeTimer = new CTimer(_ => SendTextWithoutQueue(pollString), 1000);
+				return;
+			}
+
+			SendTextWithoutQueue(pollString);
+		}
+
+		// Runs on the receive queue.
+		private void OnSerialLoginSignal(SerialLoginSignal signal)
+		{
+			switch (signal)
+			{
+				case SerialLoginSignal.LoginIncorrect:
+					this.LogWarning("The codec rejected text sent to its RS-232 login prompt as a login (\"Login incorrect\").");
+					break;
+				case SerialLoginSignal.AccountLocked:
+					this.LogError(
+						"The codec has locked its RS-232 login after repeated failed logins. Set xConfiguration SerialPort LoginRequired: Off on the codec.");
+					break;
+			}
+
+			EnterSerialLoginPrompt();
+		}
+
+		private void EnterSerialLoginPrompt()
+		{
+			if (_atSerialLoginPrompt)
+				return;
+
+			_atSerialLoginPrompt = true;
+			this.LogError(
+				"The RS-232 session is at a login prompt (xConfiguration SerialPort LoginRequired: On). The plugin can't log in over RS-232, so it has stopped sending to the codec rather than lock out its serial login. Set SerialPort LoginRequired to Off on the codec; the plugin re-syncs when the session comes back.");
+
+			(CommunicationMonitor as CiscoCommunicationMonitor)?.HoldInError();
+			ResetJsonReceiveState("serial login prompt");
+			StopFeedbackRegistrationRecovery();
+			SyncState.SessionLost();
+		}
+
+		// Runs on the receive queue, before the sync is told about the session.
+		private void LeaveSerialLoginPrompt(string reason)
+		{
+			if (!_atSerialLoginPrompt)
+				return;
+
+			_atSerialLoginPrompt = false;
+			this.LogInformation("The RS-232 session is logged in again ({reason}); re-syncing.", reason);
+			(CommunicationMonitor as CiscoCommunicationMonitor)?.ReleaseHold();
+		}
 
 		// Over RS-232, RoomOS restarts the serial session when it receives a line longer than
 		// 2,048 bytes including the CR LF (#114). SSH accepts longer lines.
@@ -4977,6 +5080,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				);
 
 				PopulateStateModel(configurationToken, CodecConfiguration.Configuration, "configuration");
+
+				if (_serialLogin != null
+					&& string.Equals((string)configurationToken.SelectToken("SerialPort.LoginRequired.Value"), "On", StringComparison.OrdinalIgnoreCase))
+					this.LogWarning(
+						"The codec has xConfiguration SerialPort LoginRequired: On. The plugin can't log in over RS-232; set it to Off.");
 
 				if (SyncState.InitialConfigurationMessageWasReceived)
 					return;
