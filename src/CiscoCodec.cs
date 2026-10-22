@@ -1100,13 +1100,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			};
 			PortGather.LineReceived += Port_LineReceived;
 
-			// The login prompts have no line ending, so they never reach the line gather (#115).
+			// The login prompts have no line ending, so they never reach the line gather (#115). The
+			// detector runs on the port's receive thread (one port raises TextReceived on one thread);
+			// queuing every raw RS-232 chunk instead slowed the whole program during a sync. Only a
+			// signal goes on the receive queue, behind the lines already received.
 			if (Communication is ComPortController)
 			{
 				_serialLogin = new SerialLoginDetector();
-				_serialLogin.SignalReceived += OnSerialLoginSignal;
-				Communication.TextReceived += (sender, args) =>
-					_receiveQueue.Enqueue(new ProcessStringMessage(args.Text, text => _serialLogin.Feed(text)));
+				_serialLogin.SignalReceived += signal =>
+					_receiveQueue.Enqueue(new ProcessStringMessage(signal.ToString(), _ => OnSerialLoginSignal(signal)));
+				Communication.TextReceived += (sender, args) => _serialLogin.Feed(args.Text);
 			}
 
 			CallHistory = new CodecCallHistory();

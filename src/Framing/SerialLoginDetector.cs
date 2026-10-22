@@ -43,7 +43,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             int lf;
             while ((lf = text.IndexOf('\n', start)) >= 0)
             {
-                var line = _tailIsMidLine ? string.Empty : _tail + text.Substring(start, lf - start);
+                // Only short lines can be a login message; don't copy the long JSON and status lines.
+                var isShort = !_tailIsMidLine && _tail.Length + (lf - start) <= MaxTailLength;
+                var line = isShort ? _tail + text.Substring(start, lf - start) : string.Empty;
                 _tail = string.Empty;
                 _tailIsMidLine = false;
                 start = lf + 1;
