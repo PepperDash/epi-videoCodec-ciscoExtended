@@ -443,8 +443,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 RecordSyncComplete();
                 InitialSyncComplete = true;
-                _parent.PollSpeakerTrack();
-                _parent.PollPresenterTrack();
+                // No SpeakerTrack/PresenterTrack polls here: the sync's full xStatus already carries both,
+                // and polling PresenterTrack on a model without it logged an ERROR every sync (#117).
             }
             else
                 InitialSyncComplete = false;
