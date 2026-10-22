@@ -2938,9 +2938,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (registrationItem != null)
 				{
-					sipUri = SipAddress.Resolve((string)registrationItem.SelectToken("URI.Value"), _contactSipAddress);
-					var match = Regex.Match(sipUri, @"(\d+)");
-					sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+					var registrationUri = (string)registrationItem.SelectToken("URI.Value");
+					sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+					sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 				}
 
 				OnCodecInfoChanged(
@@ -3126,9 +3126,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			if (sipObject.Registrations.Count <= 0)
 				return;
-			var sipUri = SipAddress.Resolve(sipObject.Registrations.First().Uri.Value, _contactSipAddress);
-			var match = Regex.Match(sipUri, @"(\d+)");
-			var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+			var registrationUri = sipObject.Registrations.First().Uri.Value;
+			var sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+			var sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 			OnCodecInfoChanged(
 				new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
 				{
