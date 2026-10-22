@@ -2936,9 +2936,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (registrationItem != null)
 				{
-					sipUri =
-						registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
-						?? "Unknown";
+					sipUri = SipAddress.Resolve((string)registrationItem.SelectToken("URI.Value"), _contactSipAddress);
 					var match = Regex.Match(sipUri, @"(\d+)");
 					sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
 				}
@@ -3118,11 +3116,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// The codec's own address from UserInterface/ContactInfo or Webex/Account (#12), used when the SIP
+		// registration has no URI.
+		private string _contactSipAddress;
+
 		private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
 		{
 			if (sipObject.Registrations.Count <= 0)
 				return;
-			var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
+			var sipUri = SipAddress.Resolve(sipObject.Registrations.First().Uri.Value, _contactSipAddress);
 			var match = Regex.Match(sipUri, @"(\d+)");
 			var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
 			OnCodecInfoChanged(
@@ -4042,6 +4044,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
+			// A Webex-registered codec has no SIP registration URI; its address is in the contact info (#12).
+			var contactSipAddress = SipAddress.FromContactInfo(statusToken);
+			if (contactSipAddress != null)
+				_contactSipAddress = contactSipAddress;
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
