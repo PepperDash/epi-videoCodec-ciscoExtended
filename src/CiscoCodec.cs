@@ -2176,6 +2176,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			else
 			{
+				// The next session's full status reports the address again.
+				_contactSipAddress = null;
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
 				StopRefreshTimers();
@@ -4045,8 +4047,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
 			// A Webex-registered codec has no SIP registration URI; its address is in the contact info (#12).
-			var contactSipAddress = SipAddress.FromContactInfo(statusToken);
-			if (contactSipAddress != null)
+			// A document that carries the address fields replaces the cached address, including with
+			// none; a partial update that doesn't mention them keeps it.
+			if (SipAddress.TryGetContactAddress(statusToken, out var contactSipAddress))
 				_contactSipAddress = contactSipAddress;
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
