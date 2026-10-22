@@ -4944,6 +4944,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			if (callHistoryDeleteEntryResultResponse != null)
 			{
+				// The codec reports a rejected delete inside the result, not in the top-level status (#5).
+				var deleteStatus = (string)callHistoryDeleteEntryResultResponse.SelectToken("status");
+				if (!string.Equals(deleteStatus, "OK", StringComparison.OrdinalIgnoreCase))
+				{
+					this.LogWarning("The codec did not delete the call history entry: {status}", deleteStatus ?? "no status");
+					return;
+				}
+
 				GetCallHistory();
 				return;
 			}
@@ -6467,9 +6475,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
 		{
+			// A recents entry groups consecutive calls to the same number, so delete them all (#5). The
+			// parameter is DeleteConsecutiveDuplicates; AcknowledgeConsecutiveDuplicates belongs to
+			// AcknowledgeMissedCall, and the codec rejected every delete with a ParameterError.
 			EnqueueCommand(
 				string.Format(
-					"xCommand CallHistory DeleteEntry CallHistoryId: {0} AcknowledgeConsecutiveDuplicates: True",
+					"xCommand CallHistory DeleteEntry CallHistoryId: {0} DeleteConsecutiveDuplicates: True",
 					entry.OccurrenceHistoryId
 				)
 			);
