@@ -32,6 +32,7 @@
     <Compile Include="..\src\Model\IdKeyedListConverter.cs" Link="Linked\IdKeyedListConverter.cs" />
     <Compile Include="..\src\Model\StateModelContractResolver.cs" Link="Linked\StateModelContractResolver.cs" />
     <Compile Include="..\src\RoutingSelector.cs" Link="Linked\RoutingSelector.cs" />
+    <Compile Include="..\src\SipAddress.cs" Link="Linked\SipAddress.cs" />
     <Compile Include="..\src\CameraTrackingCapabilitiesArgs.cs" Link="Linked\CameraTrackingCapabilitiesArgs.cs" />
     <Compile Include="..\src\Enums\eCameraTrackingCapabilities.cs" Link="Linked\eCameraTrackingCapabilities.cs" />
     <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />  </ItemGroup>
