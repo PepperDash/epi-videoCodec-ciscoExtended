@@ -263,4 +263,19 @@ public class StateModelTests
         // RoomOS sends for list items) are what the merge keys on.
         model.Contact.Should().ContainSingle();
     }
+
+    [Fact]
+    public void RoomPresetsChange_NotifiesOnEveryPresetListUpdate()
+    {
+        // The Status() constructor assigns RoomPresets (setting this to true) before CiscoCodec wires the
+        // action, and every later update from ParseRoomPresetList sets true again
+        var change = new CiscoCodecStatus.RoomPresetsChange { Value = true };
+        var n = 0;
+        change.ValueChangedAction = () => n++;
+
+        change.Value = true;
+        change.Value = true;
+
+        n.Should().Be(2);
+    }
 }

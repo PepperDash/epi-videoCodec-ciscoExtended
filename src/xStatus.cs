@@ -12,7 +12,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     /// <summary>
     /// This class exists to capture serialized data sent back by a Cisco codec in JSON output mode
     /// </summary>
-    public class CiscoCodecStatus
+    public partial class CiscoCodecStatus
     {
         public class ConnectionStatus
         {
@@ -2445,24 +2445,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
-        public class RoomPresetsChange : ValueProperty
-        {
-            private bool _value;
-
-            public bool Value
-            {
-                get { return _value; }
-                set
-                {
-                    _value = value;
-                    OnValueChanged(value);
-                }
-            }
-
-
-
-
-        }
+        // RoomPresetsChange lives in Model/RoomPresetsChange.cs so the tests can compile it.
 
         public class NetworkCount : ValueProperty
         {
