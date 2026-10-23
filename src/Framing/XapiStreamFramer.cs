@@ -43,8 +43,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private static readonly Regex TextModeLine = new Regex(@"^\*[srec] ");
         private static readonly Regex CommandEndLine = new Regex(@"^(\*\* end|OK|ERROR)\s*$");
+        // Quoted segments must be balanced: an echoed command quotes whole values (SearchString: "abc",
+        // resultId="..."), while the tail of a JSON string broken across lines has an odd quote.
         private static readonly Regex EchoLine = new Regex(
-            @"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*$",
+            @"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b(?:[^{}\[\]""]|""[^""]*"")*$",
             RegexOptions.IgnoreCase);
 
         private readonly StringBuilder _partialLine = new StringBuilder();

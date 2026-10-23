@@ -131,6 +131,17 @@ public class XapiStreamFramerTests
     }
 
     [Fact]
+    public void An_Echoed_Tagged_Command_With_Quoted_Values_Is_Dropped()
+    {
+        const string echo = "xCommand Phonebook Search SearchString: \"Smith\" Limit: 10 | resultId=\"0b8f\"";
+        var c = Run(Lines("{", "  \"CommandResponse\": {", echo, "    \"status\": \"OK\"", "  }", "}"));
+
+        c.Echoes.Should().Equal(echo);
+        JObject.Parse(c.Documents.Single())["CommandResponse"]!["status"]!.Value<string>().Should().Be("OK");
+        XapiStreamFramer.Classify(echo).Should().Be(XapiLineKind.Echo);
+    }
+
+    [Fact]
     public void Echo_Like_Text_Inside_A_String_Is_Kept()
     {
         var c = Run(Lines("{", "  \"Text\": \"line one", "xStatus inside a string\"", "}"));
