@@ -2458,13 +2458,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			_dispatcher.On("Status", (token, message) =>
 			{
-				ParseStatusObject(token);
-				// Only the reply to the sync's own tagged xStatus completes the full-status step (#142);
-				// poll replies and status feedback carry no resultId, or another request's.
-				if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+				try
 				{
-					Timings.Stop(SyncStatusRequest, message.ResultId);
-					SyncState.FullStatusReceived();
+					ParseStatusObject(token);
+				}
+				finally
+				{
+					// Only the reply to the sync's own tagged xStatus completes the full-status step (#142);
+					// poll replies and status feedback carry no resultId, or another request's. Completed
+					// even when the parse throws (the dispatcher still logs it): otherwise the request
+					// stays pending until it expires and every re-request fails the same way.
+					if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+					{
+						Timings.Stop(SyncStatusRequest, message.ResultId);
+						SyncState.FullStatusReceived();
+					}
 				}
 			});
 			_dispatcher.On("Configuration", (token, _) => ParseConfigurationObject(token));
