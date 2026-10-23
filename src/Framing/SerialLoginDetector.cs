@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
@@ -31,7 +32,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private bool _tailIsMidLine;
 
         /// <summary>Raised for each signal found, in order.</summary>
-        public event Action<SerialLoginSignal> SignalReceived;
+        public event Action<SerialLoginSignal>? SignalReceived;
 
         /// <summary>Feeds raw text exactly as received from the port.</summary>
         public void Feed(string text)

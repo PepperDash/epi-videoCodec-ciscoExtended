@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -17,7 +18,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// The address a Webex-registered codec publishes, from a status document (the object under
         /// "Status"), or null when the document doesn't carry one.
         /// </summary>
-        public static string FromContactInfo(JToken status)
+        public static string? FromContactInfo(JToken? status)
         {
             if (status == null)
                 return null;
@@ -25,13 +26,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             var contactMethods = status.SelectToken("UserInterface.ContactInfo.ContactMethod") as JArray;
             var contactNumber = contactMethods?
                 .Children<JObject>()
-                .Where(o => (string)o["id"] == "1")
-                .Select(o => (string)o.SelectToken("Number.Value"))
+                .Where(o => (string?)o["id"] == "1")
+                .Select(o => (string?)o.SelectToken("Number.Value"))
                 .FirstOrDefault();
 
             return NullIfEmpty(contactNumber)
-                ?? NullIfEmpty((string)status.SelectToken("Webex.Account.Shared.SipAddress.Value"))
-                ?? NullIfEmpty((string)status.SelectToken("Webex.Account.Personal.SipAddress.Value"));
+                ?? NullIfEmpty((string?)status.SelectToken("Webex.Account.Shared.SipAddress.Value"))
+                ?? NullIfEmpty((string?)status.SelectToken("Webex.Account.Personal.SipAddress.Value"));
         }
 
         /// <summary>
@@ -40,7 +41,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// the address, or null when the codec reports none. False when the document doesn't mention
         /// them (a partial update), so a cached address should be kept.
         /// </summary>
-        public static bool TryGetContactAddress(JToken status, out string address)
+        public static bool TryGetContactAddress(JToken? status, out string? address)
         {
             address = null;
             if (status == null)
@@ -60,7 +61,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// The codec's phone number: the first run of digits in its SIP registration URI, or "Unknown".
         /// Never taken from the Webex contact address, whose digits are part of the room name (#12).
         /// </summary>
-        public static string PhoneNumber(string registrationUri)
+        public static string PhoneNumber(string? registrationUri)
         {
             if (string.IsNullOrWhiteSpace(registrationUri))
                 return "Unknown";
@@ -70,9 +71,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>The SIP registration URI if there is one, else the contact address, else "Unknown".</summary>
-        public static string Resolve(string registrationUri, string contactAddress) =>
+        public static string Resolve(string? registrationUri, string? contactAddress) =>
             NullIfEmpty(registrationUri) ?? NullIfEmpty(contactAddress) ?? "Unknown";
 
-        private static string NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
     }
 }
