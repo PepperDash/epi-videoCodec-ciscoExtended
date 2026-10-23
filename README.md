@@ -534,3 +534,780 @@ Minimal CameraManager config example:
 - `setcodeccommdebug {1 | 0}`
   - Turn on device-level communications debugging. In order to see thes messages, the `appdebug 1` command must be sent
   - {1 | 0} - 1 turns debuggging on, 0 turns it off
+<!-- START Minimum Essentials Framework Versions -->
+### Minimum Essentials Framework Versions
+
+- 3.0.0
+- 3.0.0
+- 3.0.0
+- 3.0.0
+<!-- END Minimum Essentials Framework Versions -->
+<!-- START Config Example -->
+### Config Example
+
+```json
+{
+    "key": "GeneratedKey",
+    "uid": 1,
+    "name": "GeneratedName",
+    "type": "ciscoRoomBarPro",
+    "group": "Group",
+    "properties": {
+        "communicationMonitorProperties": "SampleValue",
+        "favorites": [
+            "SampleValue"
+        ],
+        "phonebookMode": "SampleString",
+        "showSelfViewByDefault": true,
+        "SelfViewDefaultMonitorRole": "SampleValue",
+        "sharing": {
+            "autoShareContentWhileInCall": true,
+            "defaultShareLocalOnly": true
+        },
+        "externalSourceListEnabled": true,
+        "externalSourceInputPort": "SampleString",
+        "phonebookResultsLimit": "SampleValue",
+        "overrideMeetingsLimit": true,
+        "EnableCommDebugOnStartup": true,
+        "getPhonebookOnStartup": true,
+        "getBookingsOnStartup": true,
+        "phonebookDisableAutoPopulate": true,
+        "phonebookDisableAutoDial": true,
+        "UiBranding": {
+            "enable": true,
+            "brandingUrl": "SampleString"
+        },
+        "enableCameraConfigFromRoomCameraList": true,
+        "cameraInfo": [
+            {
+                "CameraNumber": 0,
+                "Name": "SampleString",
+                "SourceId": 0
+            }
+        ],
+        "defaultTrackingMode": "SampleString",
+        "timeFormatSpecifier": "SampleString",
+        "dateFormatSpecifier": "SampleString",
+        "joinableCooldownSeconds": 0,
+        "endAllCallsOnMeetingJoin": true,
+        "usePersistentWebAppForLockout": true,
+        "extensions": {
+            "Version": "SampleString",
+            "ConfigId": "SampleValue",
+            "panels": [
+                {
+                    "order": "SampleValue",
+                    "panelId": "SampleString",
+                    "Origin": "SampleString",
+                    "ActivityType": "SampleString",
+                    "location": "SampleValue",
+                    "Type": "SampleString",
+                    "color": "SampleString",
+                    "icon": "SampleValue",
+                    "CustomIcon": {
+                        "Id": "SampleString",
+                        "Content": "SampleString",
+                        "WrappedContent": "SampleString"
+                    },
+                    "iconId": "SampleString",
+                    "customIconContent": "SampleString",
+                    "name": "SampleString",
+                    "Url": "SampleString",
+                    "MobileControlPath": "SampleString",
+                    "UiWebViewDisplays": [
+                        {
+                            "Target": "SampleString",
+                            "Mode": "SampleString",
+                            "Title": "SampleString",
+                            "Url": "SampleString",
+                            "Header": "SampleString",
+                            "Options": "SampleString",
+                            "QueryParams": {
+                                "SampleString": "SampleString"
+                            }
+                        }
+                    ],
+                    "DeviceActions": [
+                        "SampleValue"
+                    ],
+                    "PanelFeedback": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    },
+                    "PanelFeedbacks": [
+                        {
+                            "deviceKey": "SampleString",
+                            "feedbackKey": "SampleString",
+                            "propertyToChange": "SampleValue",
+                            "feedbackEventType": "SampleValue",
+                            "TruePropertyValue": "SampleString",
+                            "FalsePropertyValue": "SampleString",
+                            "StringFeedbackPropertyValues": {
+                                "SampleString": "SampleString"
+                            },
+                            "IntFeedbackPropertyValues": {
+                                "0": "SampleString"
+                            }
+                        }
+                    ],
+                    "Page": {
+                        "name": "SampleString",
+                        "pageId": "SampleString",
+                        "Options": "SampleString",
+                        "rows": [
+                            {
+                                "Name": "SampleString",
+                                "widgets": [
+                                    {
+                                        "widgetId": "SampleString",
+                                        "name": "SampleString",
+                                        "type": "SampleValue",
+                                        "Options": "SampleString"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "PanelFeedback1": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    },
+                    "PanelFeedback2": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    },
+                    "PanelFeedback3": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    },
+                    "PanelFeedback4": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    },
+                    "PanelFeedback5": {
+                        "deviceKey": "SampleString",
+                        "feedbackKey": "SampleString",
+                        "propertyToChange": "SampleValue",
+                        "feedbackEventType": "SampleValue",
+                        "TruePropertyValue": "SampleString",
+                        "FalsePropertyValue": "SampleString",
+                        "StringFeedbackPropertyValues": {
+                            "SampleString": "SampleString"
+                        },
+                        "IntFeedbackPropertyValues": {
+                            "0": "SampleString"
+                        }
+                    }
+                }
+            ],
+            "doNotSendXml": true,
+            "PanelsHandler": {}
+        },
+        "emergency": {
+            "mobileControlPath": "SampleString",
+            "uiWebViewDisplay": {
+                "Header": "SampleString",
+                "Mode": "SampleString",
+                "Options": "SampleString",
+                "Target": "SampleString",
+                "Title": "SampleString",
+                "Url": "SampleString"
+            }
+        },
+        "DefaultProvisioningMode": "SampleString",
+        "VLanId": "SampleValue"
+    }
+}
+```
+<!-- END Config Example -->
+<!-- START Supported Types -->
+### Supported Types
+
+- ciscoRoomBarPro
+- ciscoRoomOS
+- ciscoCodecEq
+- ciscoCodecPro
+- ciscoRoomBar
+- ciscocamera
+- ciscoRoomOsMobileControl
+<!-- END Supported Types -->
+<!-- START Join Maps -->
+
+<!-- END Join Maps -->
+<!-- START Interfaces Implemented -->
+### Interfaces Implemented
+
+- IHasCallHistory
+- IHasCallFavorites
+- IHasDirectory
+- IHasScheduleAwareness
+- IOccupancyStatusProvider
+- IHasCodecLayoutsAvailable
+- IHasCodecSelfView
+- ICommunicationMonitor
+- IRoutingSinkWithFeedback
+- IRoutingSource
+- IHasCodecCameras
+- IHasCameraAutoMode
+- IHasCodecRoomPresets
+- IHasExternalSourceSwitching
+- IHasBranding
+- IHasCameraOff
+- IHasCameraMute
+- IHasDoNotDisturbMode
+- IHasHalfWakeMode
+- IHasCallHold
+- IJoinCalls
+- IDeviceInfoProvider
+- IHasPhoneDialing
+- ICiscoCodecCameraConfig
+- ISpeakerTrack
+- IPresenterTrack
+- IEmergencyOSD
+- IHasWebViewWithPwaMode
+- IKeyed
+- IQueueMessage
+- ICiscoCodecCameraFactoryReset
+- IHasCameraPtzControl
+- IAmFarEndCamera
+- IBridgeAdvanced
+- IHasCameraFocusControl
+- INavigatorLockoutHandlerWithPwa
+- INavigatorLockoutHandler
+- IMobileControlTouchpanelController
+<!-- END Interfaces Implemented -->
+<!-- START Base Classes -->
+### Base Classes
+
+- ValueProperty
+- VideoCodecInfo
+- VideoCodecBase
+- JsonConverter
+- EventArgs
+- GenericCommunicationMonitor
+- VideoCodecControllerJoinMap
+- MessengerBase
+- CameraBase
+- ReconfigurableDevice
+- CiscoCodecUserInterface
+- UserInterfaceConfig
+- EssentialsDevice
+- DefaultContractResolver
+<!-- END Base Classes -->
+<!-- START Public Methods -->
+### Public Methods
+
+- public void Insert(ushort pos, string val)
+- public void Clear()
+- public void Availability_Maps_To_Capabilities(bool speakerTrack, bool presenterTrack, eCameraTrackingCapabilities expected)
+- public void Factory_Source_Sets_MinimumEssentialsFrameworkVersion(string factoryName)
+- public void Factory_Source_Sets_TypeNames(string factoryName)
+- public void Factory_Source_Contains_TypeName(string factoryName, string typeName)
+- public void No_Duplicate_TypeNames_Across_Factories()
+- public void A_Status_Value_Notifies_Only_When_It_Changes()
+- public void The_First_Set_Always_Notifies_Even_If_It_Is_Null()
+- public void An_Event_Value_Notifies_Every_Time()
+- public void Counters_Show_Notified_And_Unchanged_Sets_For_Wired_Values_Only()
+- public void Populating_The_Same_Status_Twice_Notifies_Once()
+- public void A_Partial_Update_Changes_Only_The_Item_With_That_Id()
+- public void A_Ghost_Removes_The_Item()
+- public void A_Ghost_For_An_Unknown_Id_Changes_Nothing()
+- public void A_New_Id_Is_Added_At_The_End()
+- public void A_Single_Object_Is_Treated_As_A_List_Of_One()
+- public void Update_Add_And_Ghost_In_One_Message()
+- public void Works_When_The_List_Starts_Null_Or_Empty_And_On_Deserialize()
+- public void Serializes_As_A_Plain_Array()
+- public void A_Value_Wrapped_Id_Is_Read_Through_Its_Value()
+- public void RoomPresetsChange_NotifiesOnEveryPresetListUpdate()
+- public void Login_Prompt_Without_Line_Ending_Is_Detected()
+- public void Prompt_Split_Across_Chunks_Is_Detected()
+- public void Captured_Failed_Login_Sequence()
+- public void Lockout_Line_Is_Detected()
+- public void Prompt_Is_Signalled_Once_Until_A_New_Line()
+- public void Codec_Output_Is_Not_A_Login_Signal(string text)
+- public void Long_Unfinished_Line_Ending_In_A_Prompt_Word_Is_Not_A_Prompt()
+- public void Prompt_After_A_Long_Line_Is_Detected()
+- public void Summary_Reports_Count_Last_Min_Max_And_Percentiles()
+- public void Percentiles_Use_Only_The_Most_Recent_Samples()
+- public void Invalid_Samples_Are_Ignored(double ms)
+- public void Stop_Records_A_Started_Operation_Once()
+- public void Stop_Without_Start_Records_Nothing()
+- public void Overlapping_Operations_Are_Told_Apart_By_Id()
+- public void Pending_Operations_That_Never_Stop_Do_Not_Pile_Up()
+- public void Reset_Clears_Samples_And_Pending_Operations()
+- public void Concurrent_Records_Are_All_Counted()
+- public void FormatTable_Lists_Every_Name_In_Order()
+- public void FormatTable_Says_So_When_Empty()
+- public void ElapsedMs_Converts_Stopwatch_Ticks()
+- public void Config_Class_Exists(string className)
+- public void Config_Has_Parameterless_Constructor(string className)
+- public void Config_Property_Has_JsonPropertyAttribute(string className, string jsonName)
+- public void A_Pretty_Printed_Document_Is_Found()
+- public void Chunk_Boundaries_Do_Not_Matter(int chunk)
+- public void Braces_And_Quotes_Inside_Strings_Are_Ignored()
+- public void One_Line_Documents_Are_Documents()
+- public void Lines_Between_Documents_Are_Classified()
+- public void An_Echoed_Command_Line_Inside_A_Document_Is_Dropped()
+- public void An_Echoed_Tagged_Command_With_Quoted_Values_Is_Dropped()
+- public void Echo_Like_Text_Inside_A_String_Is_Kept()
+- public void Text_Mode_Output_Abandons_A_Partial_Document()
+- public void A_Lost_Quote_Does_Not_Throw_Framing_Out_Of_Step()
+- public void DocumentStarted_Fires_Once_Per_Document_Before_It_Is_Received()
+- public void A_Login_Banner_Inside_A_Document_Abandons_It()
+- public void Text_After_A_Document_On_The_Same_Line_Is_Its_Own_Line()
+- public void Nothing_Is_Reported_Until_A_Line_Ends()
+- public void Reset_Abandons_A_Partial_Document()
+- public void Matches_The_Current_Line_Based_Framing_On_A_Mixed_Stream()
+- public void ROOMOS_FIXTURES_When_Set_Points_At_Fixtures()
+- public void Every_Fixture_Is_One_Valid_Document_However_It_Is_Chunked_When_Available()
+- public void All_Fixtures_Back_To_Back_Match_The_Current_Framing_When_Available()
+- public void A_Login_Successful_Value_Does_Not_Abandon_The_Document()
+- public void The_Rest_Of_An_Abandoned_Document_Is_Not_Framed_As_New_Documents()
+- public void Text_At_Column_Zero_After_An_Abandon_Is_Still_Reported()
+- public void A_Webinar_Prompt_Gives_The_Codec_Call_Id_Not_The_List_Position()
+- public void Every_Request_Type_But_None_Asks_For_A_Pin(string type, bool requested, bool webinar)
+- public void The_Call_With_The_Request_Is_Found_Among_Several_And_As_A_Single_Object()
+- public void A_Joined_Response_Gives_The_Role(string role)
+- public void A_Pin_Error_And_Missing_Fields_Are_Handled()
+- public void Replies_Use_The_Call_Id_The_Role_And_An_Optional_Pin()
+- public void A_Rejected_Pin_Is_An_Error_And_Never_A_Join()
+- public void A_Pin_Submitted_On_A_Call_That_Ended_Is_Not_Reported_On_The_Next_Call()
+- public void A_Guest_Join_At_A_Webinar_Prompt_Is_An_Attendee_And_At_A_Meeting_Prompt_A_Guest()
+- public void An_Accepted_Pin_Joins_When_The_Codec_Clears_The_Request()
+- public void Contact_Info_Number_Is_Used()
+- public void Webex_Shared_Sip_Address_Is_Used_Without_Contact_Info()
+- public void Document_Without_Contact_Info_Gives_Null()
+- public void Registration_Uri_Wins_Then_Contact_Address_Then_Unknown(string registrationUri, string contactAddress, string expected)
+- public void Phone_Number_Comes_From_The_Registration_Uri_Only(string registrationUri, string expected)
+- public void Webex_Address_Digits_Are_Not_A_Phone_Number()
+- public void Document_With_The_Address_Is_Authoritative()
+- public void Document_Reporting_No_Address_Clears_It()
+- public void Partial_Update_Without_The_Address_Fields_Keeps_The_Cache(string json)
+- public void Handlers_Get_The_Subtree_At_Their_Path()
+- public void Absent_Paths_Are_Not_Called()
+- public void Handlers_Run_In_Registration_Order_And_A_Path_Can_Have_Several()
+- public void ResultId_Is_Passed_With_The_Message()
+- public void Every_Top_Level_Object_In_A_Document_Is_Dispatched()
+- public void A_Failing_Handler_Does_Not_Stop_The_Others()
+- public void A_Path_Through_A_Non_Object_Is_Not_Matched()
+- public void Invalid_Json_Throws_For_The_Caller_To_Log()
+- public void Dates_Stay_As_The_Codec_Sent_Them()
+- public void Registration_Is_Validated()
+- public void A_Reply_Completes_Its_Own_Request_Once()
+- public void Replies_Without_A_ResultId_Complete_Nothing_And_Drop_Nothing()
+- public void Replies_May_Arrive_In_Any_Order()
+- public void An_Unknown_Id_Changes_Nothing()
+- public void Requests_Without_A_Reply_Expire_After_The_Timeout()
+- public void A_Request_Can_Have_Its_Own_Timeout()
+- public void PendingCount_Without_A_Kind_Counts_Every_Request()
+- public void Clear_Drops_Everything()
+- public void Begin_And_Complete_Are_Thread_Safe()
+- public void Timeout_Must_Be_Positive()
+- public void Assembly_Loads_Successfully()
+- public void Assembly_Name_Matches_Expected()
+- public void Factory_Count_Matches_Expected()
+- public void Factory_Exists_ByName(string factoryName)
+- public void All_Factories_Have_Parameterless_Constructor()
+- public void Repeated_Full_Documents_Do_Not_Grow_Any_List()
+- public void Partial_Feedback_Updates_Only_That_Item_And_Keeps_The_Count_In_Step()
+- public void Excluded_Lists_Are_Left_To_The_Code_That_Maintains_Them()
+- public void Wired_Values_Keep_Their_Action_And_Fire_Only_On_A_Real_Change()
+- public void An_Action_That_Throws_Is_Reported_And_The_Rest_Of_The_Document_Is_Populated()
+- public void Without_A_Failure_Handler_The_Exception_Propagates_As_Before()
+- public void Warm_Walks_Past_Accessors_That_Throw_On_Default_Values()
+- public void Warm_Runs_No_Actions_And_Counts_Nothing()
+- public void Wiring_Is_Not_Codec_Data_So_A_Self_Wired_Model_Warms_And_Keeps_Its_Action()
+- public void New_Path_Gives_The_Same_Result_As_Text_Round_Trip()
+- public void DateTime_Values_Keep_Their_Instant_And_Kind()
+- public void Dates_In_String_Properties_Stay_As_The_Codec_Sent_Them()
+- public void Populating_Merges_Into_An_Existing_Object()
+- public void Settings_Are_Applied_The_Same_Way()
+- public void ToObject_Keeps_DateTime_Values_And_Fixes_Dates_In_String_Properties()
+- public void ResultId_Is_Read_When_Present()
+- public void ResultId_Is_An_Empty_Guid_When_Absent()
+- public void PopulateFromToken_Rejects_Null_Arguments()
+- public void Booking_Times_From_The_Codec_Are_Utc_And_Are_Shown_In_Local_Time()
+- public void Local_And_Unspecified_Times_Are_Left_Alone()
+- public void Whole_Numbers_Of_Any_Type_Are_Inputs(object selector)
+- public void Anything_Else_Is_Not(object? selector)
+- public void A_Selector_From_Json_Is_A_Long_And_Works()
+- public void Start(int port)
+- public void FireUpdate()
+- public void DialZoom()
+- public string DialZoomEnhanced()
+- public void DialWebex()
+- public void InitializeBranding(string roomKey)
+- public void PollSpeakerTrack()
+- public void PollPresenterTrack()
+- public void SetCommDebug(bool on)
+- public void EnqueueCommand(string command)
+- public void SendText(string command)
+- public void ParseSipToken(JToken sipToken)
+- public void PrintCallItem(CodecActiveCallItem callData)
+- public eCodecCallType ConvertToTypeEnum(string s)
+- public eCodecCallDirection ConvertToDirectionEnum(string s)
+- public eCodecCallStatus ConvertToStatusEnum(string s)
+- public bool MergeCallData(
+			CodecActiveCallItem existingCallData,
+			CodecActiveCallItem newCallData
+		)
+- public void OnWebViewClearedFromUi(PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewDisplayClearActionArgs args)
+- public void CodecPollLayouts()
+- public void ExecuteSwitch(
+			object inputSelector,
+			object outputSelector,
+			eRoutingSignalType signalType
+		)
+- public string GetCallId()
+- public void GetCallHistory()
+- public void GetSchedule()
+- public void GetBookings(object command)
+- public void CheckCurrentHour(object o)
+- public void GetPhonebook(string command)
+- public void SearchDirectory(string searchString)
+- public void GetDirectoryFolderContents(string folderId)
+- public void GetDirectoryParentFolderContents()
+- public void SetCurrentDirectoryToRoot()
+- public void Dial(
+			string number,
+			string protocol,
+			string callRate,
+			string callType,
+			string meetingId
+		)
+- public void HoldCall(CodecActiveCallItem activeCall)
+- public void ResumeCall(CodecActiveCallItem activeCall)
+- public void ResumeAllCalls()
+- public void JoinCall(CodecActiveCallItem activeCall)
+- public void JoinAllCalls()
+- public void SelectPresentationSource(int source)
+- public void SetRingtoneVolume(int volume)
+- public void SelectPresentationSource1()
+- public void SelectPresentationSource2()
+- public void VolumeSetToDefault()
+- public void LinkCiscoCodecZoomConnector(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void LinkCiscoCodecToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void SetPresentationLocalOnly()
+- public void SetPresentationLocalRemote()
+- public void SetPresentationLocalRemoteToggle()
+- public void Reboot()
+- public void SelfViewModeOn()
+- public void SelfViewModeOnForMonitor(string monitorRole, bool fullScreen)
+- public void SelfViewModeOff()
+- public void SelfViewModeToggle()
+- public void SelfviewPipPositionSet(CodecCommandWithLabel position)
+- public void SelfviewPipPositionToggle()
+- public void LayoutSet(CodecCommandWithLabel layout)
+- public void LayoutSet(string layout)
+- public void LocalLayoutToggle()
+- public void LocalLayoutToggleSingleProminent()
+- public void MinMaxLayoutToggle()
+- public void PresentationViewDefaultSet()
+- public void PresentationViewMinimizedzedSet()
+- public void PresentationViewMaximizedSet()
+- public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
+- public void CameraAutoModeToggle()
+- public void CameraAutoModeOn()
+- public void CameraAutoModeOff()
+- public void SpeakerTrackOn()
+- public void SpeakerTrackOff()
+- public void PresenterTrackOff()
+- public void PresenterTrackFollow()
+- public void PresenterTrackBackground()
+- public void PresenterTrackPersistent()
+- public void SetCodecProvisionMode(string mode)
+- public void SetCameraName(uint videoConnectorId, string name)
+- public void SetInputSourceType(uint videoConnectorId, eCiscoCodecInputSourceType sourceType)
+- public void SelectCamera(string key)
+- public void CodecRoomPresetSelect(int preset)
+- public void CiscoRoomPresetRecall()
+- public void CodecRoomPresetStore(int preset, string description)
+- public void SelectFarEndPreset(int preset)
+- public void AddExternalSource(
+			string connectorId,
+			string key,
+			string name,
+			Devices.Common.VideoCodec.Cisco.eExternalSourceType type
+		)
+- public void SetExternalSourceState(
+			string key,
+			Devices.Common.VideoCodec.Cisco.eExternalSourceMode mode
+		)
+- public void ClearExternalSources()
+- public void SetSelectedSource(string key)
+- public void CameraOff()
+- public void CameraMuteOn()
+- public void CameraMuteOff()
+- public void CameraMuteToggle()
+- public void HalfwakeActivate()
+- public void UpdateDeviceInfo()
+- public void OnCodecInfoChanged(CodecInfoChangedEventArgs args)
+- public void ActivateDoNotDisturbMode()
+- public void DeactivateDoNotDisturbMode()
+- public void ToggleDoNotDisturbMode()
+- public void DialPhoneCall(string number)
+- public void EndPhoneCall()
+- public void SetCurrentSource(eRoutingSignalType signalType, IRoutingSource sourceDevice)
+- public void SendDtmfToPhone(string digit)
+- public void ShowWebView(string url, string mode, string title, string target)
+- public void HideWebView()
+- public void SendNavigatorsToPwaUrl(string url)
+- public void ExitNavigatorsPwaMode()
+- public void ShowEmergencyMessage(string url)
+- public void HideEmergencyMessage()
+- public void ParseStatus(CiscoCodecEvents.Widget val)
+- public void ParseStatus(CiscoCodecEvents.UiEvent val)
+- public void RegisterFeedback()
+- public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void UpdateWidget(string val)
+- public int WebsocketConnected(WebSocketClient.WEBSOCKET_RESULT_CODES error)
+- public int WebsocketDisconnected(WebSocketClient.WEBSOCKET_RESULT_CODES error, object item)
+- public int WebsocketReceiveCallback(byte[] data, uint dataLen,
+            WebSocketClient.WEBSOCKET_PACKET_TYPES opcode, WebSocketClient.WEBSOCKET_RESULT_CODES error)
+- public bool OnResponse(string? result)
+- public void HoldInError()
+- public void ReleaseHold()
+- public void AddCommandToQueue(string query)
+- public void LoginMessageReceived()
+- public void JsonMessageReceived()
+- public void TextOutputReceived()
+- public void FullStatusReceived()
+- public void InitialStatusMessageReceived()
+- public void InitialConfigurationMessageReceived()
+- public void InitialSoftwareVersionMessageReceived()
+- public void FeedbackRegistered()
+- public void SessionLost()
+- public void CodecDisconnected()
+- public void Push(T message)
+- public T Pop()
+- public void PostMessage(Action message)
+- public void Dispatch()
+- public void ParseAuthenticationRequest(JToken token)
+- public void ParseAuthenticationResponse(JToken token)
+- public void SetPin(string pin)
+- public void JoinAsGuest()
+- public void JoinAsHost()
+- public void JoinAsPanelist()
+- public void JoinAsAttendee()
+- public void LinkToApi(BasicTriList trilist, CiscoCodecJoinMap joinMap)
+- public void ParseStatus(JToken token)
+- public void ActivateDoNotDisturbMode()
+- public void DeactivateDoNotDisturbMode()
+- public void ToggleDoNotDisturbMode()
+- public void CameraFactoryReset(uint cameraId)
+- public string GetCameraSerialNumber(uint cameraId)
+- public void SetCameraAssignedSerialNumber(uint cameraId, string serialNumber)
+- public void SetInputCameraId(uint videoConnectorId, uint inputCameraId)
+- public void ClearCameraAssignedSerialNumber(uint cameraId)
+- public void SetCameraFlip(uint cameraId, bool flip)
+- public void SetPresenterTrackConnector(uint connector)
+- public void SetPresenterTrackEnabled(bool enabled)
+- public void SetId(int id)
+- public void PositionHome()
+- public void PanLeft()
+- public void PanRight()
+- public void PanStop()
+- public void TiltDown()
+- public void TiltUp()
+- public void TiltStop()
+- public void ZoomIn()
+- public void ZoomOut()
+- public void ZoomStop()
+- public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
+- public void SetCameraId(uint id)
+- public void SetScenarioCameraId(uint? id)
+- public void SetSourceId(uint sourceId)
+- public void SetParentCodec(CiscoCodec codec)
+- public void SetOnlineStatus(bool isOnline)
+- public void SetCapabilites(string capabilites)
+- public void PositionHome()
+- public void PanLeft()
+- public void PanRight()
+- public void PanStop()
+- public void TiltDown()
+- public void TiltUp()
+- public void TiltStop()
+- public void ZoomIn()
+- public void ZoomOut()
+- public void ZoomStop()
+- public void FocusNear()
+- public void FocusFar()
+- public void FocusStop()
+- public void TriggerAutoFocus()
+- public void LinkToApi(BasicTriList trilist, uint joinStart, string joinMapKey, EiscApiAdvanced bridge)
+- public void Record(string name, double milliseconds)
+- public void RecordSince(string name, long startTimestamp)
+- public void Start(string name, string? id = null)
+- public bool Stop(string name, string? id = null, string? recordAs = null)
+- public bool IsPending(string name, string? id = null)
+- public void Reset()
+- public string FormatTable(string newLine = "\r\n")
+- public void Add(double ms)
+- public TimingSummary Summarize(string name)
+- public string Begin(string kind, TimeSpan? timeout = null)
+- public bool TryComplete(string? id, out string kind)
+- public int PendingCount()
+- public int PendingCount(string kind)
+- public void Clear()
+- public void On(string path, Action<JToken, XapiMessage> handler)
+- public int Dispatch(string document)
+- public int Dispatch(XapiMessage message)
+- public void AddCustomActivationAction(Action a)
+- public void PreActivateAction()
+- public void AddCommandToQueue(string command)
+- public void ParseStatus(List<WebView.WebView> webViews)
+- public bool ParseErrorStatus(JToken statusToken)
+- public void ParseStatus(Panels.CiscoCodecEvents.Panel panel)
+- public void Initialize(string defaultRoomKey)
+- public void ParseStatus(CiscoCodecEvents.Panel panel)
+- public bool SubscribeToPanelFeedback(string panelId, bool subscribe)
+- public bool SubscribeToPanelFeedback(string panelId)
+- public bool UnsubscribeFromPanelFeedback(string panelId)
+- public void RegisterFeedback()
+- public void DeregisterFeedback()
+- public string xCommand()
+- public void Activate(NavigatorController parent)
+- public void SendWebViewMcUrl(
+            string mcPath,
+            WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
+        )
+- public void EnterPwaMode(string url, bool prependmcUrl = true)
+- public void ExitPwaMode()
+- public void SendWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
+- public void ClearWebView()
+- public void ClearWebViewOsd()
+- public void Activate(NavigatorController parent)
+- public void LockoutWebViewChanged(object sender, WebViewChangedEventArgs args)
+- public void SendWebViewMcUrl(
+            string mcPath,
+            WebViewDisplayConfig webViewConfig, bool prependmcUrl = true
+        )
+- public void SendWebViewUrl(string url, WebViewDisplayConfig webViewConfig)
+- public void ClearWebView()
+- public void ClearWebViewOsd()
+- public void SetAppUrl(string url)
+- public void CloseWebViewController()
+- public void CloseWebViewOsd()
+- public void ShowWebViewOsd(string url, WebViewDisplayConfig webviewConfig)
+- public void EnterPwaMode(string url)
+- public void ExitPwaMode()
+- public void Initialize(CiscoCodec parent, Action<string> enqueueCommand)
+- public void Update(Action<string> enqueueCommand)
+- public string XCommand()
+- public string GetConfiguredCameraName(string cameraKey)
+- public string GetPrimaryCameraKey()
+- public string GetPresenterTrackCameraKey()
+- public void Feed(string text)
+- public void Reset(string reason)
+- public void Feed(string text)
+- public void Reset()
+<!-- END Public Methods -->
+<!-- START Bool Feedbacks -->
+### Bool Feedbacks
+
+- PresentationViewMaximizedFeedback
+- PresentationViewMinimizedFeedback
+- PresentationViewDefaultFeedback
+- RoomIsOccupiedFeedback
+- SelfviewIsOnFeedback
+- PresentationActiveFeedback
+- IsInPwaModeFeedback
+- LocalLayoutIsProminentFeedback
+- FarEndIsSharingContentFeedback
+- CameraAutoModeIsOnFeedback
+- SpeakerTrackStatusOnFeedback
+- PresenterTrackStatusOnFeedback
+- PresenterTrackStatusOffFeedback
+- PresenterTrackStatusFollowFeedback
+- PresenterTrackStatusBackgroundFeedback
+- PresenterTrackStatusPersistentFeedback
+- CameraAutoModeAvailableFeedback
+- SpeakerTrackAvailableFeedback
+- PresenterTrackAvailableFeedback
+- DirectorySearchInProgress
+- CurrentDirectoryResultIsNotDirectoryRoot
+- PresentationSendingLocalOnlyFeedback
+- PresentationSendingLocalRemoteFeedback
+- ContentInputActiveFeedback
+- ControllingFarEndCameraFeedback
+- CameraIsOffFeedback
+- CameraIsMutedFeedback
+- HalfWakeModeIsOnFeedback
+- EnteringStandbyModeFeedback
+- DoNotDisturbModeIsOnFeedback
+- PhoneOffHookFeedback
+- DoNotDisturbModeIsOnFeedback
+- ScenarioReconciledFeedback
+<!-- END Bool Feedbacks -->
+<!-- START Int Feedbacks -->
+### Int Feedbacks
+
+- PeopleCountFeedback
+- RingtoneVolumeFeedback
+- PresentationSourceFeedback
+<!-- END Int Feedbacks -->
+<!-- START String Feedbacks -->
+### String Feedbacks
+
+- SelfviewPipPositionFeedback
+- LocalLayoutFeedback
+- AvailableLayoutsFeedback
+- PresenterTrackStatusNameFeedback
+- ProvisioningRoomTypeFeedback
+- SelectedCameraFeedback
+- WidgetEventFeedback
+- CallerIdNameFeedback
+- CallerIdNumberFeedback
+- WidgetEventFeedback
+- AppUrlFeedback
+<!-- END String Feedbacks -->
