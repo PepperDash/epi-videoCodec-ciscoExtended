@@ -91,7 +91,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
       if (combiners == null || combiners.Count == 0)
       {
-        parent.LogWarning("{uiKey} could not find RoomCombiner", parent.Key);
+        // The normal case: most systems have no room combiner (#119).
+        parent.LogDebug("{uiKey} could not find RoomCombiner", parent.Key);
         return;
       }
 

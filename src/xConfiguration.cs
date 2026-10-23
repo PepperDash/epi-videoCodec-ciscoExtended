@@ -41,7 +41,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -67,7 +67,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -157,7 +157,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
 
@@ -517,7 +517,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 set
                 {
                     _value = value;
-                    OnValueChanged();
+                    OnValueChanged(value);
                 }
             }
         }
@@ -527,7 +527,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             private string _value;
 
 
-            public string Value { get { return _value; } set { _value = value; OnValueChanged(); } }
+            public string Value { get { return _value; } set { _value = value; OnValueChanged(value); } }
         }
 
         public class H323Alias
