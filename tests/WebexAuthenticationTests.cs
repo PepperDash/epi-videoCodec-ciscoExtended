@@ -112,6 +112,19 @@ public class WebexAuthenticationTests
     }
 
     [Fact]
+    public void A_Pin_Submitted_On_A_Call_That_Ended_Is_Not_Reported_On_The_Next_Call()
+    {
+        var flow = new WebexAuthentication.PinFlow();
+        flow.OnRequest("16", "HostPinOrGuest");
+        flow.OnResponse(WebexAuthentication.ReadResponse(Entered("Host"))).Should().BeFalse();
+
+        // Call 16 drops before the codec accepts the PIN; the next call needs no PIN
+        flow.OnRequest("17", "None").Should().BeNull("nobody entered a PIN on call 17");
+        flow.PendingRole.Should().BeNull();
+        flow.OnRequest("17", "None").Should().BeNull();
+    }
+
+    [Fact]
     public void A_Guest_Join_At_A_Webinar_Prompt_Is_An_Attendee_And_At_A_Meeting_Prompt_A_Guest()
     {
         // Webinar bench 2026-10-21, call 21: Guest with the webinar password connected; the codec

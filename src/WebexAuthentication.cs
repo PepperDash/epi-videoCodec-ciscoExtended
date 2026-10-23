@@ -88,6 +88,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             /// <summary>The role of a PIN submitted and not yet accepted or rejected.</summary>
             public string? PendingRole { get; private set; }
             private bool _pendingAtWebinar;
+            // The call the pending PIN was submitted on
+            private string _pendingCallId = string.Empty;
             public bool Requested => IsRequested(RequestType);
 
             /// <summary>A Status AuthenticationRequest. Returns the role that has now joined, or null.</summary>
@@ -95,6 +97,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 CallId = callId;
                 RequestType = requestType;
+                // A PIN submitted on a call that ended before the codec accepted it: a later call's
+                // status must not report that role as joined
+                if (PendingRole != null && callId != _pendingCallId)
+                    PendingRole = null;
                 if (IsRequested(requestType) || PendingRole == null)
                     return null;
                 var joined = PendingRole;
@@ -114,6 +120,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return true;
                 }
                 PendingRole = result;
+                _pendingCallId = CallId;
                 _pendingAtWebinar = IsWebinar(RequestType);
                 return false;
             }
