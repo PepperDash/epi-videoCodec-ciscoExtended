@@ -66,6 +66,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
+        /// <summary>All requests still waiting for a reply.</summary>
+        public int PendingCount()
+        {
+            lock (_lock)
+                return _pending.Count;
+        }
+
         /// <summary>Requests of this kind still waiting for a reply.</summary>
         public int PendingCount(string kind)
         {

@@ -93,6 +93,21 @@ public class XapiRequestTrackerTests
     }
 
     [Fact]
+    public void PendingCount_Without_A_Kind_Counts_Every_Request()
+    {
+        var t = New();
+        t.Begin("phonebook.search");
+        t.Begin("phonebook.folder");
+        var status = t.Begin("status.full");
+
+        t.PendingCount().Should().Be(3);
+        t.TryComplete(status, out _);
+        t.PendingCount().Should().Be(2);
+        t.Clear();
+        t.PendingCount().Should().Be(0);
+    }
+
+    [Fact]
     public void Clear_Drops_Everything()
     {
         var t = New();

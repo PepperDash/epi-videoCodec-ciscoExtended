@@ -2317,6 +2317,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
 			ResetJsonReceiveState("connection to codec changed");
 			ResetFramerFromAnotherThread("connection to codec changed");
+			AbandonPendingRequestsFromAnotherThread("connection to codec changed");
 
 			if (e.Client.IsConnected)
 			{
@@ -2513,6 +2514,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				_requestExpiryTimer = new CTimer(
 					_ => _receiveQueue.Enqueue(new ProcessStringMessage("request-expiry", __ => ExpireRequests())),
 					null, 5000, 5000);
+		}
+
+		// Replies to requests made in a session that has ended will never come. Dropped on the receive
+		// queue, like expiry, so a pending phonebook search clears DirectorySearchInProgress straight
+		// away instead of after its timeout, and old requests don't log "No reply" warnings later.
+		private void AbandonPendingRequestsFromAnotherThread(string reason) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage("requests-abandon", _ => AbandonPendingRequests(reason)));
+
+		private void AbandonPendingRequests(string reason)
+		{
+			var pending = _requests.PendingCount();
+			if (pending == 0)
+				return;
+
+			var searchWasPending = _requests.PendingCount(PhonebookSearchRequest) > 0;
+			_requests.Clear();
+			this.LogDebug("Dropped {count} pending codec request(s): {reason}", pending, reason);
+
+			if (searchWasPending)
+			{
+				_searchInProgress = false;
+				DirectorySearchInProgress.FireUpdate();
+			}
 		}
 
 		// Runs on the receive queue, like the replies that complete requests.
@@ -2818,6 +2842,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			(CommunicationMonitor as CiscoCommunicationMonitor)?.HoldInError();
 			ResetJsonReceiveState("serial login prompt");
+			AbandonPendingRequestsFromAnotherThread("serial login prompt");
 			StopFeedbackRegistrationRecovery();
 			SyncState.SessionLost();
 		}
