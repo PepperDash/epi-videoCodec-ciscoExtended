@@ -329,6 +329,64 @@ public class XapiStreamFramerTests
         return docs;
     }
 
+    // A status document whose array elements each start with "{" on their own line, as RoomOS
+    // pretty-prints them. The first widget's value is the text "Login successful".
+    private static readonly string Widgets = Lines(
+        "{",
+        "  \"Status\": {",
+        "    \"UserInterface\": { \"Extensions\": { \"Widget\": [",
+        "      {",
+        "        \"id\": \"1\",",
+        "        \"Value\": \"Login successful\"",
+        "      },",
+        "      {",
+        "        \"id\": \"2\",",
+        "        \"Value\": \"On\"",
+        "      }",
+        "    ] } }",
+        "  }",
+        "}");
+
+    [Fact]
+    public void A_Login_Successful_Value_Does_Not_Abandon_The_Document()
+    {
+        var c = Run(Widgets);
+
+        c.Abandoned.Should().BeEmpty();
+        c.Documents.Should().ContainSingle()
+            .Which.Should().Contain("\"Login successful\"").And.Contain("\"On\"");
+    }
+
+    [Fact]
+    public void The_Rest_Of_An_Abandoned_Document_Is_Not_Framed_As_New_Documents()
+    {
+        // Abandon part-way through the widget array, as a stall reset or the size cap would
+        var lines = Widgets.Split(Crlf);
+        var f = new XapiStreamFramer();
+        var c = new Capture(f);
+        var dropped = new List<string>();
+        f.RemainderDropped += dropped.Add;
+
+        f.Feed(string.Join(Crlf, lines.Take(5)) + Crlf);
+        f.Reset("stalled");
+        f.Feed(string.Join(Crlf, lines.Skip(5)) + Volume);
+
+        c.Abandoned.Should().ContainSingle();
+        c.Documents.Should().ContainSingle().Which.Should().Contain("\"49\"");
+        c.Lines.Should().BeEmpty();
+        dropped.Should().Contain("}").And.Contain("        \"id\": \"2\",");
+    }
+
+    [Fact]
+    public void Text_At_Column_Zero_After_An_Abandon_Is_Still_Reported()
+    {
+        // An RS-232 session reset mid-document: no remainder arrives, the banner and new output do
+        var c = Run(Lines("{", "  \"Status\": {") + Lines("*r Login successful", "OK") + Volume);
+
+        c.Lines.Select(l => l.Kind).Should().Equal(XapiLineKind.TextModeOutput, XapiLineKind.CommandEnd);
+        c.Documents.Should().ContainSingle().Which.Should().Contain("\"49\"");
+    }
+
     /// <summary>The same comparison the plugin's shadow mode makes: line endings removed.</summary>
     private static string Normalize(string document) => document.Replace("\r", "").Replace("\n", "");
 }

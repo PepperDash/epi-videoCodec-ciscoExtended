@@ -2443,6 +2443,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_framer.DocumentAbandoned += reason => ResetJsonReceiveState(reason);
 			_framer.EchoDropped += line =>
 				this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", line);
+			_framer.RemainderDropped += line =>
+				this.LogVerbose("Dropped a line of an abandoned JSON document: {line}", line);
 			_framer.UnterminatedString += line =>
 				this.LogWarning(
 					"A JSON line from the codec ended inside a string (damaged text); closed it to keep framing: {line}",

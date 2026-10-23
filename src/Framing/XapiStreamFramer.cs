@@ -52,6 +52,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private int _depth;
         private bool _inString;
         private bool _escape;
+        // Set when a document is abandoned part-way through: its remaining (indented) lines are dropped
+        // rather than framed, until a line starts at column 0.
+        private bool _droppingRemainder;
 
         /// <summary>A document has started (its first line has arrived).</summary>
         public event Action? DocumentStarted;
@@ -67,6 +70,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         /// <summary>An echoed command line was dropped from inside a document.</summary>
         public event Action<string>? EchoDropped;
+
+        /// <summary>A line of an abandoned document arrived after it was abandoned, and was dropped.</summary>
+        public event Action<string>? RemainderDropped;
 
         /// <summary>
         /// A line inside a document ended inside a string. JSON strings can't contain a raw line
@@ -122,6 +128,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private void ProcessLine(string line)
         {
+            if (_depth == 0 && _droppingRemainder && DropRemainderLine(line))
+                return;
+
             if (_depth == 0)
             {
                 var first = FirstNonBlank(line);
@@ -144,9 +153,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return;
                 }
 
+                // A bare "Login successful" banner line; a JSON line can't start with it, so a value
+                // such as "Value": "Login successful" doesn't match
                 var trimmed = line.TrimStart();
                 if (TextModeLine.IsMatch(trimmed) || CommandEndLine.IsMatch(trimmed)
-                    || trimmed.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
+                    || trimmed.StartsWith("login successful", StringComparison.OrdinalIgnoreCase))
                 {
                     AbandonDocument("codec sent text-mode output in the middle of a JSON document");
                     LineReceived?.Invoke(Classify(line), line);
@@ -222,7 +233,35 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _inString = false;
             _escape = false;
             _document.Clear();
+            _droppingRemainder = true;
             DocumentAbandoned?.Invoke(reason);
+        }
+
+        // RoomOS starts a top-level document at column 0 and indents everything inside it. After an
+        // abandon, an indented line is the rest of the abandoned document: framing it would turn each
+        // remaining array element (a "{" on its own line) into a fake top-level document. Returns true
+        // when the line was dropped.
+        private bool DropRemainderLine(string line)
+        {
+            var first = FirstNonBlank(line);
+            if (first < 0)
+                return false;
+
+            if (first > 0)
+            {
+                RemainderDropped?.Invoke(line);
+                return true;
+            }
+
+            _droppingRemainder = false;
+            if (line[0] == '}' || line[0] == ']')
+            {
+                // The abandoned document's own closing brace
+                RemainderDropped?.Invoke(line);
+                return true;
+            }
+
+            return false;
         }
 
         private static int FirstNonBlank(string s)
