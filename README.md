@@ -281,7 +281,9 @@ This will automatically generate an output file:
 /user/programX/navigatorIcons/icons-base64.txt,
 which contains the Base64-encoded "customIconContent" for each icon.
 
-The plugin sends `customIconContent` to the codec split into 76-character lines. Over RS-232, RoomOS restarts the serial session when it receives a single line longer than 2,048 bytes (including CR LF), and an icon sent as one line is usually longer than that. When the codec is controlled over RS-232, the plugin logs an error and does not send any command that still has a line over 2,048 bytes.
+Over SSH, the plugin sends `customIconContent` to the codec on one line. Over RS-232, it splits the content into 76-character lines: RoomOS restarts the serial session when it receives a single line longer than 2,048 bytes (including CR LF), and an icon sent as one line is usually longer than that. When the codec is controlled over RS-232, the plugin logs an error and does not send any command that still has a line over 2,048 bytes.
+
+RoomOS 26.7 rejects the whole UI Extensions set with "Failed to decode data" when the icon content contains line breaks, so on RS-232 a custom icon can stop all panels from loading. The plugin logs this rejection as an error. If you see it, use a built-in icon instead.
 
 ### Navigator Lockout Functionality **NEW**
 

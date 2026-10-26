@@ -474,25 +474,37 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
         public string Content { get; set; }
 
         /// <summary>
-        /// <see cref="Content"/> as written to the codec: the base64 split into lines of
-        /// <see cref="ContentLineLength"/> characters. Over RS-232 RoomOS resets the session on any
-        /// line longer than 2,048 bytes, and a custom icon sent as one line is usually longer (#114).
-        /// RoomOS ignores the line breaks when it decodes the base64.
+        /// When true, <see cref="WrappedContent"/> splits the base64 into lines of
+        /// <see cref="ContentLineLength"/> characters. Set it only when the codec is on RS-232.
+        /// </summary>
+        [XmlIgnore]
+        [JsonIgnore]
+        public bool WrapContent { get; set; }
+
+        /// <summary>
+        /// <see cref="Content"/> as written to the codec. Over RS-232 RoomOS resets the session on any
+        /// line longer than 2,048 bytes, and a custom icon sent as one line is usually longer (#114),
+        /// so the base64 is wrapped when <see cref="WrapContent"/> is set. Otherwise it is sent on one
+        /// line: RoomOS 26.7 rejects the whole Extensions Set with "Failed to decode data" when the
+        /// base64 has line breaks (#177).
         /// </summary>
         [XmlElement("Content")]
         [JsonIgnore]
         public string WrappedContent
         {
-            get => WrapBase64(Content);
-            set => Content = value == null ? null : new string(value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            get => WrapContent ? WrapBase64(Content) : StripWhitespace(Content);
+            set => Content = StripWhitespace(value);
         }
+
+        private static string StripWhitespace(string content) =>
+            content == null ? null : new string(content.Where(c => !char.IsWhiteSpace(c)).ToArray());
 
         private static string WrapBase64(string content)
         {
             if (string.IsNullOrEmpty(content))
                 return content;
 
-            var base64 = new string(content.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            var base64 = StripWhitespace(content);
             var lines = new List<string>();
             for (var i = 0; i < base64.Length; i += ContentLineLength)
                 lines.Add(base64.Substring(i, Math.Min(ContentLineLength, base64.Length - i)));
