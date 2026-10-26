@@ -2396,7 +2396,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.Replace("\n", Delimiter)
 				.TrimEnd('\r', '\n');
 
-			if (Communication is ComPortController && !FitsSerialLineLimit(normalized))
+			if (UsesSerialPort && !FitsSerialLineLimit(normalized))
 				return;
 
 			// Writes come from the receive thread, the sync worker and the communication monitor's
@@ -2417,6 +2417,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		// Over RS-232, RoomOS restarts the serial session when it receives a line longer than
 		// 2,048 bytes including the CR LF (#114). SSH accepts longer lines.
 		internal const int MaxSerialLineBytes = 2048;
+
+		/// <summary>
+		/// True when the codec is controlled over RS-232, where the line limit above applies.
+		/// </summary>
+		internal bool UsesSerialPort => Communication is ComPortController;
 
 		private bool FitsSerialLineLimit(string command)
 		{
@@ -4931,6 +4936,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var presentationStatus = commandResponseToken.SelectToken(
 				"PresentationStopResult.status"
 			);
+			var extensionsSetResultResponse = commandResponseToken.SelectToken("ExtensionsSetResult");
 			var statusToken = commandResponseToken.SelectToken("status");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
 
@@ -4962,6 +4968,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 
 				GetCallHistory();
+				return;
+			}
+			if (extensionsSetResultResponse != null)
+			{
+				// The codec reports a rejected panel set inside the result and saves none of the
+				// panels, so the Navigator shows no custom controls (#177).
+				var setStatus = (string)extensionsSetResultResponse.SelectToken("status");
+				if (!string.Equals(setStatus, "OK", StringComparison.OrdinalIgnoreCase))
+				{
+					var reason = extensionsSetResultResponse.SelectToken("Reason.Value")?.ToString()
+						?? extensionsSetResultResponse.SelectToken("Reason")?.ToString()
+						?? "Unknown";
+					this.LogError("The codec rejected the UI Extensions panels: {status}. Reason: {reason}", setStatus ?? "no status", reason);
+				}
 				return;
 			}
 			if (bookingsListResultResponse != null)

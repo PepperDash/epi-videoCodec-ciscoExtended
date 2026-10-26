@@ -210,6 +210,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Config
                         parent.LogDebug("Removed Classroom Panel from UI Extensions based on Provisioning Room Type");
                     }
                 }
+
+                // Wrap custom icon base64 only on RS-232, which limits line length (#114). Over SSH
+                // RoomOS 26.7 rejects wrapped base64 (#177).
+                var wrapIcons = parent.UsesSerialPort;
+                foreach (var panel in Panels)
+                {
+                    if (panel.CustomIcon != null)
+                        panel.CustomIcon.WrapContent = wrapIcons;
+                }
+
                 return XmlConverter.SerializeObject(this);
             }
             catch (Exception ex)
