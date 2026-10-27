@@ -160,7 +160,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		public readonly WebexPinRequestHandler WebexPinRequestHandler;
+		public WebexPinRequestHandler WebexPinRequestHandler { get; }
 		public readonly DoNotDisturbHandler DoNotDisturbHandler;
 		public readonly UIExtensionsHandler UIExtensionsHandler;
 
@@ -346,7 +346,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private CiscoCodecStatus.RootObject CodecStatus;
 
-		private CiscoCodecEvents.RootObject CodecEvents = new CiscoCodecEvents.RootObject();
 
 		public CodecCallHistory CallHistory { get; private set; }
 
@@ -675,9 +674,48 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public CodecSyncState SyncState { get; }
 
-		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
+		/// <summary>
+		/// Timings of sync, phonebook, bookings, calls and JSON parsing (#129). See the codecperf console command.
+		/// </summary>
+		internal CodecTimings Timings { get; } = new CodecTimings();
 
-		private StringBuilder _jsonMessage;
+		// Frames the codec's output into JSON documents and the lines between them (#129). Only
+		// touched from the receive queue; its events are handled in the On*Framer* methods.
+		private readonly XapiStreamFramer _framer = new XapiStreamFramer();
+
+		// Routes each framed document to the parsers for the paths it contains (#129, stage 4).
+		private readonly XapiDispatcher _dispatcher = new XapiDispatcher();
+
+		// Matches replies to requests by resultId (#129, stage 4; #109). Phonebook searches and the
+		// sync's full xStatus (#142) use it. The full status is about 13 s over RS-232 at 115200, so
+		// it gets a longer timeout; the sync watchdog re-requests it if it never arrives.
+		private const string PhonebookSearchRequest = "phonebook.search";
+		private const string PhonebookFolderRequest = "phonebook.folder";
+		private const string SyncStatusRequest = "sync.xstatus";
+		private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
+		private static readonly TimeSpan SyncStatusTimeout = TimeSpan.FromSeconds(120);
+		private readonly XapiRequestTracker _requests = new XapiRequestTracker(RequestTimeout);
+		private CTimer _requestExpiryTimer;
+
+		// Populates the long-lived CodecStatus / CodecConfiguration from every document (#129, stage 6d).
+		// Lists merge by id instead of growing. Status.RoomPresets is left to ParseRoomPresetList.
+		// Cameras.CameraList (stage 6e) and Status.Calls (stage 6f) are merged by the model too; the
+		// active calls Essentials sees are still ActiveCalls, built by ParseCallArrayToken.
+		private static readonly StateModelContractResolver ModelResolver = new StateModelContractResolver(new[]
+		{
+			(typeof(CiscoCodecStatus.Status), nameof(CiscoCodecStatus.Status.RoomPresets)),
+		});
+		private static readonly JsonSerializerSettings ModelSettings = ModelResolver.Settings;
+		private static int _modelPrepared;
+		private static double _modelWarmupMs = -1;
+
+		// When the line being processed arrived from the transport, when the JSON message being
+		// accumulated started, and (while one is being parsed) when that message started (#129).
+		private long _lineReceivedAt;
+		private long _jsonMessageStartedAt;
+		private long _parsingMessageStartedAt;
+
+		public CodecPhonebookSyncState PhonebookSyncState { get; private set; }
 
 		private volatile bool _jsonFeedbackMessageIsIncoming;
 
@@ -704,9 +742,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if ((DateTime.UtcNow - _jsonMessageLastLineUtc).TotalMilliseconds < JsonMessageStallTimeoutMs)
 					return true;
 
-				ResetJsonReceiveState(
-					$"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received"
-				);
+				var reason = $"no data for {JsonMessageStallTimeoutMs} ms while a JSON response was being received";
+				ResetJsonReceiveState(reason);
+				ResetFramerFromAnotherThread(reason);
 				return false;
 			}
 		}
@@ -747,15 +785,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private string _phonebookMode = "Local"; // Default to Local
 
-		private uint _phonebookResultsLimit = 255; // Could be set later by config.
+		// RoomOS rejects any phonebook query whose limit falls outside [1,100].
+		private const uint PhonebookResultsLimitMax = 100;
+
+		private uint _phonebookResultsLimit = PhonebookResultsLimitMax; // Could be set later by config.
 
 		private CTimer _loginMessageReceivedTimer;
 		private CTimer _retryConnectionTimer;
+
+		// RS-232 login prompt handling (#115). Only set on a serial connection.
+		private SerialLoginDetector _serialLogin;
+		private volatile bool _atSerialLoginPrompt;
+		private bool _serialWakeProbeSent;
+		private CTimer _serialWakeProbeTimer;
 
 		// **___________________________________________________________________**
 		//  Timers to be moved to the global system timer at a later point....
 		private CTimer BookingsRefreshTimer;
 		private CTimer PhonebookRefreshTimer;
+
+		// The start-up search waits for the phonebook sync instead of overlapping it (#109). 1 while it
+		// is waiting; the fallback timer runs it anyway if the phonebook sync never completes.
+		private int _startupSearchPending;
+		private CTimer _startupSearchFallback;
+		private const long StartupSearchFallbackMs = 30000;
 
 		// **___________________________________________________________________**
 
@@ -782,6 +835,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			: base(config)
 		{
 			CodecStatus = new CiscoCodecStatus.RootObject();
+			PrepareStateModel();
 			DeviceInfo = new DeviceInfo();
 			CodecInfo = new CiscoCodecInfo(this);
 			_lastSearched = string.Empty;
@@ -858,10 +912,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				}
 			}
 
-			// Use the configured phonebook results limit if present
+			// Use the configured phonebook results limit if present, clamped to what RoomOS accepts
 			if (props.PhonebookResultsLimit > 0)
 			{
-				_phonebookResultsLimit = props.PhonebookResultsLimit;
+				_phonebookResultsLimit = Math.Min(
+					props.PhonebookResultsLimit,
+					PhonebookResultsLimitMax
+				);
 			}
 
 			// The queue that will collect the repsonses in the order they are received
@@ -964,10 +1021,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 
 			PresentationSourceFeedback = new IntFeedback(() => _presentationSource);
-			PresentationSendingLocalOnlyFeedback = new BoolFeedback(() => _presentationLocalOnly);
-			PresentationSendingLocalRemoteFeedback = new BoolFeedback(
-				() => _presentationLocalRemote
-			);
+			// While presenting, these show the codec's actual sending mode. While nothing is shared the
+			// codec reports Off, so they show the selected mode instead, so a panel can show the choice
+			// before presenting (#40).
+			PresentationSendingLocalOnlyFeedback = new BoolFeedback(() =>
+				_presentationActive ? _presentationLocalOnly : PresentationStates == eCodecPresentationStates.LocalOnly);
+			PresentationSendingLocalRemoteFeedback = new BoolFeedback(() =>
+				_presentationActive ? _presentationLocalRemote : PresentationStates == eCodecPresentationStates.LocalRemote);
 			PresentationActiveFeedback = new BoolFeedback(() => _presentationActive);
 			ContentInputActiveFeedback = new BoolFeedback(() => _presentationSource != 0);
 
@@ -977,21 +1037,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			Communication = comm;
 
+			// The monitor polls through SendTextWithoutQueue rather than writing the poll string to
+			// the connection itself, so its polls take the same send lock as every other plugin write
+			// and can't interleave with them on the wire (#123). SendTextWithoutQueue also adds the
+			// codec delimiter, without which the poll would merge with the next command.
 			if (props.CommunicationMonitorProperties != null)
 			{
-				// Ensure the poll string ends with the codec delimiter (\r\n).
-				// GenericCommunicationMonitor sends the poll string verbatim with no terminator,
-				// so without one the bytes buffer and merge with the next command on the wire.
 				var monitorConfig = props.CommunicationMonitorProperties;
-				if (!string.IsNullOrEmpty(monitorConfig.PollString))
-				{
-					monitorConfig.PollString = monitorConfig.PollString.TrimEnd('\r', '\n') + Delimiter;
-				}
+				var pollString = monitorConfig.PollString;
 
-				CommunicationMonitor = new GenericCommunicationMonitor(
+				CommunicationMonitor = new CiscoCommunicationMonitor(
 					this,
 					Communication,
-					monitorConfig
+					monitorConfig.PollInterval,
+					monitorConfig.TimeToWarning,
+					monitorConfig.TimeToError,
+					() => PollCodec(pollString)
 				);
 			}
 			else
@@ -1005,13 +1066,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ Delimiter
 					+ "xStatus Audio Volume";
 
-				CommunicationMonitor = new GenericCommunicationMonitor(
+				CommunicationMonitor = new CiscoCommunicationMonitor(
 					this,
 					Communication,
 					30000,
 					120000,
 					300000,
-					pollString
+					() => PollCodec(pollString)
 				);
 			}
 
@@ -1026,6 +1087,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
+			WireFramer();
+			WireDispatcher();
 
 			PhonebookSyncState = new CodecPhonebookSyncState(Key + "--PhonebookSync");
 
@@ -1036,6 +1099,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				IncludeDelimiter = true
 			};
 			PortGather.LineReceived += Port_LineReceived;
+
+			// The login prompts have no line ending, so they never reach the line gather (#115). The
+			// detector runs on the port's receive thread (one port raises TextReceived on one thread);
+			// queuing every raw RS-232 chunk instead slowed the whole program during a sync. Only a
+			// signal goes on the receive queue, behind the lines already received.
+			if (Communication is ComPortController)
+			{
+				_serialLogin = new SerialLoginDetector();
+				_serialLogin.SignalReceived += signal =>
+					_receiveQueue.Enqueue(new ProcessStringMessage(signal.ToString(), _ => OnSerialLoginSignal(signal)));
+				Communication.TextReceived += (sender, args) => _serialLogin.Feed(args.Text);
+			}
 
 			CallHistory = new CodecCallHistory();
 
@@ -1176,6 +1251,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				_refreshTimersDisabled = true;
 			}
 			StopRefreshTimers();
+			_serialWakeProbeTimer?.Dispose();
+
 			if (_loginMessageReceivedTimer != null)
 			{
 				_loginMessageReceivedTimer.Stop();
@@ -1204,6 +1281,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ReplaceTimer(ref PhonebookRefreshTimer, null);
 			ReplaceTimer(ref BookingsRefreshTimer, null);
 			ReplaceTimer(ref _registrationCheckTimer, null);
+			ReplaceTimer(ref _startupSearchFallback, null);
 		}
 
 		// Guards every create/replace/stop/reset of the refresh timers, which happen on the socket
@@ -1565,12 +1643,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			CodecStatus.Status.RoomAnalytics.PeopleCount.CurrentPeopleCount.ValueChangedAction =
 				PeopleCountFeedback.FireUpdate;
 
+			// One action for both jobs: a second "=" assignment below used to replace this one, so
+			// CurrentLayoutChanged was never raised from a layout change (#145).
 			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction = () =>
 			{
-				this.LogVerbose("CurrentLayout = {layout}", CurrentLayout);
-				OnCurrentLayoutChanged(
-					CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value
-				);
+				// Layouts are only exposed while presenting (ParseLayoutToken clears them otherwise).
+				if (!_IsInPresentation)
+					return;
+				var activeLayout = CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.Value;
+				this.LogVerbose("ActiveLayout = {layout}", activeLayout);
+				OnCurrentLayoutChanged(activeLayout);
+				LocalLayoutFeedback.FireUpdate();
 			};
 
 			CodecStatus.Status.Video.Selfview.SelfViewMode.ValueChangedAction =
@@ -1578,9 +1661,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CodecStatus.Status.Video.Selfview.PipPosition.ValueChangedAction =
 				ComputeSelfviewPipStatus;
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts.ActiveLayout.ValueChangedAction =
-				LocalLayoutFeedback.FireUpdate;
 
 			CodecStatus.Status.Video.Layout.LayoutFamily.Local.ValueChangedAction =
 				ComputeLegacyLayout;
@@ -1601,18 +1681,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					PresenterTrackFeedbackGroup.FireUpdate();
 					CameraAutoModeIsOnFeedback.FireUpdate();
 				};
+			// Availability is set by ParseSpeakerTrackToken / ParsePresenterTrackToken, which run after the
+			// model populate that fires these, so the capabilities are updated there (#117).
 			CodecStatus.Status.Cameras.SpeakerTrack.Availability.ValueChangedAction += () =>
 			{
 				SpeakerTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
-				OnCameraTrackingCapabilitiesChanged();
 			};
 			CodecStatus.Status.Cameras.PresenterTrack.Availability.ValueChangedAction += () =>
 			{
-				PresenterTrackAvailability = CodecStatus.Status.Cameras.PresenterTrack.Availability.BoolValue;
 				PresenterTrackAvailableFeedback.FireUpdate();
 				CameraAutoModeAvailableFeedback.FireUpdate();
-				OnCameraTrackingCapabilitiesChanged();
 			};
 
 			#endregion
@@ -1762,12 +1841,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		protected override bool CustomActivate()
 		{
-			CrestronConsole.AddNewConsoleCommand(
-				SetCommDebug,
-				"SetCodecCommDebug",
-				"0 for Off, 1 for on",
-				ConsoleAccessLevelEnum.AccessOperator
-			);
+			AddPerfConsoleCommand();
+
+			AddCommDebugConsoleCommand();
 			CrestronConsole.AddNewConsoleCommand(
 				GetPhonebook,
 				"GetCodecPhonebook",
@@ -1782,7 +1858,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 
 			PhonebookSyncState.InitialSyncCompleted += PhonebookSyncState_InitialSyncCompleted;
-			CameraTrackingCapabilitiesChanged += CiscoCodec_CameraTrackingCapabilitiesChanged;
 
 			//Reserved for future use
 			CodecSchedule.MeetingsListHasChanged += (sender, args) => { };
@@ -1802,17 +1877,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			mc.AddDeviceMessenger(presenterTrackMessenger);
 
 			return base.CustomActivate();
-		}
-
-		private void CiscoCodec_CameraTrackingCapabilitiesChanged(
-			object sender,
-			CameraTrackingCapabilitiesArgs e
-		)
-		{
-			if (e == null)
-				return;
-			CameraTrackingCapabilities = e.CameraTrackingCapabilites;
-			SupportsCameraAutoMode = CameraTrackingCapabilities != eCameraTrackingCapabilities.None;
 		}
 
 		private void CiscoCodec_AvailableLayoutsChanged(
@@ -1837,6 +1901,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		private void PhonebookSyncState_InitialSyncCompleted(object sender, EventArgs e)
 		{
 			this.LogVerbose("Phonebook Initial Sync Completed");
+			RunStartupSearch("the phonebook sync completed");
 			if (DirectoryRoot == null)
 				return;
 			OnDirectoryResultReturned(DirectoryRoot);
@@ -1852,7 +1917,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				RegisterRoomPresetEvents();
 				RegisterH323Configuration();
 				RegisterAutoAnswer();
-				RegisterDisconnectEvents();
 
 				if (Communication is ISocketStatus socket)
 				{
@@ -1875,7 +1939,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (Communication == null)
 					throw new NullReferenceException("Coms");
 
-				CommDebuggingIsOn = config.EnableCommDebugOnStartup;
+				if (config.EnableCommDebugOnStartup)
+					SetCommDebug(true);
 
 				Communication.Connect();
 
@@ -2026,7 +2091,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (config.GetPhonebookOnStartup)
 			{
 				this.LogInformation("Getting phonebook on startup");
-				SearchDirectory("");
+				// Sent once the phonebook sync below (folders, then root contacts) completes, not alongside
+				// it: against a large corporate directory the overlapping blank search timed out on every
+				// restart (#109, Codec Pro bench), while the same search on its own succeeds.
+				System.Threading.Interlocked.Exchange(ref _startupSearchPending, 1);
+				ReplaceTimer(ref _startupSearchFallback, new CTimer(_ =>
+					_receiveQueue.Enqueue(new ProcessStringMessage("startup-search",
+						__ => RunStartupSearch("the phonebook sync did not complete in time"))),
+					StartupSearchFallbackMs));
 			}
 
 			if (ActiveCalls.Count < 1)
@@ -2145,18 +2217,96 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ReplaceTimer(ref _registrationCheckTimer, new CTimer(EnqueueCommand, "xFeedback list", 90000, 90000));
 		}
 
-		public void SetCommDebug(string s)
+		/// <summary>
+		/// Turns comm debug on or off: Essentials stream debug (both directions, default timeout) on
+		/// this codec's communication device. CommDebuggingIsOn used to be set and never read (#120).
+		/// </summary>
+		public void SetCommDebug(bool on)
 		{
-			if (s == "1")
+			CommDebuggingIsOn = on;
+			if (Communication is IStreamDebugging streamDebugging)
+				streamDebugging.StreamDebugging.SetDebuggingWithDefaultTimeout(
+					on ? eStreamDebuggingSetting.Both : eStreamDebuggingSetting.Off);
+			else
+				this.LogWarning("Comm debug: {comm} does not support stream debugging", Communication?.Key);
+		}
+
+		private static readonly object CommDebugConsoleCommandLock = new object();
+		private static bool _commDebugConsoleCommandAdded;
+
+		// Registered once for all codecs, like codecperf: a per-instance registration under one name
+		// only ever reached the first codec (#120).
+		private static void AddCommDebugConsoleCommand()
+		{
+			lock (CommDebugConsoleCommandLock)
 			{
-				CommDebuggingIsOn = true;
-				CrestronConsole.ConsoleCommandResponse($"${Key} Codec Comm Debug Enabled.");
+				if (_commDebugConsoleCommandAdded)
+					return;
+
+				// Short, plain help text: on the CP4N bench a longer one stopped this registration, and the
+				// commands registered after it (GetCodecPhonebook, GetCodecBookings) were missing. A
+				// failure here must never skip the rest of CustomActivate.
+				try
+				{
+					if (!CrestronConsole.AddNewConsoleCommand(
+						CommDebugConsoleCommand,
+						"SetCodecCommDebug",
+						"Codec comm debug: codecKey 0 or 1",
+						ConsoleAccessLevelEnum.AccessOperator
+					))
+						Debug.LogWarning("SetCodecCommDebug console command could not be registered");
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError("SetCodecCommDebug console command could not be registered: {message}", ex.Message);
+				}
+				_commDebugConsoleCommandAdded = true;
+			}
+		}
+
+		private static void CommDebugConsoleCommand(string args)
+		{
+			const string usage = "Usage: SetCodecCommDebug <codecKey> <0|1>, or SetCodecCommDebug <0|1> when there is one codec\r\n";
+			var parts = (args ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			CiscoCodec codec;
+			string value;
+			if (parts.Length == 2)
+			{
+				codec = DeviceManager.GetDeviceForKey(parts[0]) as CiscoCodec;
+				value = parts[1];
+				if (codec == null)
+				{
+					CrestronConsole.ConsoleCommandResponse("No Cisco codec with key '{0}'\r\n", parts[0]);
+					return;
+				}
+			}
+			else if (parts.Length == 1)
+			{
+				var codecs = DeviceManager.AllDevices.OfType<CiscoCodec>().ToList();
+				if (codecs.Count != 1)
+				{
+					CrestronConsole.ConsoleCommandResponse("{0} Cisco codecs configured; give the codec key. {1}", codecs.Count, usage);
+					return;
+				}
+				codec = codecs[0];
+				value = parts[0];
 			}
 			else
 			{
-				CommDebuggingIsOn = false;
-				CrestronConsole.ConsoleCommandResponse($"${Key} Codec Comm Debug Disabled.");
+				CrestronConsole.ConsoleCommandResponse(usage);
+				return;
 			}
+
+			if (value != "0" && value != "1")
+			{
+				CrestronConsole.ConsoleCommandResponse(usage);
+				return;
+			}
+
+			var on = value == "1";
+			codec.SetCommDebug(on);
+			CrestronConsole.ConsoleCommandResponse("{0} codec comm debug {1} (stream debug on {2})\r\n",
+				codec.Key, on ? "on" : "off", codec.Communication?.Key);
 		}
 
 		private void Socket_ConnectionChange(object sender, GenericSocketStatusChageEventArgs e)
@@ -2166,6 +2316,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Any response that was mid-stream is gone with the old connection; release the
 			// command queue so SyncState.CodecDisconnected() and the re-sync can run.
 			ResetJsonReceiveState("connection to codec changed");
+			ResetFramerFromAnotherThread("connection to codec changed");
+			AbandonPendingRequestsFromAnotherThread("connection to codec changed");
 
 			if (e.Client.IsConnected)
 			{
@@ -2177,6 +2329,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			else
 			{
+				// The next session's full status reports the address again.
+				_contactSipAddress = null;
 				SyncState.CodecDisconnected();
 				PhonebookSyncState.CodecDisconnected();
 				StopFeedbackRegistrationRecovery();
@@ -2193,148 +2347,358 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_retryConnectionTimer = new CTimer(o => Communication.Connect(), 2000);
 		}
 
+		private static readonly object PerfConsoleCommandLock = new object();
+		private static bool _perfConsoleCommandAdded;
+
+		// One console command for every codec instance: codecperf <codecKey> [reset].
+		private static void AddPerfConsoleCommand()
+		{
+			lock (PerfConsoleCommandLock)
+			{
+				if (_perfConsoleCommandAdded)
+					return;
+
+				CrestronConsole.AddNewConsoleCommand(
+					PerfConsoleCommand,
+					"codecperf",
+					"Cisco codec timings (ms): codecperf <codecKey> [reset]",
+					ConsoleAccessLevelEnum.AccessOperator
+				);
+				_perfConsoleCommandAdded = true;
+			}
+		}
+
+		private static void PerfConsoleCommand(string args)
+		{
+			var parts = (args ?? string.Empty).Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length == 0)
+			{
+				CrestronConsole.ConsoleCommandResponse("Usage: codecperf <codecKey> [reset]\r\n");
+				return;
+			}
+
+			if (!(DeviceManager.GetDeviceForKey(parts[0]) is CiscoCodec codec))
+			{
+				CrestronConsole.ConsoleCommandResponse("No Cisco codec with key '{0}'\r\n", parts[0]);
+				return;
+			}
+
+			if (parts.Length > 1 && parts[1].Equals("reset", StringComparison.OrdinalIgnoreCase))
+			{
+				codec.Timings.Reset();
+				ValueProperty.ResetCounts();
+				CrestronConsole.ConsoleCommandResponse("{0}: timings reset\r\n", codec.Key);
+				return;
+			}
+
+			CrestronConsole.ConsoleCommandResponse("{0}", codec.FormatPerfReport());
+		}
+
+		internal string FormatPerfReport()
+		{
+			var sync = SyncState;
+			var cameraList = CodecStatus.Status.Cameras.CameraList.ToList();
+			return string.Format(
+				"{0} timings since {1:yyyy-MM-dd HH:mm:ss} UTC\r\n"
+					+ "SyncState: Login={2} JsonMode={3} Status={4} Configuration={5} SoftwareVersion={6} Feedback={7} Complete={8} FullStatus={12}\r\n"
+					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
+					+ "Cameras: listed={14} connected={15} devices={16}\r\n"
+					+ "Calls: listed={17} active={18}\r\n"
+					+ "{9}",
+				Key, Timings.SinceUtc,
+				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
+				sync.InitialConfigurationMessageWasReceived, sync.InitialSoftwareVersionMessageWasReceived,
+				sync.FeedbackWasRegistered, sync.InitialSyncComplete,
+				Timings.FormatTable(),
+				ValueProperty.NotifiedCount, ValueProperty.UnchangedCount,
+				sync.FullStatusWasReceived, _modelWarmupMs,
+				cameraList.Count,
+				cameraList.Count(c => string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase)),
+				Cameras?.Count ?? 0,
+				CodecStatus.Status.Calls?.Count ?? 0,
+				ActiveCalls?.Count ?? 0
+			);
+		}
+
 		private void Port_LineReceived(object dev, GenericCommMethodReceiveTextArgs args)
 		{
-			var message = new ProcessStringMessage(args.Text, ProcessResponse);
+			var receivedAt = CodecTimings.Now;
+			var message = new ProcessStringMessage(args.Text, text =>
+			{
+				_lineReceivedAt = receivedAt;
+				Timings.RecordSince("rx.queueDelay", receivedAt);
+				FeedFramer(text);
+			});
 			_receiveQueue.Enqueue(message);
 		}
 
-		private void ProcessResponse(string response)
+		// ---- Receive path (#129, stage 3) --------------------------------------------------------
+		// CommunicationGather delivers lines; XapiStreamFramer turns them into complete JSON documents
+		// and classified lines between them, independent of how the codec split its output.
+
+		private void WireFramer()
+		{
+			_framer.DocumentStarted += OnFramerDocumentStarted;
+			_framer.DocumentReceived += OnFramerDocument;
+			_framer.LineReceived += OnFramerLine;
+			_framer.DocumentAbandoned += reason => ResetJsonReceiveState(reason);
+			_framer.EchoDropped += line =>
+				this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", line);
+			_framer.RemainderDropped += line =>
+				this.LogVerbose("Dropped a line of an abandoned JSON document: {line}", line);
+			_framer.UnterminatedString += line =>
+				this.LogWarning(
+					"A JSON line from the codec ended inside a string (damaged text); closed it to keep framing: {line}",
+					line.Length > 120 ? line.Substring(0, 120) + "..." : line);
+		}
+
+		// The same four parsers, in the same order, as before; each is now only called when its
+		// top-level key is present (they all returned straight away on null before). A parser that
+		// throws no longer stops the others for that message.
+		private void WireDispatcher()
+		{
+			_dispatcher.On("Status", (token, message) =>
+			{
+				try
+				{
+					ParseStatusObject(token);
+				}
+				finally
+				{
+					// Only the reply to the sync's own tagged xStatus completes the full-status step (#142);
+					// poll replies and status feedback carry no resultId, or another request's. Completed
+					// even when the parse throws (the dispatcher still logs it): otherwise the request
+					// stays pending until it expires and every re-request fails the same way.
+					if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+					{
+						Timings.Stop(SyncStatusRequest, message.ResultId);
+						SyncState.FullStatusReceived();
+					}
+				}
+			});
+			_dispatcher.On("Configuration", (token, _) => ParseConfigurationObject(token));
+			// Events are one-off notices, not state: each area has its own handler (#129, stage 6b).
+			_dispatcher.On("Event/CallDisconnect", (token, _) => OnCallDisconnectEvent(token));
+			_dispatcher.On("Event/Bookings", (token, _) => GetBookings(null));
+			_dispatcher.On("Event/UserInterface", (token, _) => OnUserInterfaceEvent(token));
+			_dispatcher.On("Event/Conference", (token, _) => WebexPinRequestHandler.ParseAuthenticationResponse(token));
+			// Command replies: one handler per result type (#129, stage 6c). Each reply carries one result,
+			// and the parsers take the whole CommandResponse object.
+			OnCommandResult("CallHistoryRecentsResult", (response, _) => ParseCallHistoryResponseToken(response));
+			OnCommandResult("CallHistoryDeleteEntryResult", (response, _) => OnCallHistoryDeleteEntryResult(response));
+			OnCommandResult("BookingsListResult", (response, _) => ParseBookingsListResultToken(response));
+			OnCommandResult("PhonebookSearchResult", (response, message) => ParsePhonebookSearchResultResponse(response, message.ResultId));
+			OnCommandResult("PresentationStopResult", (response, _) => OnPresentationStopResult(response));
+			OnCommandResult("ExtensionsSetResult", (response, _) => OnExtensionsSetResult(response));
+			_dispatcher.HandlerFailed += (path, ex) =>
+			{
+				this.LogError("Error handling {path} from codec: {error}", path, ex.Message);
+				this.LogVerbose(ex, "Stack Trace: ");
+			};
+		}
+
+		/// <summary>
+		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
+		/// the full-status step done (#142).
+		/// </summary>
+		internal void RequestFullStatus()
+		{
+			var id = _requests.Begin(SyncStatusRequest, SyncStatusTimeout);
+			Timings.Start(SyncStatusRequest, id);
+			StartRequestExpiryTimer();
+			SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id));
+		}
+
+		private void StartRequestExpiryTimer()
+		{
+			if (_requestExpiryTimer == null)
+				_requestExpiryTimer = new CTimer(
+					_ => _receiveQueue.Enqueue(new ProcessStringMessage("request-expiry", __ => ExpireRequests())),
+					null, 5000, 5000);
+		}
+
+		// Replies to requests made in a session that has ended will never come. Dropped on the receive
+		// queue, like expiry, so a pending phonebook search clears DirectorySearchInProgress straight
+		// away instead of after its timeout, and old requests don't log "No reply" warnings later.
+		private void AbandonPendingRequestsFromAnotherThread(string reason) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage("requests-abandon", _ => AbandonPendingRequests(reason)));
+
+		private void AbandonPendingRequests(string reason)
+		{
+			var pending = _requests.PendingCount();
+			if (pending == 0)
+				return;
+
+			var searchWasPending = _requests.PendingCount(PhonebookSearchRequest) > 0;
+			_requests.Clear();
+			this.LogDebug("Dropped {count} pending codec request(s): {reason}", pending, reason);
+
+			if (searchWasPending)
+			{
+				_searchInProgress = false;
+				DirectorySearchInProgress.FireUpdate();
+			}
+		}
+
+		// Runs on the receive queue, like the replies that complete requests.
+		private void ExpireRequests()
+		{
+			foreach (var expired in _requests.Expire())
+			{
+				this.LogWarning("No reply from the codec to {kind} request {id} within {seconds} s",
+					expired.Value, expired.Key,
+					(expired.Value == SyncStatusRequest ? SyncStatusTimeout : RequestTimeout).TotalSeconds);
+				Timings.Stop(expired.Value, expired.Key, expired.Value + "Timeout");
+
+				if (expired.Value == PhonebookSearchRequest && _requests.PendingCount(PhonebookSearchRequest) == 0)
+				{
+					_searchInProgress = false;
+					DirectorySearchInProgress.FireUpdate();
+				}
+			}
+		}
+
+		private void FeedFramer(string text)
 		{
 			try
 			{
-				// Discard a bare echoed 'xCommand ...' line (SSH command echo) only when we're not
-				// accumulating a JSON message and the line actually begins with the token, so we don't
-				// throw away legitimate JSON/feedback content that merely contains the substring.
-				if (!_jsonFeedbackMessageIsIncoming
-					&& response.TrimStart().StartsWith("xcommand", StringComparison.OrdinalIgnoreCase))
-				{
-					return;
-				}
-
-				// A login banner means the codec started a new session (e.g. it restarted, or the
-				// serial session was reset), so a response that was mid-stream will never finish.
-				if (response.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
-				{
-					ResetJsonReceiveState("codec started a new session");
-				}
-
-				if (
-					!response.StartsWith("/")
-					&& _feedbackListMessage != null
-					&& _feedbackListMessageIncoming
-				)
-				{
-					_feedbackListMessageIncoming = false;
-
-					var feedbackListString = _feedbackListMessage.ToString();
-					_feedbackListMessage = null;
-
-					ProcessFeedbackList(feedbackListString);
-				}
-
-				if (response.StartsWith("/"))
-				{
-					_feedbackListMessageIncoming = true;
-					if (_feedbackListMessage == null)
-						_feedbackListMessage = new StringBuilder();
-				}
-
-				if (_feedbackListMessageIncoming && _feedbackListMessage != null)
-				{
-					_feedbackListMessage.Append(response);
-					return;
-				}
-
-				if (!SyncState.InitialSyncComplete)
-				{
-					var data = response.Trim().ToLower();
-					if (data.Contains("*r login successful") || data.Contains("xstatus systemunit"))
-					{
-						SyncState.LoginMessageReceived();
-
-						_loginMessageReceivedTimer?.Stop();
-
-						// Disable the SSH console's command echo so in-flight commands are no longer
-						// echoed back into the response stream, which was corrupting JSON messages
-						// that happened to be accumulating at the same time.
-						SendTextWithoutQueue("echo off");
-					}
-					else if (data.Contains("xpreferences outputmode json"))
-					{
-						if (SyncState.JsonResponseModeSet)
-							return;
-
-						// The initial 'xStatus' kickoff is owned by CodecSyncState (driven from login /
-						// JSON-mode confirmation) so it no longer depends on this echo arriving.
-						SyncState.JsonResponseModeMessageReceived();
-					}
-				}
-
-				if (response == "{" + Delimiter) // Check for the beginning of a new JSON message
-				{
+				_framer.Feed(text);
+				if (_framer.InDocument)
 					_jsonMessageLastLineUtc = DateTime.UtcNow;
-					_jsonFeedbackMessageIsIncoming = true;
-					_jsonMessage = new StringBuilder();
-				}
-				else if (response == "}" + Delimiter) // Check for the end of a JSON message
-				{
-					_jsonFeedbackMessageIsIncoming = false;
-
-					_jsonMessage.Append(response);
-
-					// Enqueue the complete message to be deserialized
-
-					var success = DeserializeResponse(_jsonMessage.ToString());
-
-					if (success)
-					{
-						_jsonMessage = null;
-
-						// A valid JSON message is definitive proof the codec is in JSON output mode,
-						// even if the 'xPreferences outputmode json' echo never arrived ('echo off',
-						// sent at login, can suppress it). Use it as a proxy so InitialSync isn't gated
-						// on that unreliable echo.
-						if (!SyncState.JsonResponseModeSet)
-							SyncState.JsonResponseModeConfirmedByValidJson();
-					}
-
-					return;
-				}
-
-				if (!_jsonFeedbackMessageIsIncoming)
-					return;
-
-				_jsonMessageLastLineUtc = DateTime.UtcNow;
-
-				// The codec can echo an in-flight command (xStatus, xConfiguration, xFeedback,
-				// xPreferences, xCommand) back on the same session while a JSON message is being
-				// accumulated. Drop a line that is wholly such an echo (no JSON structural characters),
-				// but never strip substrings out of a line that carries real JSON - a legitimate JSON
-				// string value can contain tokens like "xStatus", and stripping would corrupt it.
-				if (EchoedCommandLinePattern.IsMatch(response))
-				{
-					this.LogDebug("Dropped echoed command line embedded in JSON stream: {line}", response);
-					return;
-				}
-
-				_jsonMessage.Append(response);
 			}
 			catch (Exception ex)
 			{
 				this.LogDebug("Swallowing an exception processing a response:{message}", ex.Message);
+				_framer.Reset("exception while framing");
+				ResetJsonReceiveState("exception while framing");
 			}
 		}
 
-		// Matches a line that is wholly an echoed xAPI command (leading command keyword, then text
-		// containing no JSON structural characters {, }, [, ], "), so only standalone echo lines are
-		// dropped and any line carrying real JSON is left untouched.
-		private static readonly Regex EchoedCommandLinePattern = new Regex(
-			@"^\s*x(?:Command|Status|Configuration|Feedback|Preferences)\b[^{}\[\]""]*$",
-			RegexOptions.IgnoreCase
-		);
+		// The framer is only touched from the receive queue, so other threads queue the reset.
+		private void ResetFramerFromAnotherThread(string reason) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage("framer-reset", _ => _framer.Reset(reason)));
+
+		private void OnFramerDocumentStarted()
+		{
+			// A JSON line ends a feedback list, as any other non-path line does.
+			FinishFeedbackList();
+
+			_jsonMessageLastLineUtc = DateTime.UtcNow;
+			_jsonFeedbackMessageIsIncoming = true;
+			_jsonMessageStartedAt = _lineReceivedAt;
+		}
+
+		private void OnFramerDocument(string document)
+		{
+			_jsonFeedbackMessageIsIncoming = false;
+
+			// "{}" is the codec's reply to each xFeedback register; there is nothing in it.
+			if (document.Trim() == "{}")
+				return;
+
+			var parseStartedAt = CodecTimings.Now;
+			if (_jsonMessageStartedAt != 0)
+				Timings.Record("json.receive", CodecTimings.ElapsedMs(_jsonMessageStartedAt, parseStartedAt));
+
+			_parsingMessageStartedAt = _jsonMessageStartedAt;
+			var success = DeserializeResponse(document);
+			_parsingMessageStartedAt = 0;
+			Timings.RecordSince(success ? "parse.document" : "parse.documentFailed", parseStartedAt);
+
+			if (!success)
+				return;
+
+			// JSON can only arrive from a logged-in session in JSON mode. This is what confirms JSON
+			// mode, and it also covers a session that was already set up before a program restart,
+			// which sends no banner and no echo (#113).
+			_loginMessageReceivedTimer?.Stop();
+			LeaveSerialLoginPrompt("JSON received");
+			SyncState.JsonMessageReceived();
+		}
+
+		private void OnFramerLine(XapiLineKind kind, string line)
+		{
+			if (kind == XapiLineKind.FeedbackListPath)
+			{
+				_feedbackListMessageIncoming = true;
+				if (_feedbackListMessage == null)
+					_feedbackListMessage = new StringBuilder();
+				_feedbackListMessage.Append(line).Append(Delimiter);
+				RestartFeedbackListQuietTimer();
+				return;
+			}
+
+			FinishFeedbackList();
+
+			// A login banner means the codec started a new session (e.g. it restarted, or the serial
+			// session was reset), so a response that was mid-stream will never finish.
+			if (line.IndexOf("login successful", StringComparison.OrdinalIgnoreCase) >= 0)
+				ResetJsonReceiveState("codec started a new session");
+
+			if (kind == XapiLineKind.TextModeOutput)
+			{
+				// Text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner) means a
+				// session exists that is not in JSON mode: a new one to set up, or - once JSON mode was
+				// confirmed - one the codec restarted, which needs a full re-sync (#113). SyncState
+				// turns echo off and requests JSON mode. Any JSON response that was mid-stream will never
+				// finish, so the hold on the sync queue is released first.
+				ResetJsonReceiveState("codec sent text-mode output");
+
+				_loginMessageReceivedTimer?.Stop();
+				LeaveSerialLoginPrompt("text-mode output received");
+				SyncState.TextOutputReceived();
+				return;
+			}
+
+			// Not over RS-232: at a serial login prompt the codec echoes the poll as the typed username
+			// (#115). A serial session with echo on also answers the poll with text-mode output or JSON,
+			// which is what starts the sync there.
+			if (_serialLogin == null
+				&& !SyncState.InitialSyncComplete
+				&& line.IndexOf("xstatus systemunit", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				// The plugin's poll echoed back: a session with echo on exists.
+				_loginMessageReceivedTimer?.Stop();
+				SyncState.LoginMessageReceived();
+			}
+		}
 
 		private DateTime _lastFeedbackFail = DateTime.MinValue;
+
+		// In JSON mode the xFeedback List reply is a run of "/..." lines with no end marker, so the list
+		// was only finished by the next unrelated line, which on a quiet codec can be many seconds later
+		// and held up the initial sync (#138). Also finish it once no "/" line has arrived for this long.
+		private const long FeedbackListQuietMs = 500;
+		private CTimer _feedbackListQuietTimer;
+
+		private void RestartFeedbackListQuietTimer()
+		{
+			if (_feedbackListQuietTimer == null)
+				_feedbackListQuietTimer = new CTimer(OnFeedbackListQuiet, FeedbackListQuietMs);
+			else
+				_feedbackListQuietTimer.Reset(FeedbackListQuietMs);
+		}
+
+		// Finish on the receive queue, so lines already received are processed first and the list
+		// state is only ever touched by the receive thread. The message text must not be empty:
+		// ProcessStringMessage.Dispatch() silently skips an empty message.
+		private const string FeedbackListQuietMessage = "feedback-list-quiet";
+
+		private void OnFeedbackListQuiet(object _) =>
+			_receiveQueue.Enqueue(new ProcessStringMessage(FeedbackListQuietMessage, __ => FinishFeedbackList()));
+
+		private void FinishFeedbackList()
+		{
+			if (!_feedbackListMessageIncoming || _feedbackListMessage == null)
+				return;
+
+			_feedbackListMessageIncoming = false;
+
+			var feedbackListString = _feedbackListMessage.ToString();
+			_feedbackListMessage = null;
+
+			ProcessFeedbackList(feedbackListString);
+		}
 
 		private void ProcessFeedbackList(string data)
 		{
@@ -2391,6 +2755,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (string.IsNullOrEmpty(command))
 				return;
 
+			// At a serial login prompt anything sent is taken as a username or password (#115).
+			if (_atSerialLoginPrompt)
+			{
+				this.LogVerbose("Not sent, the RS-232 session is at a login prompt: {command}", command);
+				return;
+			}
+
 			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
 			// concatenating multiple commands into a single malformed expression.
 			var normalized = command
@@ -2399,7 +2770,119 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.Replace("\n", Delimiter)
 				.TrimEnd('\r', '\n');
 
-			Communication.SendText(normalized + Delimiter);
+			if (UsesSerialPort && !FitsSerialLineLimit(normalized))
+				return;
+
+			// Writes come from the receive thread, the sync worker and the communication monitor's
+			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
+			// codec gets garbled commands and loses some of them (#123).
+			lock (_sendLock)
+			{
+				// Skip writes while the connection is down or being torn down (always true on RS-232).
+				if (!Communication.IsConnected)
+					return;
+
+				Communication.SendText(normalized + Delimiter);
+			}
+		}
+
+		private readonly object _sendLock = new object();
+
+		// ---- RS-232 login prompt (#115) ------------------------------------------------------------
+		// With xConfiguration SerialPort LoginRequired: On the serial session drops to a login prompt.
+		// The plugin can't log in there, and everything it sends is taken as a username or password;
+		// after a few failures the codec locks out serial logins. So at a prompt the plugin stops
+		// sending, holds the comm monitor in error and resets the sync, until the codec shows a
+		// logged-in session again (the "*r Login successful" banner, any text-mode output or JSON).
+
+		private void PollCodec(string pollString)
+		{
+			// The first poll over RS-232 could land on a login prompt left from before a program
+			// restart and be typed in as a username and password. An empty line only shows the prompt
+			// again, so send that first and poll a second later, unless a prompt came back.
+			if (_serialLogin != null && !_serialWakeProbeSent)
+			{
+				_serialWakeProbeSent = true;
+				lock (_sendLock)
+				{
+					if (Communication.IsConnected)
+						Communication.SendText(Delimiter);
+				}
+				_serialWakeProbeTimer = new CTimer(_ => SendTextWithoutQueue(pollString), 1000);
+				return;
+			}
+
+			SendTextWithoutQueue(pollString);
+		}
+
+		// Runs on the receive queue.
+		private void OnSerialLoginSignal(SerialLoginSignal signal)
+		{
+			switch (signal)
+			{
+				case SerialLoginSignal.LoginIncorrect:
+					this.LogWarning("The codec rejected text sent to its RS-232 login prompt as a login (\"Login incorrect\").");
+					break;
+				case SerialLoginSignal.AccountLocked:
+					this.LogError(
+						"The codec has locked its RS-232 login after repeated failed logins. Set xConfiguration SerialPort LoginRequired: Off on the codec.");
+					break;
+			}
+
+			EnterSerialLoginPrompt();
+		}
+
+		private void EnterSerialLoginPrompt()
+		{
+			if (_atSerialLoginPrompt)
+				return;
+
+			_atSerialLoginPrompt = true;
+			this.LogError(
+				"The RS-232 session is at a login prompt (xConfiguration SerialPort LoginRequired: On). The plugin can't log in over RS-232, so it has stopped sending to the codec rather than lock out its serial login. Set SerialPort LoginRequired to Off on the codec; the plugin re-syncs when the session comes back.");
+
+			(CommunicationMonitor as CiscoCommunicationMonitor)?.HoldInError();
+			ResetJsonReceiveState("serial login prompt");
+			AbandonPendingRequestsFromAnotherThread("serial login prompt");
+			StopFeedbackRegistrationRecovery();
+			SyncState.SessionLost();
+		}
+
+		// Runs on the receive queue, before the sync is told about the session.
+		private void LeaveSerialLoginPrompt(string reason)
+		{
+			if (!_atSerialLoginPrompt)
+				return;
+
+			_atSerialLoginPrompt = false;
+			this.LogInformation("The RS-232 session is logged in again ({reason}); re-syncing.", reason);
+			(CommunicationMonitor as CiscoCommunicationMonitor)?.ReleaseHold();
+		}
+
+		// Over RS-232, RoomOS restarts the serial session when it receives a line longer than
+		// 2,048 bytes including the CR LF (#114). SSH accepts longer lines.
+		internal const int MaxSerialLineBytes = 2048;
+
+		/// <summary>
+		/// True when the codec is controlled over RS-232, where the line limit above applies.
+		/// </summary>
+		internal bool UsesSerialPort => Communication is ComPortController;
+
+		private bool FitsSerialLineLimit(string command)
+		{
+			var lines = command.Split(new[] { Delimiter }, StringSplitOptions.None);
+			var longest = lines.Max(line => Encoding.UTF8.GetByteCount(line)) + Delimiter.Length;
+
+			if (longest <= MaxSerialLineBytes)
+				return true;
+
+			var firstLine = lines[0];
+			this.LogError(
+				"Command not sent: a line is {length} bytes, over the codec's RS-232 limit of {limit} bytes, which would reset the serial session. Command: {command}",
+				longest,
+				MaxSerialLineBytes,
+				firstLine.Length > 80 ? firstLine.Substring(0, 80) + "..." : firstLine);
+			return false;
 		}
 
 		public void SendText(string command)
@@ -2477,14 +2960,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void ClearLayouts()
 		{
-			var nullLayout = new CiscoCodecStatus.CurrentLayouts()
-			{
-				AvailableLayouts = new List<CiscoCodecStatus.LayoutData>(),
-				AvailableLayoutsCount = new CiscoCodecStatus.AvailableLayoutsCount() { Value = 0 },
-				ActiveLayout = new CiscoCodecStatus.ActiveLayout() { Value = "" }
-			};
-
-			CodecStatus.Status.Video.Layout.CurrentLayouts = nullLayout;
+			// Clears the plugin's layout state only. The status model mirrors the codec (stage 6d) and is
+			// left alone: replacing its CurrentLayouts dropped the ActiveLayout action wired in
+			// SetFeedbackActions (#145), and resetting its values fought the next status update.
 
 			AvailableLayouts = new List<CodecCommandWithLabel>();
 			AvailableLayoutsFeedback.FireUpdate();
@@ -2653,39 +3131,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void RegisterDisconnectEvents()
-		{
-			CodecEvents.Event.CallDisconnect.ValueChangedAction += () =>
-			{
-				//For Future Use
-			};
-		}
-
-		private void RegisterUserInterfaceEvents()
-		{
-			CodecEvents
-				.Event
-				.UserInterface
-				.Presentation
-				.ExternalSource
-				.Selected
-				.SourceIdentifier
-				.ValueChangedAction += () =>
-				{
-					//For Future Use
-				};
-
-			// triggered when CodecEvents.Event.UserInterface.Extensions is updated
-			/*
-             * CodecEvents.Event.UserInterface.Extensions.ValueChangedAction +=
-                () =>
-                {
-                    var act_ = CodecEvents.Event.UserInterface.Extensions.Action;
-                    Debug.Console(1, this, "UserInterface.Extensions.ValueChangedAction: /{0} /{1} /{2}", act_.Type, act_.Id, act_.Value);
-                };
-             * */
-		}
-
 		private void RegisterAutoAnswer()
 		{
 			CodecConfiguration
@@ -2711,6 +3156,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			_presentationActive = state;
 			PresentationActiveFeedback.FireUpdate();
+			// The sending-mode feedbacks switch between actual and selected mode on this (#40).
+			FirePresentationSendingModeFeedback();
 			if (!state)
 			{
 				SetPresentationSource(0);
@@ -2905,11 +3352,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (registrationItem != null)
 				{
-					sipUri =
-						registrationItem.SelectToken("URI.Value").ToString().NullIfEmpty()
-						?? "Unknown";
-					var match = Regex.Match(sipUri, @"(\d+)");
-					sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+					var registrationUri = (string)registrationItem.SelectToken("URI.Value");
+					sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+					sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 				}
 
 				OnCodecInfoChanged(
@@ -2992,6 +3437,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					SpeakerTrackStatus = statusToken.ToString().ToLower() == "active";
 
 				UpdateCameraAutoModeFeedbacks();
+				UpdateCameraTrackingCapabilities();
 			}
 			catch (Exception e)
 			{
@@ -3037,6 +3483,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					}
 				}
 				UpdateCameraAutoModeFeedbacks();
+				UpdateCameraTrackingCapabilities();
 			}
 			catch (Exception e)
 			{
@@ -3087,13 +3534,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		// The codec's own address from UserInterface/ContactInfo or Webex/Account (#12), used when the SIP
+		// registration has no URI.
+		private string _contactSipAddress;
+
 		private void ParseSipObject(CiscoCodecStatus.Sip sipObject)
 		{
 			if (sipObject.Registrations.Count <= 0)
 				return;
-			var sipUri = sipObject.Registrations.First().Uri.Value.NullIfEmpty() ?? "Unknown";
-			var match = Regex.Match(sipUri, @"(\d+)");
-			var sipPhoneNumber = match.Success ? match.Groups[1].Value : "Unknown";
+			var registrationUri = sipObject.Registrations.First().Uri.Value;
+			var sipUri = SipAddress.Resolve(registrationUri, _contactSipAddress);
+			var sipPhoneNumber = SipAddress.PhoneNumber(registrationUri);
 			OnCodecInfoChanged(
 				new CodecInfoChangedEventArgs(eCodecInfoChangeType.Sip)
 				{
@@ -3129,6 +3580,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			UpdateCurrentLayout(layoutToken.SelectToken("ActiveLayout.Value"));
 			UpdateLayoutList(layoutToken.SelectToken("AvailableLayouts"));
+		}
+
+		/// <summary>
+		/// Call timings (#129): how long after its JSON message started arriving a call status change
+		/// was raised, and dial to connected.
+		/// </summary>
+		private void RecordCallTimings(CodecActiveCallItem call, eCodecCallStatus previousStatus)
+		{
+			if (_parsingMessageStartedAt != 0)
+				Timings.RecordSince("call.feedbackLatency", _parsingMessageStartedAt);
+
+			if (call != null && call.Status == eCodecCallStatus.Connected && previousStatus != eCodecCallStatus.Connected)
+				Timings.Stop("call.dialToConnected");
 		}
 
 		private void ParseCallArrayToken(JToken callToken)
@@ -3169,9 +3633,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						this.LogDebug("Processing active call with id {id}", activeCall.Id);
 
+						var previousStatus = activeCall.Status;
+
 						if (callGhost)
 						{
+							// The CallDisconnect event normally removes the call first (~70 ms before this ghost on
+							// the bench). If it didn't arrive (its feedback registration is one of many, #14), the
+							// ghost is the only notice. Before, the call was removed and its status change raised
+							// with its last status (e.g. Connected), so Disconnected was never reported (#129, 6f).
+							this.LogDebug("Call {id} removed by the codec (ghost) without a CallDisconnect event", activeCall.Id);
 							ActiveCalls.Remove(activeCall);
+							ListCalls();
+							SetSelfViewMode();
+							SetNewCallStatusAndFireCallStatusChange(eCodecCallStatus.Disconnected, activeCall);
+							RecordCallTimings(activeCall, previousStatus);
+							GetCallHistory();
+							continue;
 						}
 
 						if (callObject != null)
@@ -3189,6 +3666,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						);
 
 						OnCallStatusChange(activeCall);
+						RecordCallTimings(activeCall, previousStatus);
 
 						ListCalls();
 
@@ -3208,11 +3686,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					this.LogDebug(
 							"On Call ID {id} Status Change - Status == {status}",
-							activeCall?.Id,
-							activeCall?.Status
+							callObject.Id,
+							callObject.Status
 						);
 
 					OnCallStatusChange(callObject);
+					RecordCallTimings(callObject, eCodecCallStatus.Unknown);
 
 					CodecPollLayouts();
 				}
@@ -3693,8 +4172,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				//var _userInterfaceObject = userInterfaceObject.SelectToken("Presentation.ExternalSource.Selected.SourceIdentifier");
 
-				var val_ = JsonConvert.SerializeObject(userInterfaceObject);
-				//Debug.Console(1, this, "userInterfaceObject val: {0}", val_);
 
 				if (RunRouteAction != null && !_externalSourceChangeRequested)
 				{
@@ -3717,7 +4194,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				//Debug.Console(2, this, "Extensions Event");
 				try
 				{
-					var val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions);
 
 					this.LogVerbose(
 						"*** Got an Extensions Event {0}",
@@ -3734,8 +4210,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							"*** Got an Extensions Widget Action {0}",
 							userInterfaceObject.Extensions.Widget
 						);
-						val_ = JsonConvert.SerializeObject(userInterfaceObject.Extensions.Widget);
-						//Debug.Console(1, this, "Widget val: {0}", val_);
 						UIExtensionsHandler.ParseStatus(userInterfaceObject.Extensions.Widget);
 					}
 
@@ -3746,10 +4220,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					{
 						this.LogVerbose(
 							"*** Got an Extensions Widget Event {0}",
-							userInterfaceObject.Extensions.WidgetEvent
-						);
-
-						val_ = JsonConvert.SerializeObject(
 							userInterfaceObject.Extensions.WidgetEvent
 						);
 
@@ -3912,23 +4382,68 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			HandleWebViewClearedByCommand(this, args);
 		}
 
-		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
+		/// <summary>
+		/// Once per program: logs model actions that throw, and builds the model's JSON contracts on a
+		/// background thread. Building them on the first status document cost ~630 ms at every
+		/// program start on an RMC4 (#129, stage 6a).
+		/// </summary>
+		private void PrepareStateModel()
 		{
-			var tokenString = string.Empty;
+			if (System.Threading.Interlocked.Exchange(ref _modelPrepared, 1) == 1)
+				return;
+
+			ValueProperty.ActionFailed += (value, ex) =>
+			{
+				Debug.LogError("Error in codec feedback action for {value}: {message}", value.GetType().Name, ex.Message);
+				Debug.LogVerbose(ex, "Stack Trace: ");
+			};
+
+			System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+			{
+				var watch = System.Diagnostics.Stopwatch.StartNew();
+				var statusFailed = ModelResolver.Warm<CiscoCodecStatus.Status>();
+				var configurationFailed = ModelResolver.Warm<CiscoCodecConfiguration.Configuration>();
+				_modelWarmupMs = watch.Elapsed.TotalMilliseconds;
+				foreach (var failed in new[] { statusFailed, configurationFailed })
+					if (failed != null)
+						this.LogWarning("Preparing the codec state model failed (first documents will be slower): {message}", failed.Message);
+				this.LogDebug("Codec state model prepared in {ms} ms", Math.Round(_modelWarmupMs));
+			});
+		}
+
+		/// <summary>Populates the long-lived model from a whole Status or Configuration document.</summary>
+		private void PopulateStateModel(JToken documentToken, object model, string documentName)
+		{
+			var started = CodecTimings.Now;
 			try
 			{
-				// this.LogDebug("PopulateObjectWithToken: {0}", tokenSelector);
-				var token = JTokenValidInToken(jToken, tokenSelector); // JObject
-				if (token == null)
-					return;
-				tokenString = token.ToString();
-				JsonConvert.PopulateObject(tokenString, target);
-				//Debug.Console(2, this, "PopulateObject complete");
+				CodecJson.PopulateFromToken(documentToken, model, ModelSettings);
 			}
 			catch (Exception e)
 			{
-				this.LogError("Exception: PopulateObjectWithToken - {message}", e.Message);
-				this.LogError("Token String: {tokenString}", tokenString);
+				this.LogError("Error updating the codec {document} model: {message}", documentName, e.Message);
+				this.LogVerbose(e, "Exception");
+			}
+			Timings.RecordSince("model.populate", started);
+		}
+
+		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
+		{
+			JToken token = null;
+			try
+			{
+				token = JTokenValidInToken(jToken, tokenSelector); // JObject
+				if (token == null)
+					return;
+
+				// Straight from the parsed token: no ToString() and second parse (#129).
+				CodecJson.PopulateFromToken(token, target);
+			}
+			catch (Exception e)
+			{
+				this.LogError("Exception: PopulateObjectWithToken {selector} - {message}", tokenSelector, e.Message);
+				// The token can be large; keep it out of the error log (#95).
+				this.LogDebug("Token String: {tokenString}", token?.ToString());
 				this.LogVerbose(e, "Exception");
 			}
 		}
@@ -3941,9 +4456,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return false;
 			}
 
+			// The state model has already added the camera to CameraList (#129, stage 6e).
 			this.LogDebug("Camera {camId} is connected.", cameraId);
-			var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-			CodecStatus.Status.Cameras.CameraList.Add(newCam);
 
 			CameraConnected?.Invoke(this, new CameraEventArgs(cameraId, serialNumber));
 
@@ -3999,7 +4513,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			}
 
-			var status = new CiscoCodecStatus.Status();
 			var legacyLayoutsToken = statusToken.SelectToken("Video.Layout.LayoutFamily");
 			var layoutsToken = statusToken.SelectToken("Video.Layout.CurrentLayouts");
 			var selfviewToken = statusToken.SelectToken("Video.Selfview.Mode");
@@ -4011,6 +4524,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var presenterTrackToken = statusToken.SelectToken("Cameras.PresenterTrack");
 			var networkToken = statusToken.SelectToken("Network");
 			var sipToken = statusToken.SelectToken("SIP");
+			// A Webex-registered codec has no SIP registration URI; its address is in the contact info (#12).
+			// A document that carries the address fields replaces the cached address, including with
+			// none; a partial update that doesn't mention them keeps it.
+			if (SipAddress.TryGetContactAddress(statusToken, out var contactSipAddress))
+				_contactSipAddress = contactSipAddress;
 			var conferenceToken = statusToken.SelectToken("Conference");
 			var webViewStatusToken = statusToken.SelectToken("UserInterface.WebView");
 			var callToken = statusToken.SelectToken("Call");
@@ -4019,28 +4537,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var provisioningToken = statusToken.SelectToken("Provisioning");
 			var diagnosticsToken = statusToken.SelectToken("Diagnostics");
 
-			var serializedToken = statusToken.ToString();
-
 			if (errorToken != null)
 			{
 				var xPath = statusToken.SelectToken("XPath.Value")?.ToString();
 				var isWebViewError = xPath != null && xPath.StartsWith(UserInterface.WebView.WebViewDisplay.xStatusPath);
+				// Models without SpeakerTrack or PresenterTrack answer "No match on address expression" (#117).
+				var isUnsupportedTrackingError = xPath != null
+					&& (xPath.StartsWith("Status/Cameras/PresenterTrack") || xPath.StartsWith("Status/Cameras/SpeakerTrack"));
 
 				UiExtensionsHandler?.ParseErrorStatus(statusToken);
 
 				if (isWebViewError)
 					this.LogDebug("WebView Status Error (expected when no WebView active): {error}", statusToken.ToString());
+				else if (isUnsupportedTrackingError)
+					this.LogDebug("Camera tracking not supported on this model: {error}", statusToken.ToString());
 				else
 					this.LogError("Error in Status Response: {error}", statusToken.ToString());
 
 				return;
 			}
 
-			JsonConvert.PopulateObject(serializedToken, status);
+			// The long-lived model takes every value; feedbacks wired to it fire on real changes (#129,
+			// stage 6d). It replaces the SystemUnit and Audio populates that were the only model updates.
+			// The populate below merges cameras into the model's list, so the camera code further down
+			// can't use "not in the list" to mean "new camera" any more: it uses this snapshot (#129, stage 6e).
+			var camerasBefore = new HashSet<string>(CodecStatus.Status.Cameras.CameraList.Select(c => c.CameraId));
 
-			if (status?.UserInterface?.WebViews != null && status.UserInterface.WebViews.Count > 0)
+			PopulateStateModel(statusToken, CodecStatus.Status, "status");
+
+			// Each area below reads its own token. The whole document is no longer populated into a
+			// throwaway Status object first (#129, stage 6): only UserInterface and RoomPreset were read
+			// from it, and one bad area threw and stopped every other area from being parsed.
+			var userInterface = new CiscoCodecStatus.UserInterface();
+			PopulateObjectWithToken(statusToken, "UserInterface", userInterface);
+			if (userInterface.WebViews != null && userInterface.WebViews.Count > 0)
 			{
-				UiExtensionsHandler?.ParseStatus(status.UserInterface.WebViews);
+				UiExtensionsHandler?.ParseStatus(userInterface.WebViews);
 			}
 
 			var standbyToken = statusToken.SelectToken("Standby");
@@ -4115,8 +4647,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 					UInt16.TryParse(camId, out UInt16 camIdInt);
 
-					var existingCamStatus =
-						CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+					var existingCamStatus = camerasBefore.Contains(camId)
+						? CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId)
+						: null;
 
 					if (string.IsNullOrEmpty(serialNumber))
 						serialNumber = existingCamStatus?.SerialNumber?.Value ?? "Unknown";
@@ -4136,6 +4669,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							serialNumber = existingCameraDevice.SerialNumber ?? serialNumber;
 							this.LogDebug("Camera {camId}: resolved device by camera ID: {device} serial={serial}", camId, existingCameraDevice.Key, serialNumber);
 						}
+					}
+
+					// {"ghost": "True", "id": "2"}: the camera is gone. The model has already dropped it; treat
+					// it as disconnected so the device and listeners hear about it. This used to be ignored.
+					if (string.Equals(cam.SelectToken("ghost")?.ToString(), "True", StringComparison.OrdinalIgnoreCase))
+					{
+						this.LogDebug("Camera {camId} was removed by the codec (ghost).", camId);
+						existingCameraDevice?.SetOnlineStatus(false);
+						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
+						removedCameraIds.Add(camIdInt);
+						continue;
 					}
 
 					var lenses = cam.SelectToken("Lenses");
@@ -4187,43 +4731,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 							listWasUpdated = true;
 						}
-					}
-
-
-					if (existingCamStatus == null)
-					{
-						// Add only if the status list still does not contain this camera ID.
-						var currentCamStatus =
-							CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
-
-						if (currentCamStatus == null)
-						{
-							var newCam = cam.ToObject<CiscoCodecStatus.Camera>();
-							CodecStatus.Status.Cameras.CameraList.Add(newCam);
-							listWasUpdated = true;
-						}
-						else
-						{
-							JsonConvert.PopulateObject(
-								cam.ToString(),
-								currentCamStatus,
-								new JsonSerializerSettings
-								{
-									NullValueHandling = NullValueHandling.Ignore,
-									MissingMemberHandling = MissingMemberHandling.Ignore,
-								});
-						}
-					}
-					else
-					{
-						JsonConvert.PopulateObject(
-							cam.ToString(),
-							existingCamStatus,
-							new JsonSerializerSettings
-							{
-								NullValueHandling = NullValueHandling.Ignore,
-								MissingMemberHandling = MissingMemberHandling.Ignore,
-							});
 					}
 				}
 
@@ -4277,7 +4784,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			if (systemUnitStateToken != null)
 			{
-				PopulateObjectWithToken(statusToken, "SystemUnit", CodecStatus.Status.SystemUnit);
 				this.LogVerbose("SystemUnit State updated: NumberOfActiveCalls={n} IsAnyCallActive={inCall}",
 					CodecStatus?.Status?.SystemUnit?.SystemUnitState?.NumberOfActiveCalls?.Value,
 					IsAnyCallActive);
@@ -4286,22 +4792,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMediaChannelsTokenArray(mediaChannelsToken);
 			}
-			if (status.Audio != null)
-			{
-				PopulateObjectWithToken(statusToken, "Audio", CodecStatus.Status.Audio);
-			}
-			if (status.RoomPresets != null)
-			{
-				ParseRoomPresetList(status.RoomPresets);
-			}
+			var roomPresets = new List<CiscoCodecStatus.RoomPreset>();
+			PopulateObjectWithToken(statusToken, "RoomPreset", roomPresets);
+			ParseRoomPresetList(roomPresets);
 			if (webViewStatusToken != null)
 			{
 				ParseWebviewStatusToken(webViewStatusToken[0]);
 			}
-			// if (webViewDisplayToken != null)
-			// {
-			// 	ParseWebviewDisplayToken(webViewDisplayToken[0]);
-			// }
 			if (provisioningToken != null)
 			{
 				ParseProvisioningToken(provisioningToken);
@@ -4314,9 +4811,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				ParseMainSourceToken(mainSourceToken);
 			}
-
-			// we don't want to do this... this will expand lists infinitely
-			//JsonConvert.PopulateObject(serializedToken, CodecStatus.Status);
 
 			if (SyncState.InitialStatusMessageWasReceived)
 				return;
@@ -4341,11 +4835,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 			this.LogDebug("Sending Feedback");
 
-			SendTextWithoutQueue(BuildFeedbackRegistrationExpression());
+			// All three go through the command queue, so they are written by one thread in this
+			// order. xFeedback List must follow every registration: ProcessFeedbackList counts the
+			// registered paths, and a list that overtakes the registrations reads as lost feedback (#123).
+			EnqueueCommand(BuildFeedbackRegistrationExpression());
 			UIExtensionsHandler.RegisterFeedback();
 
 			this.LogDebug("Requesting xFeedback List to verify registration");
-			SendTextWithoutQueue("xFeedback List");
+			EnqueueCommand("xFeedback List");
 
 			StartFeedbackRegistrationRecovery();
 		}
@@ -4632,41 +5129,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					configurationToken.SelectToken("Video.Input.Connector")
 				);
 
-				var configuration = new CiscoCodecConfiguration.Configuration();
-				try
-				{
-					if (configuration.H323.H323Alias != null)
-					{
-						PopulateObjectWithToken(
-							configurationToken,
-							"H323.H323Alias",
-							CodecConfiguration.Configuration.H323.H323Alias
-						);
-					}
-				}
-				catch (Exception e)
-				{
-					this.LogError("Exception in ParseConfigurationObject H323 : {message}", e.Message);
-					this.LogVerbose(e, "Exception");
-				}
+				PopulateStateModel(configurationToken, CodecConfiguration.Configuration, "configuration");
 
-				try
-				{
-					if (configuration.Conference.AutoAnswer != null)
-					{
-						PopulateObjectWithToken(
-							configurationToken,
-							"Conference.AutoAnswer",
-							CodecConfiguration.Configuration.Conference.AutoAnswer
-						);
-					}
-				}
-				catch (Exception e)
-				{
-					this.LogError("Exception in ParseConfigurationObject.Populat Autoanswer: {message}", e.Message);
-					this.LogVerbose(e, "Exception");
-					throw;
-				}
+				if (_serialLogin != null
+					&& string.Equals((string)configurationToken.SelectToken("SerialPort.LoginRequired.Value"), "On", StringComparison.OrdinalIgnoreCase))
+					this.LogWarning(
+						"The codec has xConfiguration SerialPort LoginRequired: On. The plugin can't log in over RS-232; set it to Off.");
+
 				if (SyncState.InitialConfigurationMessageWasReceived)
 					return;
 				this.LogVerbose("InitialConfig Received");
@@ -4723,42 +5192,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private void ParsePhonebookDirectoryResponseTypical(
+		// Shows the result of a search the caller has already matched to its pending request.
+		private void ShowSearchResult(
 			CiscoCodecExtendedPhonebook.PhonebookSearchResult phonebookSearchResultResponseObject,
-			string resultId
+			string resultId,
+			bool isSearch = true
 		)
 		{
 			try
 			{
-				while (_searches.Count > 0)
-				{
-					var expectedResultId = _searches.Dequeue();
-					this.LogDebug("Expected = {0} ; Parsed = {1}", expectedResultId,
-						resultId
-					);
-					if (resultId != expectedResultId)
-						continue;
+				var directoryResults = new CodecDirectory();
 
-					var directoryResults = new CodecDirectory();
+				var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
+				if (int.TryParse(totalRowsValue, out var totalRows) && totalRows > 0)
+					directoryResults =
+						CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
+							phonebookSearchResultResponseObject
+						);
 
-					if (phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value != "0")
-						directoryResults =
-							CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-								phonebookSearchResultResponseObject
-							);
+				PrintDirectory(directoryResults);
 
-					PrintDirectory(directoryResults);
+				DirectoryBrowseHistory.Add(directoryResults);
 
-					DirectoryBrowseHistory.Add(directoryResults);
-
-					OnDirectoryResultReturned(directoryResults);
-					_searchInProgress = false;
-					DirectorySearchInProgress.FireUpdate();
-				}
+				OnDirectoryResultReturned(directoryResults);
+				if (!isSearch)
+					return; // folder contents: no search busy flag or search timing to stop
+				_searchInProgress = false;
+				DirectorySearchInProgress.FireUpdate();
+				Timings.Stop("phonebook.search", resultId);
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookDirectoryResponseTypical : {message}", ex.Message);
+				this.LogError("Exception in ShowSearchResult : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
@@ -4805,9 +5270,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				if (PhonebookSyncState == null)
 					return;
-				PhonebookSyncState.SetNumberOfContacts(
-					int.Parse(phonebookSearchResultResponseObject.ResultInfo.TotalRows.Value)
-				);
+				var totalRowsValue = phonebookSearchResultResponseObject.ResultInfo?.TotalRows?.Value;
+				if (int.TryParse(totalRowsValue, out var totalRows))
+					PhonebookSyncState.SetNumberOfContacts(totalRows);
 				if (DirectoryRoot == null)
 					return;
 				DirectoryRoot.AddContactsToDirectory(
@@ -4820,58 +5285,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Exception in ParsePhonebookNumberOfContacts : {message}", ex.Message);
+				this.LogError("Exception in ParsePhonebookNumberOfContacts : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
 
-		private void ParseEventObject(JToken eventToken)
+		private void OnCallDisconnectEvent(JToken callDisconnectToken)
 		{
-			if (
-				eventToken == null
-				|| (eventToken.Type == JTokenType.Object && !eventToken.HasValues)
-			)
-			{
-				return;
-			}
+			var callDisconnect = new CiscoCodecEvents.CallDisconnect();
+			CodecJson.PopulateFromToken(callDisconnectToken, callDisconnect);
+			EvalutateDisconnectEvent(callDisconnect);
+		}
 
-			try
-			{
-				var codecEvent = new CiscoCodecEvents.EventObject();
-				var bookingsEvent = eventToken.SelectToken("Bookings");
-				//var userInterfaceEvent = eventToken.SelectToken("UserInterface.Presentation.ExternalSource.Selected.SourceIdentifier");
-				var userInterfaceEvent = eventToken.SelectToken("UserInterface");
-				var conferenceEvent = eventToken.SelectToken("Conference");
-
-				if (codecEvent.CallDisconnect != null)
-				{
-					PopulateObjectWithToken(
-						eventToken,
-						"CallDisconnect",
-						codecEvent.CallDisconnect
-					);
-					EvalutateDisconnectEvent(codecEvent);
-				}
-				if (bookingsEvent != null)
-				{
-					GetBookings(null);
-				}
-				if (userInterfaceEvent != null)
-				{
-					PopulateObjectWithToken(eventToken, "UserInterface", codecEvent.UserInterface);
-
-					ParseUserInterfaceEvent(codecEvent.UserInterface);
-				}
-				if (conferenceEvent != null)
-				{
-					WebexPinRequestHandler.ParseAuthenticationResponse(conferenceEvent);
-				}
-			}
-			catch (Exception ex)
-			{
-				this.LogError("Exception parsing event: {message}", ex.Message);
-				this.LogVerbose(ex, "Exception");
-			}
+		private void OnUserInterfaceEvent(JToken userInterfaceToken)
+		{
+			var userInterface = new CiscoCodecEvents.UserInterface();
+			CodecJson.PopulateFromToken(userInterfaceToken, userInterface);
+			ParseUserInterfaceEvent(userInterface);
 		}
 
 		private void ParseCallHistoryResponseToken(JToken callHistoryResponseToken)
@@ -4917,6 +5347,44 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			try
 			{
+				// An error response carries no Contact/Folder data, so parsing it yields empty
+				// collections and looks identical to "no results" unless the reason is surfaced.
+				var resultToken =
+					phonebookSearchResultResponseToken.SelectToken("PhonebookSearchResult")
+					?? phonebookSearchResultResponseToken;
+
+				// A reply to a pending search (matched by resultId) is a search result, whatever start-up
+				// step the phonebook is on. Only replies without one drive the start-up folder and contact
+				// steps below. Before, those steps took replies in arrival order, so the tagged start-up
+				// search (sent before the untagged folder query) was taken as the folder list and never
+				// completed (#109).
+				// A folder browse (#146) is shown the same way; only a search clears the search busy flag.
+				var isSearchReply = _requests.TryComplete(resultId, out var requestKind);
+				var isSearch = isSearchReply && requestKind == PhonebookSearchRequest;
+
+				var status = resultToken.SelectToken("status")?.ToString();
+				if (
+					!string.IsNullOrEmpty(status)
+					&& status.Equals("Error", StringComparison.OrdinalIgnoreCase)
+				)
+				{
+					var reason = resultToken.SelectToken("Reason.Value")?.ToString() ?? "Unknown";
+					this.LogError("Phonebook query failed. Reason: {reason}", reason);
+
+					if (isSearch)
+						Timings.Stop("phonebook.search", resultId, "phonebook.searchFailed");
+
+					// SearchDirectory raised the busy flag, and only a completion clears it; a failed
+					// search has to clear it here or DirectorySearchInProgress latches on.
+					if (isSearch)
+					{
+						_searchInProgress = false;
+						DirectorySearchInProgress.FireUpdate();
+					}
+
+					return;
+				}
+
 				var phonebookSearchResultResponseObject =
 					new CiscoCodecExtendedPhonebook.PhonebookSearchResult();
 				PopulateObjectWithToken(
@@ -4924,6 +5392,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					"PhonebookSearchResult",
 					phonebookSearchResultResponseObject
 				);
+
+				if (isSearchReply)
+				{
+					ShowSearchResult(phonebookSearchResultResponseObject, resultId, isSearch);
+					return;
+				}
 
 				if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
 				{
@@ -4935,80 +5409,56 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					ParsePhonebookNumberOfContacts(phonebookSearchResultResponseObject);
 					PhonebookSyncState.PhonebookRootEntriesReceived();
+					return;
 				}
-				ParsePhonebookDirectoryResponseTypical(
-					phonebookSearchResultResponseObject,
-					resultId
-				);
+
+				// Replies without a pending search id (e.g. folder contents, which are requested without
+				// a resultId) are not shown as search results, as before.
+				this.LogDebug("Phonebook result {resultId} answers no pending search; not shown", resultId ?? "(none)");
 			}
 			catch (Exception ex)
 			{
 				this.LogError(
-					"Exception in ParsePhonebookSearchResultResponse : {message}", ex.Message);
+					"Exception in ParsePhonebookSearchResultResponse : {message}\n{stack}", ex.Message, ex.StackTrace);
 				this.LogVerbose(ex, "Exception");
 			}
 		}
 
-		private void ParseCommandResponseObject(JToken commandResponseToken, string resultId)
+		/// <summary>
+		/// Registers a handler for one command result type, called with the whole CommandResponse object.
+		/// A response whose own status is an error is logged and not handled, as before.
+		/// </summary>
+		private void OnCommandResult(string resultName, Action<JToken, XapiMessage> handler)
 		{
-			if (commandResponseToken == null || (commandResponseToken.Type == JTokenType.Object && !commandResponseToken.HasValues))
-				return;
-			var callHistoryRecentsResultResponse = commandResponseToken.SelectToken(
-				"CallHistoryRecentsResult"
-			);
-			var callHistoryDeleteEntryResultResponse = commandResponseToken.SelectToken(
-				"CallHistoryDeleteEntryResult"
-			);
-			var phonebookSearchResultResponse = commandResponseToken.SelectToken(
-				"PhonebookSearchResult"
-			);
-			var bookingsListResultResponse = commandResponseToken.SelectToken("BookingsListResult");
-			var presentationStatus = commandResponseToken.SelectToken(
-				"PresentationStopResult.status"
-			);
+			_dispatcher.On("CommandResponse/" + resultName, (_, message) =>
+			{
+				var response = message.Root["CommandResponse"];
+				if (CommandResponseFailed(response))
+					return;
+				handler(response, message);
+			});
+		}
+
+		private bool CommandResponseFailed(JToken commandResponseToken)
+		{
 			var statusToken = commandResponseToken.SelectToken("status");
 			var errorToken = JTokenValidInToken(statusToken, "Reason");
-
 			if (errorToken != null)
 			{
 				this.LogError("Error in command response: {error}", errorToken.ToString());
-				return;
+				return true;
 			}
 
-			if (statusToken != null)
-			{
-				if (statusToken.ToString().ToLower() == "error")
-					//do Something
-					return;
-			}
-			if (callHistoryRecentsResultResponse != null)
-			{
-				ParseCallHistoryResponseToken(commandResponseToken);
-				return;
-			}
-			if (callHistoryDeleteEntryResultResponse != null)
-			{
-				GetCallHistory();
-				return;
-			}
-			if (bookingsListResultResponse != null)
-			{
-				ParseBookingsListResultToken(commandResponseToken);
-				return;
-			}
-			if (phonebookSearchResultResponse != null)
-			{
+			return statusToken != null && statusToken.ToString().ToLower() == "error";
+		}
 
-				ParsePhonebookSearchResultResponse(commandResponseToken, resultId);
-				return;
-			}
-			if (presentationStatus != null)
+		private void OnPresentationStopResult(JToken commandResponseToken)
+		{
+			var presentationStatus = commandResponseToken.SelectToken("PresentationStopResult.status");
+			if (presentationStatus != null && presentationStatus.ToString().ToLower() == "ok")
 			{
-				if (presentationStatus.ToString().ToLower() == "ok")
-				{
-					_presentationSource = 0;
-					ClearLayouts();
-				}
+				_presentationSource = 0;
+				ClearLayouts();
 			}
 		}
 
@@ -5038,6 +5488,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogVerbose("There are No Meetings");
 				CodecSchedule.Meetings = new List<Meeting>();
 			}
+
+			Timings.Stop("bookings.list");
+
 			// A bookings response can arrive while the timers are being stopped or recreated, so the
 			// check, create and reset happen under the refresh-timer lock (and never after shutdown).
 			lock (_refreshTimerLock)
@@ -5054,65 +5507,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
-		private static string ParseResultId(JObject obj)
-		{
-			try
-			{
-				return obj["ResultId"].ToString();
-			}
-			catch
-			{
-				return Guid.Empty.ToString();
-			}
-		}
 
 		private bool DeserializeResponse(string response)
 		{
 			try
 			{
-				using (var sReader = new System.IO.StringReader(response))
-				using (var jReader = new JsonTextReader(sReader))
-				{
-					while (jReader.Read())
-					{
-						if (jReader.TokenType != JsonToken.StartObject)
-							continue;
-						var obj = JObject.Load(jReader);
-
-						var resultId = ParseResultId(obj);
-
-						ParseStatusObject(JTokenValidInObject(obj, "Status"));
-						ParseConfigurationObject(JTokenValidInObject(obj, "Configuration"));
-						ParseEventObject(JTokenValidInObject(obj, "Event"));
-						ParseCommandResponseObject(
-							JTokenValidInObject(obj, "CommandResponse"),
-							resultId
-						);
-					}
-				}
-
+				_dispatcher.Dispatch(response);
 				return true;
 			}
 			catch (JsonReaderException ex)
 			{
-				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition}", ex.Message, ex.LineNumber, ex.LinePosition);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Json Error deserializing response from codec: {error} at line number:{lineNumber} line position:{linePosition} ({length} characters; payload logged at Debug)", ex.Message, ex.LineNumber, ex.LinePosition, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
-
-				if (ex.Message.Contains("Additional text encountered after finished reading JSON content: }"))
-				{
-					var responseWithLastBraceRemoved = response.LastIndexOf('}') > 0
-						? response.Remove(response.LastIndexOf('}'))
-						: response;
-
-					DeserializeResponse(responseWithLastBraceRemoved);
-				}
 				return false;
 			}
 			catch (Exception ex)
 			{
-				this.LogError("Error deserializing feedback from codec: {error}", ex.Message);
-				this.LogError("Response JSON: {response}", response);
+				this.LogError("Error deserializing feedback from codec: {error} ({length} characters; payload logged at Debug)", ex.Message, response.Length);
+				this.LogDebug("Response JSON: {response}", response);
 				this.LogVerbose(ex, "Stack Trace: ");
 
 
@@ -5129,15 +5542,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			CurrentDirectoryResultIsNotDirectoryRoot.FireUpdate();
 
-			// This will return the latest results to all UIs.  Multiple indendent UI Directory browsing will require a different methodology
-			DirectoryResultReturned?.Invoke(
-					this,
-					new DirectoryEventArgs()
+			// Fire event to all subscribed UIs. Isolate faulty subscribers so one bad handler
+			// can't bubble an exception back into our phonebook parser or prevent other UIs from updating.
+			var handlers = DirectoryResultReturned;
+			if (handlers != null)
+			{
+				foreach (var d in handlers.GetInvocationList())
+				{
+					var handler = (EventHandler<DirectoryEventArgs>)d;
+					try
 					{
-						Directory = result,
-						DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
+						handler(
+							this,
+							new DirectoryEventArgs()
+							{
+								Directory = result,
+								DirectoryIsOnRoot = !CurrentDirectoryResultIsNotDirectoryRoot.BoolValue
+							}
+						);
 					}
-				);
+					catch (Exception ex)
+					{
+						this.LogError(
+							"Directory subscriber threw ({subscriber}): {message}",
+							handler.Method.DeclaringType != null ? handler.Method.DeclaringType.FullName : handler.Method.Name,
+							ex.Message
+						);
+						this.LogVerbose(ex, "Directory subscriber exception");
+					}
+				}
+			}
 
 			PrintDirectory(result);
 		}
@@ -5221,16 +5655,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private void EvalutateDisconnectEvent(CiscoCodecEvents.EventObject eventReceived)
+		private void EvalutateDisconnectEvent(CiscoCodecEvents.CallDisconnect callDisconnect)
 		{
-			if (
-				eventReceived == null
-				|| eventReceived.CallDisconnect == null
-				|| eventReceived.CallDisconnect.CallId == null
-			)
+			if (callDisconnect?.CallId == null)
 				return;
 			var tempActiveCall = ActiveCalls.FirstOrDefault(c =>
-				c.Id.Equals(eventReceived.CallDisconnect.CallId.Value)
+				c.Id.Equals(callDisconnect.CallId.Value)
 			);
 
 			if (tempActiveCall == null)
@@ -5253,8 +5683,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void ExecuteSwitch(object selector)
 		{
-			if (!(selector is int input))
+			// Selectors from JSON arrive as long or string, not int (#121).
+			if (!RoutingSelector.TryGetInput(selector, out var input))
 			{
+				this.LogWarning("ExecuteSwitch: selector {selector} ({type}) is not an input number; ignored",
+					selector, selector?.GetType().Name ?? "null");
 				return;
 			}
 
@@ -5332,6 +5765,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void GetBookings(object command)
 		{
+			Timings.Start("bookings.list");
 			EnqueueCommand("xCommand Bookings List Days: 1 DayOffset: 0");
 		}
 
@@ -5345,6 +5779,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					PhonebookRefreshTimer?.Reset(3600000, 3600000);
 				}
 			}
+		}
+
+		/// <summary>Sends the start-up search once, when it is waiting (#109).</summary>
+		private void RunStartupSearch(string reason)
+		{
+			if (System.Threading.Interlocked.Exchange(ref _startupSearchPending, 0) == 0)
+				return;
+			ReplaceTimer(ref _startupSearchFallback, null);
+			this.LogDebug("Sending the start-up phonebook search: {reason}", reason);
+			SearchDirectory("");
 		}
 
 		public void GetPhonebook(string command)
@@ -5379,7 +5823,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private readonly CrestronQueue<string> _searches = new CrestronQueue<string>();
 		private bool _searchInProgress;
 
 		public void SearchDirectory(string searchString)
@@ -5400,8 +5843,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				return;
 
 			_searchInProgress = !string.IsNullOrEmpty(searchString);
-			var tag = Guid.NewGuid();
-			_searches.Enqueue(tag.ToString());
+			var tag = _requests.Begin(PhonebookSearchRequest);
+			Timings.Start("phonebook.search", tag);
+			StartRequestExpiryTimer();
 			EnqueueCommand(
 				string.Format(
 					"xCommand Phonebook Search SearchString: \"{0}\" PhonebookType: {1} ContactType: Contact Limit: {2} | resultId=\"{3}\"",
@@ -5418,12 +5862,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void GetDirectoryFolderContents(string folderId)
 		{
+			// Tagged so the reply is shown (#146): untagged replies are only used by the start-up
+			// phonebook sync, so folder contents were logged as "answers no pending search" and dropped.
+			var tag = _requests.Begin(PhonebookFolderRequest);
+			StartRequestExpiryTimer();
 			EnqueueCommand(
 				string.Format(
-					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2}",
+					"xCommand Phonebook Search FolderId: {0} PhonebookType: {1} ContactType: Any Limit: {2} | resultId=\"{3}\"",
 					folderId,
 					_phonebookMode,
-					_phonebookResultsLimit
+					_phonebookResultsLimit,
+					tag
 				)
 			);
 		}
@@ -5476,6 +5925,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void Dial(string number)
 		{
+			Timings.Start("call.dialToConnected");
 			EnqueueCommand(string.Format("xCommand Dial Number: \"{0}\"", number));
 		}
 
@@ -5503,6 +5953,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			string meetingId
 		)
 		{
+			Timings.Start("call.dialToConnected");
 			EnqueueCommand(
 				string.Format(
 					"xCommand Dial Number: \"{0}\" Protocol: {1} CallRate: {2} CallType: {3} BookingId: {4}",
@@ -6289,6 +6740,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			PresentationStates = eCodecPresentationStates.LocalOnly;
 			if (_presentationActive)
 				StartSharing();
+			else
+				FirePresentationSendingModeFeedback();
 		}
 
 		public void SetPresentationLocalRemote()
@@ -6296,6 +6749,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			PresentationStates = eCodecPresentationStates.LocalRemote;
 			if (_presentationActive)
 				StartSharing();
+			else
+				FirePresentationSendingModeFeedback();
+		}
+
+		// Out of a presentation the feedbacks show the selected mode (#40).
+		private void FirePresentationSendingModeFeedback()
+		{
+			PresentationSendingLocalOnlyFeedback.FireUpdate();
+			PresentationSendingLocalRemoteFeedback.FireUpdate();
 		}
 
 		public void SetPresentationLocalRemoteToggle()
@@ -6341,18 +6803,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			);
 		}
 
-		private void OnCameraTrackingCapabilitiesChanged()
+		/// <summary>
+		/// Sets CameraTrackingCapabilities and SupportsCameraAutoMode from the parsed availability and
+		/// raises CameraTrackingCapabilitiesChanged when they change (#117).
+		/// </summary>
+		private void UpdateCameraTrackingCapabilities()
 		{
-			var handler = CameraTrackingCapabilitiesChanged;
-			if (handler == null)
+			var args = new CameraTrackingCapabilitiesArgs(SpeakerTrackAvailability, PresenterTrackAvailability);
+			if (args.CameraTrackingCapabilites == CameraTrackingCapabilities)
 				return;
-			handler(
-				this,
-				new CameraTrackingCapabilitiesArgs(
-					SpeakerTrackAvailableFeedbackFunc,
-					PresenterTrackAvailableFeedbackFunc
-				)
-			);
+
+			CameraTrackingCapabilities = args.CameraTrackingCapabilites;
+			SupportsCameraAutoMode = CameraTrackingCapabilities != eCameraTrackingCapabilities.None;
+			this.LogInformation("Camera tracking capabilities: {capabilities}", CameraTrackingCapabilities);
+
+			CameraTrackingCapabilitiesChanged?.Invoke(this, args);
 		}
 
 		private void OnCurrentLayoutChanged(string currentLayout)
@@ -6538,12 +7003,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
 		{
+			// A recents entry groups consecutive calls to the same number, so delete them all (#5). The
+			// parameter is DeleteConsecutiveDuplicates; AcknowledgeConsecutiveDuplicates belongs to
+			// AcknowledgeMissedCall, and the codec rejected every delete with a ParameterError.
 			EnqueueCommand(
 				string.Format(
-					"xCommand CallHistory DeleteEntry CallHistoryId: {0} AcknowledgeConsecutiveDuplicates: True",
+					"xCommand CallHistory DeleteEntry CallHistoryId: {0} DeleteConsecutiveDuplicates: True",
 					entry.OccurrenceHistoryId
 				)
 			);
+		}
+
+		private void OnCallHistoryDeleteEntryResult(JToken response)
+		{
+			// The codec reports a rejected delete inside the result, which CommandResponseFailed doesn't see.
+			var status = (string)response.SelectToken("CallHistoryDeleteEntryResult.status");
+			if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase))
+			{
+				this.LogWarning("The codec did not delete the call history entry: {status}", status ?? "no status");
+				return;
+			}
+
+			GetCallHistory();
+		}
+
+		private void OnExtensionsSetResult(JToken response)
+		{
+			// The codec reports a rejected panel set inside the result and saves none of the panels,
+			// so the Navigator shows no custom controls (#177).
+			var result = response.SelectToken("ExtensionsSetResult");
+			var status = (string)result?.SelectToken("status");
+			if (string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase))
+				return;
+
+			var reason = result?.SelectToken("Reason.Value")?.ToString()
+				?? result?.SelectToken("Reason")?.ToString()
+				?? "Unknown";
+			this.LogError("The codec rejected the UI Extensions panels: {status}. Reason: {reason}", status ?? "no status", reason);
 		}
 
 		#region IHasCameraSpeakerTrack
@@ -6705,6 +7201,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand("xCommand Cameras PresenterTrack Set Mode: Persistent");
 		}
 
+		/// <summary>
+		/// Sets each Cisco camera device online or offline from the status camera list. The camera's
+		/// status arrives in the full xStatus, before the devices exist, so the connect handling in
+		/// ParseStatusObject had no device to update and camera1 stayed offline (#153).
+		/// </summary>
+		private void SetCameraOnlineStatusFromStatus()
+		{
+			var cameraList = CodecStatus.Status.Cameras.CameraList;
+			foreach (var camera in Cameras.OfType<CiscoCamera>())
+			{
+				var status = cameraList.FirstOrDefault(c => c.CameraId == camera.CameraId.ToString());
+				var online = string.Equals(status?.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase);
+				camera.SetOnlineStatus(online);
+				this.LogDebug("Camera {key} (id {id}) online: {online}", camera.Key, camera.CameraId, online);
+			}
+		}
+
 		private void SetUpCameras(List<CameraInfo> cameraInfo)
 		{
 			// Add the internal camera
@@ -6861,6 +7374,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			SelectedCamera = Cameras.First();
+			SetCameraOnlineStatusFromStatus();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 
 			if (NearEndPresets != null)
@@ -6942,6 +7456,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			SelectedCamera = Cameras.First();
+			SetCameraOnlineStatusFromStatus();
 			SelectCamera(SelectedCamera.Key); // call the method to select the camera and ensure the feedbacks get updated.
 
 			if (NearEndPresets != null)

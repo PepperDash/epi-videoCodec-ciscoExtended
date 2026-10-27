@@ -21,6 +21,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Plugin classes with no Crestron dependencies, compiled in and tested directly. -->
+    <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
+    <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
+    <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />
+    <Compile Include="..\src\Framing\SerialLoginDetector.cs" Link="Linked\SerialLoginDetector.cs" />
+    <Compile Include="..\src\Dispatch\XapiDispatcher.cs" Link="Linked\XapiDispatcher.cs" />
+    <Compile Include="..\src\Dispatch\XapiRequestTracker.cs" Link="Linked\XapiRequestTracker.cs" />
+    <Compile Include="..\src\Model\ValueProperty.cs" Link="Linked\ValueProperty.cs" />
+    <Compile Include="..\src\Model\RoomPresetsChange.cs" Link="Linked\RoomPresetsChange.cs" />
+    <Compile Include="..\src\Model\IdKeyedListConverter.cs" Link="Linked\IdKeyedListConverter.cs" />
+    <Compile Include="..\src\Model\StateModelContractResolver.cs" Link="Linked\StateModelContractResolver.cs" />
+    <Compile Include="..\src\RoutingSelector.cs" Link="Linked\RoutingSelector.cs" />
+    <Compile Include="..\src\SipAddress.cs" Link="Linked\SipAddress.cs" />
+    <Compile Include="..\src\CameraTrackingCapabilitiesArgs.cs" Link="Linked\CameraTrackingCapabilitiesArgs.cs" />
+    <Compile Include="..\src\Enums\eCameraTrackingCapabilities.cs" Link="Linked\eCameraTrackingCapabilities.cs" />
+    <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />  </ItemGroup>
+
+  <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
     <ProjectReference Include="..\src\epi-videoCodec-ciscoExtended.4Series.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
@@ -13,10 +14,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     public class CodecSyncState : IKeyed
     {
         bool _initialSyncComplete;
-
-        // Ensures the initial 'xStatus' dump is requested exactly once per connection, independent
-        // of whether the codec echoes the 'xPreferences outputmode json' command back.
-        private bool _initialStatusRequested;
 
         private const int Idle = 0;
         private const int Processing = 1;
@@ -55,6 +52,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public bool InitialStatusMessageWasReceived { get; private set; }
 
+        /// <summary>
+        /// The reply to this sync's own full <c>xStatus</c> request (tagged with a resultId) has been
+        /// parsed. <see cref="InitialStatusMessageWasReceived"/> is set by any status message, including
+        /// the communication monitor's poll reply, which carries no call data; sync completion waits for
+        /// this one, so ActiveCalls and cameras are loaded when Initial Sync Complete is raised (#142).
+        /// </summary>
+        public bool FullStatusWasReceived { get; private set; }
+
         public bool InitialConfigurationMessageWasReceived { get; private set; }
 
         public bool InitialSoftwareVersionMessageWasReceived { get; private set; }
@@ -66,10 +71,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Key = key;
             _parent = parent;
 
+            _syncWatchdogTimer = new CTimer(o => CheckSyncProgress(), null, SyncWatchdogIntervalMs, SyncWatchdogIntervalMs);
+
             CrestronEnvironment.ProgramStatusEventHandler += type =>
                 {
                     if (type != eProgramStatusEventType.Stopping)
                         return;
+
+                    _syncWatchdogTimer.Stop();
+                    _syncWatchdogTimer.Dispose();
 
                     Interlocked.Exchange(ref _isProcessing, Idle);
                     _waitHandle.Set();
@@ -95,41 +105,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Schedule();
         }
 
+        // How a session is recognised (#113). Over RS-232 there are no socket events, and the codec's
+        // session can outlive a program restart (still logged in, in JSON mode, echo off) or restart on
+        // its own (back to text mode, echo on, no feedback registrations). So the sync is driven by what
+        // the codec actually sends, never only by echoes:
+        //  - a JSON message: the session is logged in and in JSON mode;
+        //  - text-mode output (*s, *r, *e, *c, including the "*r Login successful" banner): a session
+        //    exists but is not in JSON mode - set it up, or re-sync if JSON mode had been confirmed;
+        //  - an echo of the plugin's own poll: a session exists (kept for sessions with echo on).
+
+        /// <summary>
+        /// The plugin's poll was echoed: a session exists.
+        /// </summary>
         public void LoginMessageReceived()
         {
             _systemActions.Enqueue(() =>
             {
-                if (!LoginMessageWasReceived)
-                {
-                    this.LogDebug("Login Message Received.");
-                    LoginMessageWasReceived = true;
-                }
-
-                if (!JsonResponseModeSet)
-                {
-                    _parent.SendTextWithoutQueue("xPreferences outputmode json");
-                }
-
-                // Kick off the initial status dump here rather than waiting on the codec to echo
-                // the 'xPreferences outputmode json' command - with SSH 'echo off' that echo may
-                // never arrive, which would otherwise stall initial sync.
-                RequestInitialStatusOnce();
-
-                CheckSyncStatus();
-            });
-
-            Schedule();
-        }
-
-        public void JsonResponseModeMessageReceived()
-        {
-            _systemActions.Enqueue(() =>
-            {
-                if (!JsonResponseModeSet)
-                    this.LogDebug("Json Response Mode Message Received.");
-
-                JsonResponseModeSet = true;
-                RequestInitialStatusOnce();
+                StartSession("poll echoed");
                 CheckSyncStatus();
             });
 
@@ -137,31 +129,116 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
-        /// Marks JSON output mode as active based on a successfully-parsed JSON message, for codecs
-        /// (e.g. the EQ) that never echo/acknowledge the 'xPreferences outputmode json' command.
+        /// A complete JSON message was parsed: the session is logged in and in JSON mode. This also
+        /// covers a session that was already set up before a program restart, where no login banner
+        /// or echo will ever arrive.
         /// </summary>
-        public void JsonResponseModeConfirmedByValidJson()
+        public void JsonMessageReceived()
         {
+            if (LoginMessageWasReceived && JsonResponseModeSet)
+                return; // the usual case: nothing to do, and no action queued per message
+
             _systemActions.Enqueue(() =>
             {
-                if (!JsonResponseModeSet)
-                    this.LogDebug("JSON output mode confirmed by a valid JSON response (outputmode echo not received).");
+                if (LoginMessageWasReceived && JsonResponseModeSet)
+                    return;
+
+                this.LogDebug("JSON received from the codec: the session is logged in and in JSON mode.");
 
                 JsonResponseModeSet = true;
-                RequestInitialStatusOnce();
+
+                if (!LoginMessageWasReceived)
+                {
+                    // Adopting a session this program did not set up (e.g. after a program restart).
+                    LoginMessageWasReceived = true;
+                    MarkSessionDetected();
+
+                    // It may still have echo on.
+                    _parent.SendTextWithoutQueue("echo off");
+
+                    // Always request the full status here: the JSON that got us here may be a poll
+                    // reply (SystemUnit, cameras, SIP, volume), which already counts as the initial
+                    // status but leaves call, standby and presentation state unloaded. A session
+                    // this program set up already requested it in StartSession.
+                    _parent.RequestFullStatus();
+                }
+
+                MarkSyncPhase("jsonMode");
                 CheckSyncStatus();
             });
 
             Schedule();
         }
 
-        private void RequestInitialStatusOnce()
+        /// <summary>
+        /// The codec sent text-mode output (a line starting *s, *r, *e or *c, which includes the
+        /// "*r Login successful" banner of a new session).
+        /// </summary>
+        public void TextOutputReceived()
         {
-            if (InitialStatusMessageWasReceived || _initialStatusRequested)
+            if (LoginMessageWasReceived && !JsonResponseModeSet)
+                return; // the session is already being set up; the watchdog retries if that stalls
+
+            _systemActions.Enqueue(() =>
+            {
+                if (JsonResponseModeSet)
+                {
+                    // In JSON mode the codec never sends text output, so the session restarted (or
+                    // lost JSON mode) and has lost its echo setting and feedback registrations too.
+                    this.LogWarning(
+                        "Codec sent text-mode output after JSON mode was confirmed: its session restarted or left JSON mode. Re-syncing.");
+                    ResetSync();
+                    StartSession("session restarted");
+                }
+                else if (!LoginMessageWasReceived)
+                {
+                    StartSession("text output received");
+                }
+
+                CheckSyncStatus();
+            });
+
+            Schedule();
+        }
+
+        /// <summary>
+        /// Marks the session as logged in and, unless JSON mode is already confirmed, turns echo off and
+        /// requests JSON mode. JSON mode is only marked as set once JSON actually arrives.
+        /// Runs on the worker thread.
+        /// </summary>
+        private void StartSession(string reason)
+        {
+            var isNewSession = !LoginMessageWasReceived;
+            LoginMessageWasReceived = true;
+            MarkSessionDetected();
+
+            if (JsonResponseModeSet)
                 return;
 
-            _initialStatusRequested = true;
-            _parent.SendTextWithoutQueue("xStatus");
+            if (isNewSession)
+                this.LogDebug("Codec session detected ({reason}): turning echo off and requesting JSON mode.", reason);
+
+            _parent.SendTextWithoutQueue("echo off");
+            _parent.SendTextWithoutQueue("xPreferences outputmode json");
+
+            if (isNewSession && !FullStatusWasReceived)
+                _parent.RequestFullStatus();
+        }
+
+        /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
+        public void FullStatusReceived()
+        {
+            _systemActions.Enqueue(() =>
+            {
+                if (!FullStatusWasReceived)
+                    this.LogDebug("Full Codec Status received.");
+
+                FullStatusWasReceived = true;
+                MarkSyncPhase("fullStatus");
+                CheckSyncStatus();
+            });
+
+            Schedule();
         }
 
         public void InitialStatusMessageReceived()
@@ -172,6 +249,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Status Message Received.");
 
                 InitialStatusMessageWasReceived = true;
+                MarkSyncPhase("status");
                 CheckSyncStatus();
             });
 
@@ -186,6 +264,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
 
                 InitialConfigurationMessageWasReceived = true;
+                MarkSyncPhase("configuration");
                 CheckSyncStatus();
             });
 
@@ -200,6 +279,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Software Information received");
 
                 InitialSoftwareVersionMessageWasReceived = true;
+                MarkSyncPhase("softwareVersion");
 
                 CheckSyncStatus();
             });
@@ -215,7 +295,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     this.LogDebug("Initial Codec Feedback Registration Successful.");
 
                 FeedbackWasRegistered = true;
+                MarkSyncPhase("feedback");
                 CheckSyncStatus();
+            });
+
+            Schedule();
+        }
+
+        /// <summary>
+        /// The session is gone and anything sent now would be taken as a login: the RS-232 session
+        /// dropped to a login prompt (#115). Drops the queued commands and resets the sync.
+        /// </summary>
+        public void SessionLost()
+        {
+            _commandActions.Clear();
+
+            _systemActions.Enqueue(() =>
+            {
+                this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
+                _commandActions.Clear();
+                ResetSync();
             });
 
             Schedule();
@@ -226,44 +325,189 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             _systemActions.Enqueue(() =>
             {
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
-                LoginMessageWasReceived = false;
-                JsonResponseModeSet = false;
-                _initialStatusRequested = false;
-                InitialConfigurationMessageWasReceived = false;
-                InitialStatusMessageWasReceived = false;
-                FeedbackWasRegistered = false;
-                InitialSyncComplete = false;
-
-                // A reset sync must not leave the previous sync's periodic timers running while it
-                // re-syncs (on RS-232 there is no socket disconnect to stop them).
-                _parent.StopRefreshTimers();
+                ResetSync();
             });
 
             Schedule();
         }
 
+        /// <summary>
+        /// Clears the sync flags so the next session is synced from the start. Runs on the worker thread.
+        /// </summary>
+        private void ResetSync()
+        {
+            LoginMessageWasReceived = false;
+            JsonResponseModeSet = false;
+            InitialConfigurationMessageWasReceived = false;
+            InitialStatusMessageWasReceived = false;
+            FullStatusWasReceived = false;
+            FeedbackWasRegistered = false;
+            InitialSyncComplete = false;
+            _syncIncompleteSinceUtc = null;
+            _sessionDetectedAt = 0;
+
+            // A reset sync must not leave the previous sync's periodic timers running while it
+            // re-syncs (on RS-232 there is no socket disconnect to stop them).
+            _parent.StopRefreshTimers();
+        }
+
+        // Sync watchdog (#113): each initial request (JSON mode, xStatus, xConfiguration, xFeedback List)
+        // is otherwise sent once, so a lost or unparseable reply left the sync incomplete for good, with
+        // nothing logged. While a session is logged in but not synced, re-request what is missing once
+        // the sync has made no progress for SyncRetryAfter. Long enough for a full xConfiguration reply
+        // (about 96 KB, roughly 9 s at 115200 baud) to arrive and be parsed before anything is resent.
+        private const long SyncWatchdogIntervalMs = 15000;
+        private static readonly TimeSpan SyncRetryAfter = TimeSpan.FromSeconds(60);
+        private CTimer _syncWatchdogTimer;
+        private DateTime? _syncIncompleteSinceUtc;
+
+        private void CheckSyncProgress()
+        {
+            if (InitialSyncComplete)
+                return;
+
+            _systemActions.Enqueue(RetryMissingSyncSteps);
+            Schedule();
+        }
+
+        /// <summary>
+        /// Runs on the worker thread.
+        /// </summary>
+        private void RetryMissingSyncSteps()
+        {
+            if (InitialSyncComplete || !LoginMessageWasReceived)
+            {
+                _syncIncompleteSinceUtc = null;
+                return;
+            }
+
+            // Time from the last progress, not from when the watchdog started: a step that completes
+            // restarts the wait, so a slow but progressing sync is never retried early.
+            var now = DateTime.UtcNow;
+            var progress = SyncStepsCompleted();
+            if (_syncIncompleteSinceUtc == null || progress != _syncProgressAtLastCheck)
+            {
+                _syncIncompleteSinceUtc = now;
+                _syncProgressAtLastCheck = progress;
+                return;
+            }
+
+            if (now - _syncIncompleteSinceUtc.Value < SyncRetryAfter)
+                return;
+
+            _syncIncompleteSinceUtc = now; // next retry no sooner than another SyncRetryAfter
+
+            this.LogWarning(
+                "Sync with the codec still incomplete after {seconds} s (JsonMode={Json}, Status={Status}, FullStatus={FullStatus}, Configuration={Config}, SoftwareVersion={Software}, FeedbackRegistered={Feedback}). Re-requesting what is missing.",
+                SyncRetryAfter.TotalSeconds, JsonResponseModeSet, InitialStatusMessageWasReceived, FullStatusWasReceived,
+                InitialConfigurationMessageWasReceived, InitialSoftwareVersionMessageWasReceived, FeedbackWasRegistered);
+
+            if (!JsonResponseModeSet)
+            {
+                _parent.SendTextWithoutQueue("echo off");
+                _parent.SendTextWithoutQueue("xPreferences outputmode json");
+                _parent.RequestFullStatus();
+                return;
+            }
+
+            if (!InitialStatusMessageWasReceived || !FullStatusWasReceived)
+            {
+                _parent.RequestFullStatus();
+                if (!InitialStatusMessageWasReceived)
+                    return;
+            }
+
+            if (!InitialConfigurationMessageWasReceived)
+                _parent.SendTextWithoutQueue("xConfiguration");
+
+            // The software version comes from SystemUnit status, which a custom monitor poll may not include.
+            if (!InitialSoftwareVersionMessageWasReceived)
+                _parent.SendTextWithoutQueue("xStatus SystemUnit");
+
+            if (!FeedbackWasRegistered)
+                _parent.SendTextWithoutQueue("xFeedback List");
+        }
+
+        private int _syncProgressAtLastCheck;
+
+        private int SyncStepsCompleted()
+        {
+            var steps = 0;
+            if (JsonResponseModeSet) steps++;
+            if (InitialStatusMessageWasReceived) steps++;
+            if (FullStatusWasReceived) steps++;
+            if (InitialConfigurationMessageWasReceived) steps++;
+            if (InitialSoftwareVersionMessageWasReceived) steps++;
+            if (FeedbackWasRegistered) steps++;
+            return steps;
+        }
+
         void CheckSyncStatus()
         {
             this.LogDebug(
-                "CheckSyncStatus: LoginMessageWasReceived={Login}, JsonResponseModeSet={Json}, InitialConfigurationMessageWasReceived={Config}, InitialStatusMessageWasReceived={Status}, FeedbackWasRegistered={Feedback}, InitialSoftwareVersionMessageWasReceived={Software}, InitialSyncComplete={Sync}",
+                "CheckSyncStatus: LoginMessageWasReceived={Login}, JsonResponseModeSet={Json}, InitialConfigurationMessageWasReceived={Config}, InitialStatusMessageWasReceived={Status}, FullStatusWasReceived={FullStatus}, FeedbackWasRegistered={Feedback}, InitialSoftwareVersionMessageWasReceived={Software}, InitialSyncComplete={Sync}",
                 LoginMessageWasReceived, JsonResponseModeSet, InitialConfigurationMessageWasReceived,
-                InitialStatusMessageWasReceived, FeedbackWasRegistered, InitialSoftwareVersionMessageWasReceived,
-                InitialSyncComplete);
+                InitialStatusMessageWasReceived, FullStatusWasReceived, FeedbackWasRegistered,
+                InitialSoftwareVersionMessageWasReceived, InitialSyncComplete);
 
             if (LoginMessageWasReceived && JsonResponseModeSet && InitialConfigurationMessageWasReceived &&
-                InitialStatusMessageWasReceived && FeedbackWasRegistered && InitialSoftwareVersionMessageWasReceived)
+                InitialStatusMessageWasReceived && FullStatusWasReceived && FeedbackWasRegistered &&
+                InitialSoftwareVersionMessageWasReceived)
             {
                 if (InitialSyncComplete)
                 {
                     return;
                 }
 
+                RecordSyncComplete();
                 InitialSyncComplete = true;
-                _parent.PollSpeakerTrack();
-                _parent.PollPresenterTrack();
+                // No SpeakerTrack/PresenterTrack polls here: the sync's full xStatus already carries both,
+                // and polling PresenterTrack on a model without it logged an ERROR every sync (#117).
             }
             else
                 InitialSyncComplete = false;
+        }
+
+        // Sync timing (#129): from the moment a session is detected to Initial Sync Complete, plus when
+        // each step completed. Measuring only. All of this runs on the worker thread.
+        private long _sessionDetectedAt;
+        private readonly Dictionary<string, double> _syncPhaseMs = new Dictionary<string, double>();
+
+        private void MarkSessionDetected()
+        {
+            if (_sessionDetectedAt != 0)
+                return;
+
+            _sessionDetectedAt = CodecTimings.Now;
+            _syncPhaseMs.Clear();
+        }
+
+        private void MarkSyncPhase(string phase)
+        {
+            if (_sessionDetectedAt == 0 || _syncPhaseMs.ContainsKey(phase))
+                return;
+
+            var ms = CodecTimings.ElapsedMs(_sessionDetectedAt, CodecTimings.Now);
+            _syncPhaseMs[phase] = ms;
+            _parent.Timings.Record("sync." + phase, ms);
+        }
+
+        private double SyncPhaseMs(string phase) =>
+            _syncPhaseMs.TryGetValue(phase, out var ms) ? Math.Round(ms) : -1;
+
+        private void RecordSyncComplete()
+        {
+            if (_sessionDetectedAt == 0)
+                return;
+
+            var total = CodecTimings.ElapsedMs(_sessionDetectedAt, CodecTimings.Now);
+            _parent.Timings.Record("sync.total", total);
+            _sessionDetectedAt = 0;
+
+            this.LogInformation(
+                "[perf] Initial sync took {total} ms after the session was detected (JSON mode {json} ms, status {status} ms, configuration {config} ms, software version {software} ms, feedback {feedback} ms, full status {fullStatus} ms; -1 = not measured)",
+                Math.Round(total), SyncPhaseMs("jsonMode"), SyncPhaseMs("status"), SyncPhaseMs("configuration"),
+                SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"), SyncPhaseMs("fullStatus"));
         }
 
         private void Schedule()
