@@ -42,12 +42,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public bool? FlipImage { get; set; }
 
         /// <summary>
-        /// The source ID of the camera on the codec. This is used to link the camera to the correct video source on the codec for switching and management purposes.
-        /// 
+        /// The video input source id the camera selects with SetMainVideoSource. Optional: when 0 or
+        /// omitted, <see cref="DefaultCameraId"/> is used.
         /// </summary>
-        
-        // TODO: Need to test this at runtime and implement logic to set the source ID on the codec's corresponding camera object if it doesn't match this value.
-        // This is important for ensuring the camera is correctly linked to the codec's video sources for switching and management purposes.
         [JsonProperty("sourceId")]
         public uint SourceId { get; set; }
 

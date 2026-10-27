@@ -6991,6 +6991,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
 			SelectedCamera = camera;
 
+			if (!CameraSourceId.IsValid(camera.SourceId))
+			{
+				this.LogWarning("Camera '{key}' has no video source id; not changing the main video source", camera.Key);
+				return;
+			}
+
 			EnqueueCommand(
 				string.Format(
 					"xCommand Video Input SetMainVideoSource SourceId: {0}",

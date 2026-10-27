@@ -159,6 +159,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             CameraId = props.DefaultCameraId;
             DefaultCameraId = props.DefaultCameraId;
+            SourceId = CameraSourceId.Resolve(props.SourceId, props.DefaultCameraId);
             baselineSourceId = SourceId;
 
             SetupOutputPort();
