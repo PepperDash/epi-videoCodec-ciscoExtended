@@ -7227,34 +7227,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogDebug("Setting up cameras from info: {info}",
 				JsonConvert.SerializeObject(cameraInfo, Formatting.Indented));
 
-			// Deal with the case of 1 or no reported cameras
-			if (camCount <= 1)
+			// No reported cameras: fall back to the integrated camera
+			if (camCount == 0)
 			{
-				var internalCamera = new CiscoCamera(Key + "-camera1", "Near End", this, 1);
-
-				if (camCount > 0)
-				{
-					// Try to get the capabilities from the codec
-					if (
-						CodecStatus.Status.Cameras.CameraList[0] != null
-						&& CodecStatus.Status.Cameras.CameraList[0].Capabilities != null
-					)
-					{
-						internalCamera.SetCapabilites(
-							CodecStatus.Status.Cameras.CameraList[0].Capabilities.Options.Value
-						);
-					}
-				}
-
-				Cameras.Add(internalCamera);
-				this.LogDebug("Adding camera to camera list: {key}", internalCamera.Key);
-
-				var existingInternalCamera = DeviceManager.GetDeviceForKey(internalCamera.Key);
-
-				if (existingInternalCamera == null)
-				{
-					DeviceManager.AddDevice(internalCamera);
-				}
+				AddFallbackCamera(null);
 			}
 			else
 			{
@@ -7341,6 +7317,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					// 	DeviceManager.AddDevice(camera);
 					// }
 				}
+
+				// No reported camera matched a camera device or had a serial number to create one from
+				if (Cameras.Count == 0)
+				{
+					AddFallbackCamera(cameraInfo[0]);
+				}
 			}
 
 			// Add the far end camera
@@ -7380,6 +7362,39 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (NearEndPresets != null)
 			{
 				CodecRoomPresetsListHasChanged?.Invoke(this, EventArgs.Empty);
+			}
+		}
+
+		/// <summary>
+		/// Adds a near-end camera for the first reported camera, or for the integrated camera 1 when
+		/// <paramref name="info"/> is null.
+		/// </summary>
+		private void AddFallbackCamera(CameraInfo info)
+		{
+			var (cameraId, sourceId) = FallbackCamera.Resolve(info?.CameraNumber, info?.SourceId ?? 0);
+			var camera = new CiscoCamera(
+				string.Format("{0}-camera{1}", Key, cameraId),
+				"Near End",
+				this,
+				cameraId,
+				sourceId
+			);
+
+			// Try to get the capabilities from the codec
+			var status = CodecStatus.Status.Cameras.CameraList?.FirstOrDefault(c =>
+				c != null && c.CameraId == cameraId.ToString(CultureInfo.InvariantCulture)
+			);
+			if (status?.Capabilities != null)
+			{
+				camera.SetCapabilites(status.Capabilities.Options.Value);
+			}
+
+			Cameras.Add(camera);
+			this.LogDebug("Adding camera to camera list: {key} (id {id}, source {sourceId})", camera.Key, cameraId, sourceId);
+
+			if (DeviceManager.GetDeviceForKey(camera.Key) == null)
+			{
+				DeviceManager.AddDevice(camera);
 			}
 		}
 

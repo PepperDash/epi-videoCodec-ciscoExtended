@@ -16,7 +16,7 @@ public class CameraSourceIdTests
     [Fact]
     public void Unset_Source_Id_Falls_Back_To_Camera_Id()
     {
-        // Laurelhurst: ciscoPtzCameraA has defaultCameraId 7 and no sourceId.
+        // A network camera configured with defaultCameraId 7 and no sourceId.
         CameraSourceId.Resolve(0, 7).Should().Be(7u);
     }
 

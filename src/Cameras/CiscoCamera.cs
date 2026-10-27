@@ -162,6 +162,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             SourceId = CameraSourceId.Resolve(props.SourceId, props.DefaultCameraId);
             baselineSourceId = SourceId;
 
+            // Set default speeds
+            PanSpeed = 7;
+            TiltSpeed = 7;
+            ZoomSpeed = 7;
+
             SetupOutputPort();
 
             // add pre activation action to set the codec based on the default parent device key
