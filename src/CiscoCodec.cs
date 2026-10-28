@@ -931,7 +931,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			LocalLayoutIsProminentFeedback = new BoolFeedback(LocalLayoutIsProminentFeedbackFunc);
 			FarEndIsSharingContentFeedback = new BoolFeedback(FarEndIsSharingContentFeedbackFunc);
 			CameraIsOffFeedback = new BoolFeedback(
-				() => CodecStatus.Status.Video.VideoInput.MainVideoMute.BoolValue
+				// Null-safe: MainVideoMute may be absent until the codec first reports a mute status.
+				// Evaluated from the SelectedCamera setter, so an NRE here throws out of SelectCamera and
+				// (on the CameraManager timer thread) is silently swallowed, wedging role application.
+				() => CodecStatus?.Status?.Video?.VideoInput?.MainVideoMute?.BoolValue ?? false
 			);
 			AvailableLayoutsFeedback = new StringFeedback(AvailableLayoutsFeedbackFunc);
 			DirectorySearchInProgress = new BoolFeedback(() => _searchInProgress);
@@ -7534,8 +7537,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			private set
 			{
 				_selectedCamera = value;
-				SelectedCameraFeedback.FireUpdate();
-				ControllingFarEndCameraFeedback.FireUpdate();
+				// The status parse can add a camera and select it from MainVideoSource before
+				// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
+				SelectedCameraFeedback?.FireUpdate();
+				ControllingFarEndCameraFeedback?.FireUpdate();
 				if (CameraIsOffFeedback.BoolValue)
 					CameraMuteOff();
 				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
