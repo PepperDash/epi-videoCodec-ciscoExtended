@@ -7537,8 +7537,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			private set
 			{
 				_selectedCamera = value;
-				SelectedCameraFeedback.FireUpdate();
-				ControllingFarEndCameraFeedback.FireUpdate();
+				// The status parse can add a camera and select it from MainVideoSource before
+				// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
+				SelectedCameraFeedback?.FireUpdate();
+				ControllingFarEndCameraFeedback?.FireUpdate();
 				if (CameraIsOffFeedback.BoolValue)
 					CameraMuteOff();
 				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
