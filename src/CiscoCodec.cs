@@ -4540,6 +4540,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			if (state == CameraBindingState.Unknown)
 				return;
 
+			// Cameras the codec builds itself (SetUpCamerasFromConfig, or SetUpCameras from a serial)
+			// are in Cameras but not in DeviceManager, so the caller's lookup can't find them.
+			if (device == null && uint.TryParse(camId, out var slot))
+				device = Cameras?.OfType<CiscoCamera>().FirstOrDefault(c => c.CameraId == slot);
+
 			device?.SetBindingState(state);
 
 			_cameraBindingStates.TryGetValue(camId, out var previous);
@@ -7269,7 +7274,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var status = cameraList.FirstOrDefault(c => c.CameraId == camera.CameraId.ToString());
 				var online = string.Equals(status?.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase);
 				camera.SetOnlineStatus(online);
-				this.LogDebug("Camera {key} (id {id}) online: {online}", camera.Key, camera.CameraId, online);
+				// Same reason for the binding state (#188): reports before the device existed had no device to set.
+				camera.SetBindingState(CameraBinding.Evaluate(status?.Connected?.Value, status?.DetectedConnector?.Value));
+				this.LogDebug("Camera {key} (id {id}) online: {online} binding: {binding}",
+					camera.Key, camera.CameraId, online, camera.BindingState);
 			}
 		}
 
