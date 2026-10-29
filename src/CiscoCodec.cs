@@ -4492,6 +4492,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					var camerasList = Cameras.OfType<CiscoCamera>().ToList();
 					var cameraToRemove = camerasList.FirstOrDefault(c => c.CameraId == cameraId);
+					// Before it leaves Cameras: a codec-built camera isn't in DeviceManager, so
+					// UpdateCameraBinding can't find it afterwards (#188).
+					cameraToRemove?.SetBindingState(CameraBindingState.Disconnected);
 					cameraToRemove?.SetParentCodec(null);
 					Cameras.Remove(cameraToRemove);
 				}
