@@ -4509,6 +4509,53 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 		}
 
+		/// <summary>
+		/// Last known binding state per camera id (slot), so only changes are logged (#188). Kept by
+		/// slot rather than on the device: the camera in a wrong slot often has no config device.
+		/// </summary>
+		private readonly Dictionary<string, CameraBindingState> _cameraBindingStates =
+			new Dictionary<string, CameraBindingState>();
+
+		/// <summary>
+		/// Works out a camera's binding state from the merged state model, not the incoming entry:
+		/// partial feedback often leaves DetectedConnector out. Logs a Warning when a connected camera
+		/// becomes unbound and an Information line when it binds again.
+		/// </summary>
+		private void UpdateCameraBinding(string camId, bool removed, CiscoCamera device)
+		{
+			CameraBindingState state;
+			string connector = null;
+			if (removed)
+			{
+				state = CameraBindingState.Disconnected;
+			}
+			else
+			{
+				var status = CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+				connector = status?.DetectedConnector?.Value;
+				state = CameraBinding.Evaluate(status?.Connected?.Value, connector);
+			}
+
+			// Not enough reported yet: keep what we knew.
+			if (state == CameraBindingState.Unknown)
+				return;
+
+			device?.SetBindingState(state);
+
+			_cameraBindingStates.TryGetValue(camId, out var previous);
+			_cameraBindingStates[camId] = state;
+			if (state == previous)
+				return;
+
+			if (state == CameraBindingState.Unbound)
+				this.LogWarning(
+					"Camera {camId} ({device}) is connected but not bound to a video input (DetectedConnector 0); its video won't come up",
+					camId, device?.Key ?? "no device");
+			else if (previous == CameraBindingState.Unbound && state == CameraBindingState.Bound)
+				this.LogInformation("Camera {camId} ({device}) is bound to video input connector {connector}",
+					camId, device?.Key ?? "no device", connector);
+		}
+
 		private void ParseStatusObject(JToken statusToken)
 		{
 			if (statusToken == null || (statusToken.Type == JTokenType.Object && !statusToken.HasValues))
@@ -4682,6 +4729,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						existingCameraDevice?.SetOnlineStatus(false);
 						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
 						removedCameraIds.Add(camIdInt);
+						UpdateCameraBinding(camId, true, existingCameraDevice);
 						continue;
 					}
 
@@ -4735,6 +4783,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							listWasUpdated = true;
 						}
 					}
+
+					// After the Connected handling, and for entries without Connected too: a bind
+					// or unbind can arrive as DetectedConnector alone.
+					UpdateCameraBinding(camId, removedCameraIds.Contains(camIdInt), existingCameraDevice);
 				}
 
 				if (listWasUpdated)
