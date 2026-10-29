@@ -38,6 +38,7 @@
     <Compile Include="..\src\Enums\eCameraTrackingCapabilities.cs" Link="Linked\eCameraTrackingCapabilities.cs" />
     <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />
     <Compile Include="..\src\Cameras\CameraSourceId.cs" Link="Linked\CameraSourceId.cs" />
+    <Compile Include="..\src\Cameras\CameraBinding.cs" Link="Linked\CameraBinding.cs" />
     <Compile Include="..\src\Cameras\FallbackCamera.cs" Link="Linked\FallbackCamera.cs" />  </ItemGroup>
 
   <ItemGroup>

@@ -4492,6 +4492,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				{
 					var camerasList = Cameras.OfType<CiscoCamera>().ToList();
 					var cameraToRemove = camerasList.FirstOrDefault(c => c.CameraId == cameraId);
+					// Before it leaves Cameras: a codec-built camera isn't in DeviceManager, so
+					// UpdateCameraBinding can't find it afterwards (#188).
+					cameraToRemove?.SetBindingState(CameraBindingState.Disconnected);
 					cameraToRemove?.SetParentCodec(null);
 					Cameras.Remove(cameraToRemove);
 				}
@@ -4507,6 +4510,58 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogDebug("Camera {camId}: RemoveCamera stack trace: {stack}", cameraId, ex.StackTrace);
 				return false;
 			}
+		}
+
+		/// <summary>
+		/// Last known binding state per camera id (slot), so only changes are logged (#188). Kept by
+		/// slot rather than on the device: the camera in a wrong slot often has no config device.
+		/// </summary>
+		private readonly Dictionary<string, CameraBindingState> _cameraBindingStates =
+			new Dictionary<string, CameraBindingState>();
+
+		/// <summary>
+		/// Works out a camera's binding state from the merged state model, not the incoming entry:
+		/// partial feedback often leaves DetectedConnector out. Logs a Warning when a connected camera
+		/// becomes unbound and an Information line when it binds again.
+		/// </summary>
+		private void UpdateCameraBinding(string camId, bool removed, CiscoCamera device)
+		{
+			CameraBindingState state;
+			string connector = null;
+			if (removed)
+			{
+				state = CameraBindingState.Disconnected;
+			}
+			else
+			{
+				var status = CodecStatus.Status.Cameras.CameraList.FirstOrDefault(c => c.CameraId == camId);
+				connector = status?.DetectedConnector?.Value;
+				state = CameraBinding.Evaluate(status?.Connected?.Value, connector);
+			}
+
+			// Not enough reported yet: keep what we knew.
+			if (state == CameraBindingState.Unknown)
+				return;
+
+			// Cameras the codec builds itself (SetUpCamerasFromConfig, or SetUpCameras from a serial)
+			// are in Cameras but not in DeviceManager, so the caller's lookup can't find them.
+			if (device == null && uint.TryParse(camId, out var slot))
+				device = Cameras?.OfType<CiscoCamera>().FirstOrDefault(c => c.CameraId == slot);
+
+			device?.SetBindingState(state);
+
+			_cameraBindingStates.TryGetValue(camId, out var previous);
+			_cameraBindingStates[camId] = state;
+			if (state == previous)
+				return;
+
+			if (state == CameraBindingState.Unbound)
+				this.LogWarning(
+					"Camera {camId} ({device}) is connected but not bound to a video input (DetectedConnector 0); its video won't come up",
+					camId, device?.Key ?? "no device");
+			else if (previous == CameraBindingState.Unbound && state == CameraBindingState.Bound)
+				this.LogInformation("Camera {camId} ({device}) is bound to video input connector {connector}",
+					camId, device?.Key ?? "no device", connector);
 		}
 
 		private void ParseStatusObject(JToken statusToken)
@@ -4682,6 +4737,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						existingCameraDevice?.SetOnlineStatus(false);
 						listWasUpdated = RemoveCamera(camIdInt, existingCameraDevice);
 						removedCameraIds.Add(camIdInt);
+						UpdateCameraBinding(camId, true, existingCameraDevice);
 						continue;
 					}
 
@@ -4735,6 +4791,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 							listWasUpdated = true;
 						}
 					}
+
+					// After the Connected handling, and for entries without Connected too: a bind
+					// or unbind can arrive as DetectedConnector alone.
+					UpdateCameraBinding(camId, removedCameraIds.Contains(camIdInt), existingCameraDevice);
 				}
 
 				if (listWasUpdated)
@@ -7217,7 +7277,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				var status = cameraList.FirstOrDefault(c => c.CameraId == camera.CameraId.ToString());
 				var online = string.Equals(status?.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase);
 				camera.SetOnlineStatus(online);
-				this.LogDebug("Camera {key} (id {id}) online: {online}", camera.Key, camera.CameraId, online);
+				// Same reason for the binding state (#188): reports before the device existed had no device to set.
+				camera.SetBindingState(CameraBinding.Evaluate(status?.Connected?.Value, status?.DetectedConnector?.Value));
+				this.LogDebug("Camera {key} (id {id}) online: {online} binding: {binding}",
+					camera.Key, camera.CameraId, online, camera.BindingState);
 			}
 		}
 

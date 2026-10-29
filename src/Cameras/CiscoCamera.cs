@@ -295,6 +295,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             IsOnline = isOnline;
         }
 
+        /// <summary>
+        /// The camera's binding state as last reported by the codec (#188). An unbound camera is
+        /// connected but has DetectedConnector 0, so its video never reaches a video input.
+        /// </summary>
+        [JsonIgnore]
+        public CameraBindingState BindingState { get; private set; }
+
+        /// <summary>
+        /// False only when the codec reports the camera connected but not bound to a connector.
+        /// Unknown counts as bound, so a camera whose DetectedConnector isn't reported yet is
+        /// treated as it was before binding was tracked.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsBound => BindingState != CameraBindingState.Unbound;
+
+        /// <summary>
+        /// Updates the binding state from the codec's Connected and DetectedConnector status.
+        /// </summary>
+        public void SetBindingState(CameraBindingState state)
+        {
+            BindingState = state;
+        }
+
         //  Takes a string from the camera capabilities value and converts from "ptzf" to enum bitmask
         public void SetCapabilites(string capabilites)
         {
