@@ -42,6 +42,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         }
 
         /// <summary>
+        /// A switch command on the port completed. If the manager has acted on this port before,
+        /// restart its boot window from now: a queued PoE-on (or a VLAN change done with a PoE
+        /// cycle) can complete long after it was sent, and the camera only starts booting when
+        /// power actually returns. Ports the manager never touched are ignored, so the switch
+        /// reporting a port's current state (e.g. at startup) does not open a window.
+        /// </summary>
+        /// <returns>True when the window was restarted.</returns>
+        public bool RefreshOnCompletion(string port, DateTime nowUtc)
+        {
+            var key = Normalize(port);
+            if (key == null)
+            {
+                return false;
+            }
+
+            lock (sync)
+            {
+                if (!lastPortActionUtc.TryGetValue(key, out var last))
+                {
+                    return false;
+                }
+
+                if (nowUtc > last)
+                {
+                    lastPortActionUtc[key] = nowUtc;
+                }
+
+                return true;
+            }
+        }
+
+        /// <summary>
         /// True while the camera on <paramref name="port"/> may still be booting from a manager
         /// port action; <paramref name="bootingUntilUtc"/> is when the window closes.
         /// </summary>

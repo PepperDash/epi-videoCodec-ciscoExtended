@@ -23,6 +23,59 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public uint CameraId { get; }
     }
 
+    /// <summary>Result of <see cref="CameraPresence.Evaluate"/>.</summary>
+    public enum CameraPresenceState
+    {
+        /// <summary>Connected on its target codec (any slot).</summary>
+        OnTarget,
+
+        /// <summary>Connected on a codec other than its target.</summary>
+        OnOtherCodec,
+
+        /// <summary>Every codec was sampled and none reports it connected.</summary>
+        Absent,
+
+        /// <summary>Not found, but at least one codec could not be sampled: no conclusion.</summary>
+        Unknown
+    }
+
+    /// <summary>
+    /// Allows an action at most once per interval per key (e.g. one camera-status refresh per codec
+    /// per minute). Thread-safe.
+    /// </summary>
+    public sealed class KeyedRateLimiter
+    {
+        private readonly object sync = new object();
+        private readonly Dictionary<string, DateTime> lastUtc = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        private readonly TimeSpan interval;
+
+        /// <summary>Creates the limiter.</summary>
+        public KeyedRateLimiter(TimeSpan interval)
+        {
+            this.interval = interval;
+        }
+
+        /// <summary>True (and records the time) when the key has not been allowed within the interval.</summary>
+        public bool TryAcquire(string key, DateTime nowUtc)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return false;
+            }
+
+            lock (sync)
+            {
+                if (lastUtc.TryGetValue(key, out var last) && nowUtc - last < interval)
+                {
+                    return false;
+                }
+
+                lastUtc[key] = nowUtc;
+                return true;
+            }
+        }
+    }
+
     /// <summary>
     /// Finds a camera by serial in the codecs' camera-status records, in any slot. The camera
     /// manager's own view (control wrappers matched by configured slot) can miss a camera that is
@@ -31,6 +84,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     /// </summary>
     public static class CameraPresence
     {
+        /// <summary>
+        /// Classifies where a camera is, from the codecs' camera-status records.
+        /// <para>
+        /// When not every codec could be sampled (<paramref name="allCodecsSampled"/> false), not
+        /// finding the camera proves nothing: it may be connected on the codec that was missed. That
+        /// case is <see cref="CameraPresenceState.Unknown"/>, never <see cref="CameraPresenceState.Absent"/>,
+        /// so the caller defers instead of power-cycling a camera that may be connected.
+        /// </para>
+        /// </summary>
+        public static CameraPresenceState Evaluate(
+            IEnumerable<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> codecs,
+            bool allCodecsSampled,
+            string serialNumber,
+            string? targetCodecKey,
+            out CameraPresenceMatch match)
+        {
+            if (TryFindConnected(codecs, serialNumber, targetCodecKey, out match))
+            {
+                return string.Equals(match.CodecKey, targetCodecKey, StringComparison.OrdinalIgnoreCase)
+                    ? CameraPresenceState.OnTarget
+                    : CameraPresenceState.OnOtherCodec;
+            }
+
+            return allCodecsSampled ? CameraPresenceState.Absent : CameraPresenceState.Unknown;
+        }
+
         /// <summary>
         /// Looks for <paramref name="serialNumber"/> connected on any codec, preferring
         /// <paramref name="preferredCodecKey"/> (the camera's target) when several report it.

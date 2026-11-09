@@ -80,6 +80,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // Boot window after the manager touches a camera's port (see CameraBootWindow).
         private readonly CameraBootWindow cameraBootWindow;
 
+        // At most one full camera-status request per codec per CameraStatusRefreshIntervalMs, sent
+        // when a codec's status shows a managed camera its wrappers never picked up.
+        private readonly KeyedRateLimiter cameraStatusRefreshLimiter = new KeyedRateLimiter(TimeSpan.FromMilliseconds(CameraStatusRefreshIntervalMs));
+
         // Cameras already warned about being connected on their target codec in a slot other than
         // the configured one (one warning per camera until it is seen in the right slot or the
         // scenario changes). Guarded by activeMigrationsLock.
@@ -200,6 +204,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // enough for a PTZ camera to power up and re-register (a Room Vision PTZ takes 90 s+).
         // Configurable via cameraBootWindowMs.
         private const int DefaultCameraBootWindowMs = 180000;
+
+        // Minimum time between full camera-status requests to the same codec from the floating sweep.
+        private const int CameraStatusRefreshIntervalMs = 60000;
 
         // Ceiling on how long an "all cameras lost" codec outage holds floating recovery. That
         // outage is inferred from camera status, so it must not hold forever (for example a broken
@@ -651,18 +658,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
         /// <summary>
         /// Reads every managed codec's camera-status records. A codec whose list changed while
-        /// copying is left out of this sample.
+        /// copying is left out of this sample and <paramref name="allSampled"/> is false, so a
+        /// camera that is not found cannot be taken as absent.
         /// </summary>
-        private List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> BuildCameraStatusByCodec()
+        private List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> BuildCameraStatusByCodec(out bool allSampled)
         {
+            allSampled = true;
             var result = new List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>>();
             foreach (var kvp in managedCodecs)
             {
-                var snapshot = (kvp.Value as CiscoCodec)?.GetCameraStatusSnapshot();
-                if (snapshot != null)
+                var codec = kvp.Value as CiscoCodec;
+                if (codec == null)
                 {
-                    result.Add(new KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>(kvp.Key, snapshot));
+                    continue;
                 }
+
+                var snapshot = codec.GetCameraStatusSnapshot();
+                if (snapshot == null)
+                {
+                    allSampled = false;
+                    continue;
+                }
+
+                result.Add(new KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>(kvp.Key, snapshot));
             }
 
             return result;
@@ -746,6 +764,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 case NetworkSwitchPortEventType.PoEDisabled:
                 case NetworkSwitchPortEventType.PoEEnabled:
                     LogSwitchHealthTransition(switchHealth.OnCommandCompleted(now), "commandCompleted", e.Port);
+
+                    // A queued command can complete long after it was sent; the camera only starts
+                    // booting when power actually returns (PoE on, or a VLAN change done with a
+                    // PoE cycle). Restart the port's boot window from the completion.
+                    if (cameraBootWindow.RefreshOnCompletion(e.Port, now))
+                    {
+                        this.LogVerbose($"CAMERA_BOOT_WINDOW_RESTARTED port='{e.Port}' event='{e.EventType}' windowMs='{(int)cameraBootWindow.Window.TotalMilliseconds}'");
+                    }
                     break;
             }
         }
@@ -1669,6 +1695,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             // Codec camera-status records, read once per sweep when first needed.
             List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> statusByCodec = null;
+            var statusComplete = false;
 
             foreach (var codecConfig in scenarioConfig.CodecConfigs)
             {
@@ -1705,9 +1732,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     // The manager's view above only sees control wrappers. Check the codecs' own
                     // camera-status records (any slot): a camera the target codec reports connected,
                     // even in a different slot than configured, is present and must not be probed.
-                    statusByCodec = statusByCodec ?? BuildCameraStatusByCodec();
-                    var foundInStatus = CameraPresence.TryFindConnected(statusByCodec, camera.SerialNumber, targetCodecKey, out var presence);
-                    if (foundInStatus && string.Equals(presence.CodecKey, targetCodecKey, StringComparison.OrdinalIgnoreCase))
+                    if (statusByCodec == null)
+                    {
+                        statusByCodec = BuildCameraStatusByCodec(out statusComplete);
+                    }
+
+                    var presenceState = CameraPresence.Evaluate(statusByCodec, statusComplete, camera.SerialNumber, targetCodecKey, out var presence);
+                    if (presenceState == CameraPresenceState.OnTarget)
                     {
                         NoteCameraPresentInCodecStatus(cameraKey, targetCodecKey, presence.CameraId, currentScenario.Key);
                         ClearFloatingRecoveryState(cameraKey, "presentInCodecStatus");
@@ -1793,15 +1824,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     // Connected on another codec per that codec's status, but not visible to the
                     // wrapper-based wrong-codec path above. It is alive, so a probe would only
-                    // power-cycle it; leave it to the connect-driven migration and look again later.
-                    if (foundInStatus)
+                    // power-cycle it. This happens when the codec reported Connected before the
+                    // serial: the later serial-only update never attaches the wrapper or raises
+                    // CameraConnected. Ask that codec for its full camera status (rate-limited per
+                    // codec) so the normal connect -> migration path runs, and look again later.
+                    if (presenceState == CameraPresenceState.OnOtherCodec)
                     {
                         lock (activeMigrationsLock)
                         {
                             reconcileNextActionUtc[cameraKey] = now.AddMilliseconds(ReconcileBackoffMs);
                         }
 
-                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='connectedOnOtherCodecInStatus' statusCodec='{presence.CodecKey}' statusCameraId='{presence.CameraId}'");
+                        var refreshRequested = false;
+                        if (managedCodecs.TryGetValue(presence.CodecKey, out var reportingCodecDevice)
+                            && reportingCodecDevice is CiscoCodec reportingCodec
+                            && cameraStatusRefreshLimiter.TryAcquire(presence.CodecKey, now))
+                        {
+                            reportingCodec.RequestCameraStatus();
+                            refreshRequested = true;
+                        }
+
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='connectedOnOtherCodecInStatus' statusCodec='{presence.CodecKey}' statusCameraId='{presence.CameraId}' statusRefreshRequested='{refreshRequested}'");
+                        continue;
+                    }
+
+                    // Not found, but a codec could not be sampled this sweep (its list was changing).
+                    // The camera may be connected there; never probe on an incomplete picture. Look
+                    // again next sweep without starting an episode.
+                    if (presenceState == CameraPresenceState.Unknown)
+                    {
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='defer' reason='codecStatusIncomplete'");
                         continue;
                     }
 

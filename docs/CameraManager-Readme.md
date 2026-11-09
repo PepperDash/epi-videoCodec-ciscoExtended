@@ -281,8 +281,9 @@ Actions:
 - If the camera's target codec is in outage (see 6.6): hold, do nothing.
 - If online on wrong codec: start migration immediately.
 - If the target codec's own camera-status records report the camera connected (any slot), it is present: no probe. A slot other than the configured one is warned about once (`CAMERA_SLOT_MISMATCH`).
-- If the manager itself PoE-cycled or re-VLANed the camera's port within `cameraBootWindowMs` (default 180 s), the camera is rebooting: no episode, no probe until the window closes. Every manager switch command (probe, migration, reseed, port ensure) restarts the window.
-- If another codec's status reports the camera connected, it is alive: no probe; looked at again after `ReconcileBackoffMs`.
+- If the manager itself PoE-cycled or re-VLANed the camera's port within `cameraBootWindowMs` (default 180 s), the camera is rebooting: no episode, no probe until the window closes. Every manager switch command (probe, migration, reseed, port ensure) restarts the window, and so does the switch reporting a command on that port completed (a queued PoE-on can complete well after it was sent).
+- If another codec's status reports the camera connected, it is alive: no probe; that codec is asked for its full camera status (at most once a minute per codec) so the normal connect -> migration path picks it up, and the camera is looked at again after `ReconcileBackoffMs`.
+- If a codec's status could not be read this sweep and the camera was not found elsewhere, no conclusion is drawn: no episode, no probe, retry next sweep.
 - If online nowhere: run bounded floating recovery:
   - first sighting starts a floating episode: one `CAMERA_FLOATING_DETECTED` warning, then a 60 s grace (`FloatingDetectGraceMs`) before the first probe
   - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs), with codecs in outage removed before rotating (A, B, C with B held probes A, C, A, C; a full pass then has 2 probes)

@@ -57,6 +57,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
+        /// <summary>
+        /// Asks the codec for its full camera status. A full report repeats Connected together with
+        /// the serial, so a camera whose Connected arrived before its serial is matched to its
+        /// device and announced with <see cref="CameraConnected"/>.
+        /// </summary>
+        public void RequestCameraStatus()
+        {
+            this.LogDebug("Requesting full camera status from codec {codecKey}", Key);
+            EnqueueCommand("xStatus Cameras Camera");
+        }
+
         public string GetCameraSerialNumber(uint cameraId)
         {
             var camera = Cameras.Where(c => c is CiscoCamera cam && cam.CameraId == cameraId).FirstOrDefault() as CiscoCamera;
