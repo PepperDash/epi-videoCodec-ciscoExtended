@@ -196,6 +196,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private const int SwitchProbeBackoffBaseMs = 60000;
         private const int SwitchProbeBackoffMaxMs = 600000;
 
+        // Floating-probe pacing (see FloatingProbePolicy): the first pass over the candidate codecs
+        // waits ReconcileBackoffMs between probes, later probes double up to this cap.
+        private const int FloatingProbeMaxDelayMs = 600000;
+
+        // Most floating-recovery probes started in one sweep, across all cameras.
+        private const int MaxFloatingProbesPerSweep = 1;
+
         // Maximum time to wait for source-side assigned-serial clear feedback before forcing the
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
@@ -1548,6 +1555,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            var probesThisSweep = 0;
+
             foreach (var codecConfig in scenarioConfig.CodecConfigs)
             {
                 var targetCodecKey = codecConfig.CodecKey;
@@ -1667,6 +1676,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // At most MaxFloatingProbesPerSweep probes per sweep across all cameras, so
+                    // several floating cameras never queue their VLAN/PoE bursts on the switch
+                    // console at the same time. The rest wait for the next sweep.
+                    if (probesThisSweep >= MaxFloatingProbesPerSweep)
+                    {
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='probeCapPerSweep' cap='{MaxFloatingProbesPerSweep}'");
+                        continue;
+                    }
+
                     // Do not start a probe while the switch session is failing: its commands would
                     // time out and pile up on the console. One trial probe is let through per
                     // back-off window so a recovered switch is noticed. A held probe does not
@@ -1711,15 +1729,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
+
+                    // Pace the next probe: one full pass over the candidate codecs at the base
+                    // delay, then doubling per probe up to FloatingProbeMaxDelayMs.
+                    var nextProbeDelay = FloatingProbePolicy.GetRetryDelay(
+                        floatingCount,
+                        probeTotal,
+                        TimeSpan.FromMilliseconds(ReconcileBackoffMs),
+                        TimeSpan.FromMilliseconds(FloatingProbeMaxDelayMs));
                     lock (activeMigrationsLock)
                     {
-                        reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                        reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.Add(nextProbeDelay);
                     }
 
-                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
                     if (string.IsNullOrWhiteSpace(probeCodecKey))
                     {
-                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        // The episode was already warned about once; this repeats per probe slot.
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
                         continue;
                     }
 
@@ -1729,7 +1756,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
-                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' nextProbeDelayS='{(int)nextProbeDelay.TotalSeconds}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    probesThisSweep++;
                     networkSwitch.SetPortVlan(port, probeCodecDevice.VLanId);
                     networkSwitch.SetPortPoeState(port, false);
                     ScheduleDelayed(MigrationPoeOffDelayMs, () =>
