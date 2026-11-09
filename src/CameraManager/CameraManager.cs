@@ -77,6 +77,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // fixed cameras, unmanaged cameras) is an outage "anchor". Built once at activation.
         private readonly HashSet<string> movingCameraSerials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Switch-session health from the switch's own port events (see SwitchCommandHealth). While
+        // commands are not completing, floating-recovery probes are held (one trial per back-off).
+        private readonly SwitchCommandHealth switchHealth = new SwitchCommandHealth(
+            TimeSpan.FromMilliseconds(SwitchCommandStaleMs),
+            TimeSpan.FromMilliseconds(SwitchProbeBackoffBaseMs),
+            TimeSpan.FromMilliseconds(SwitchProbeBackoffMaxMs));
+
         // Skip-if-unchanged cache for the port-state-ensure pass. TryEnsureScenarioCameraPortStates
         // re-asserts VLAN/PoE for every already-placed camera on every reconcile pass (which runs on
         // every codec connect event), flooding the switch with redundant commands for cameras that
@@ -178,6 +185,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // outage; this gives the outage detector time to see every camera on the codec gone before
         // any port is touched, and lets a camera that is just rebooting come back on its own.
         private const int FloatingDetectGraceMs = 60000;
+
+        // A switch command session that has not completed this long after it started counts as
+        // failed. Well above a normal console session (a few seconds) and the switch driver's own
+        // per-step session timeout.
+        private const int SwitchCommandStaleMs = 60000;
+
+        // Back-off between trial probes while the switch session is failing: 1 min after the first
+        // failure, doubling per further failure, capped at 10 min.
+        private const int SwitchProbeBackoffBaseMs = 60000;
+        private const int SwitchProbeBackoffMaxMs = 600000;
 
         // Maximum time to wait for source-side assigned-serial clear feedback before forcing the
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
@@ -614,9 +631,45 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 .ToList();
         }
 
+        /// <summary>
+        /// Feeds a switch port event into the switch-session health tracker. "In progress" events
+        /// mark a command session starting; VlanChanged/PoEEnabled/PoEDisabled mark one completing.
+        /// </summary>
+        private void TrackSwitchCommandHealth(NetworkSwitchPortEventArgs e)
+        {
+            var now = DateTime.UtcNow;
+            switch (e.EventType)
+            {
+                case NetworkSwitchPortEventType.VlanChangeInProgress:
+                case NetworkSwitchPortEventType.PoeDisableInProgress:
+                case NetworkSwitchPortEventType.PoeEnableInProgress:
+                    LogSwitchHealthTransition(switchHealth.OnCommandStarted(now), "previousSessionNotCompleted", e.Port);
+                    break;
+                case NetworkSwitchPortEventType.VlanChanged:
+                case NetworkSwitchPortEventType.PoEDisabled:
+                case NetworkSwitchPortEventType.PoEEnabled:
+                    LogSwitchHealthTransition(switchHealth.OnCommandCompleted(now), "commandCompleted", e.Port);
+                    break;
+            }
+        }
+
+        private void LogSwitchHealthTransition(SwitchHealthTransition transition, string reason, string port = null)
+        {
+            if (transition == SwitchHealthTransition.Failing)
+            {
+                this.LogWarning($"CAMERA_SWITCH_SESSION_FAILING reason='{reason}' port='{port}' failures='{switchHealth.ConsecutiveFailures}' backoffMs='{(int)switchHealth.CurrentBackoff.TotalMilliseconds}' action='holdFloatingProbes' — a switch command did not complete; floating-recovery probes wait until a switch command succeeds (one trial probe per back-off window)");
+            }
+            else if (transition == SwitchHealthTransition.Recovered)
+            {
+                this.LogInformation($"CAMERA_SWITCH_SESSION_RECOVERED port='{port}' action='resumeFloatingProbes' — a switch command completed");
+            }
+        }
+
         private void NetworkSwitch_PortStateChanged(object sender, NetworkSwitchPortEventArgs e)
         {
             this.LogVerbose($"Camera Manager {Key} detected network switch port state change on port '{e.Port}' to state '{e.EventType}'");
+
+            TrackSwitchCommandHealth(e);
 
             if (e.EventType == NetworkSwitchPortEventType.PoEDisabled)
             {
@@ -1460,6 +1513,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 // soon as the last camera drops and before the floating sweep can act on it.
                 UpdateCodecOutageState(now);
 
+                // Count a switch session that never completed as a failure.
+                LogSwitchHealthTransition(switchHealth.Evaluate(now), "sessionNotCompleted");
+
                 // Periodic safety-net sweep: catch cameras that ended up floating with no active
                 // migration (the recovery dead-end). Throttled to ReconcileSweepIntervalMs.
                 if (now >= nextReconcileSweepUtc)
@@ -1609,6 +1665,27 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     {
                         this.LogWarning($"CAMERA_FLOATING_DETECTED camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' graceMs='{FloatingDetectGraceMs}' managed='{BuildManagedCameraSnapshot(cameraKey)}' — camera is online on no codec; floating recovery starts after the grace period unless it returns or its codec is found to be in outage");
                         continue;
+                    }
+
+                    // Do not start a probe while the switch session is failing: its commands would
+                    // time out and pile up on the console. One trial probe is let through per
+                    // back-off window so a recovered switch is noticed. A held probe does not
+                    // count against the camera's attempt limit.
+                    var switchWasFailing = switchHealth.IsFailing;
+                    if (!switchHealth.TryAcquireProbe(now, out var switchRetryAtUtc))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = switchRetryAtUtc;
+                        }
+
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='switchSessionFailing' failures='{switchHealth.ConsecutiveFailures}' retryAtUtc='{switchRetryAtUtc:O}'");
+                        continue;
+                    }
+
+                    if (switchWasFailing)
+                    {
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' action='trialProbe' reason='switchSessionFailing' failures='{switchHealth.ConsecutiveFailures}' nextTrialUtc='{switchRetryAtUtc:O}' — one probe allowed to test whether the switch is answering again");
                     }
 
                     int floatingCount;

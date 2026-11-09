@@ -41,6 +41,7 @@
     <Compile Include="..\src\Cameras\CameraBinding.cs" Link="Linked\CameraBinding.cs" />
     <Compile Include="..\src\Cameras\FallbackCamera.cs" Link="Linked\FallbackCamera.cs" />
     <Compile Include="..\src\CameraManager\CodecCameraOutageTracker.cs" Link="Linked\CodecCameraOutageTracker.cs" />
+    <Compile Include="..\src\CameraManager\SwitchCommandHealth.cs" Link="Linked\SwitchCommandHealth.cs" />
   </ItemGroup>
 
   <ItemGroup>
