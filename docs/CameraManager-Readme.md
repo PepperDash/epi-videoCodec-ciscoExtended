@@ -277,13 +277,33 @@ Periodic sweep( ReconcileSweepIntervalMs = 30000) finds cameras that are:
 - Not currently migrating
 
 Actions:
+- If the camera's target codec is in outage (see 6.6): hold, do nothing.
 - If online on wrong codec: start migration immediately.
 - If online nowhere: run bounded floating recovery:
-  - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs)
+  - first sighting starts a floating episode: one `CAMERA_FLOATING_DETECTED` warning, then a 60 s grace (`FloatingDetectGraceMs`) before the first probe
+  - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs), skipping codecs in outage
   - PoE bounce per attempt
+  - pacing: one full pass over the candidate codecs at 2 min between probes, then doubling per probe up to 10 min (`FloatingProbePolicy`)
+  - at most one probe per sweep across all cameras (`MaxFloatingProbesPerSweep`)
+  - no probe while the switch session is failing (see 6.7)
   - stop at attempt limit (12 attempts per camera)
+  - episode end is logged once: `CAMERA_FLOATING_EPISODE_END` with outcome, probe count and duration
 
 State is reset on scenario change.
+
+### 6.6 Codec/network outage hold
+
+Every timer tick each managed codec is sampled (`CodecCameraOutageTracker`). An "anchor" camera is any camera the codec reports that the manager never moves (assigned to the same codec in every scenario, or not managed at all, e.g. a Quad). A codec is in outage when:
+- its control connection is offline, or
+- it reports no online camera after it has been seen with an online anchor.
+
+A codec whose cameras are all moving cameras is never put in outage by camera count, since it can legitimately end up empty.
+
+While a codec is in outage, floating recovery holds every camera that belongs on it and never probes through its VLAN. When a camera comes back the outage ends, and those cameras get a fresh grace period (`ReconcileBackoffMs`) before recovery may touch their ports. Markers: `CAMERA_CODEC_OUTAGE_START`, `CAMERA_CODEC_OUTAGE_END`.
+
+### 6.7 Switch session back-off
+
+`SwitchCommandHealth` follows the switch's port events. A command session that starts while the previous one never completed (timed out or aborted), or that has not completed 60 s after it started, counts as a failure; any completed command clears the failures. While failing, floating probes are held except one trial probe per back-off window (1 min, doubling per failure, capped at 10 min). A switch driver that raises no in-progress events is never seen as failing. Markers: `CAMERA_SWITCH_SESSION_FAILING`, `CAMERA_SWITCH_SESSION_RECOVERED`.
 
 ## 7) Scenario Reconciliation Semantics
 
@@ -317,6 +337,8 @@ Key markers to watch:
 - Attach success: `CAMERA_SWITCHOVER_ATTACH_CONFIRMED` - Camera was confirmed online on target codec; migration is considered complete.
 - Attach timeout/recovery: `CAMERA_SWITCHOVER_ATTACH_FAILED`, `CAMERA_SWITCHOVER_ATTACH_AUTOMAGIC_RECOVERY_TRIGGERED` - Target attach timed out; manager initiated automatic recovery (reseed/retry path).
 - Watchdog intervention: `CAMERA_SWITCHOVER_RECONCILE_WRONG_CODEC`, `CAMERA_SWITCHOVER_RECONCILE_FLOATING` - Periodic reconcile detected camera off-target or floating and is intervening (start migration or probe/bounce recovery).
+- Floating episode: `CAMERA_FLOATING_DETECTED`, `CAMERA_FLOATING_EPISODE_END` - Once per camera per episode.
+- Outage/back-off: `CAMERA_CODEC_OUTAGE_START`/`_END`, `CAMERA_SWITCH_SESSION_FAILING`/`_RECOVERED` - Floating recovery is on hold (codec down, or switch not answering).
 
 Practical workflow:
 1. Filter logs by camera key.
