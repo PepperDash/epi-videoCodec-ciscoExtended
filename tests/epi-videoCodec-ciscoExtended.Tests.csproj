@@ -39,7 +39,9 @@
     <Compile Include="..\src\WebexAuthentication.cs" Link="Linked\WebexAuthentication.cs" />
     <Compile Include="..\src\Cameras\CameraSourceId.cs" Link="Linked\CameraSourceId.cs" />
     <Compile Include="..\src\Cameras\CameraBinding.cs" Link="Linked\CameraBinding.cs" />
-    <Compile Include="..\src\Cameras\FallbackCamera.cs" Link="Linked\FallbackCamera.cs" />  </ItemGroup>
+    <Compile Include="..\src\Cameras\FallbackCamera.cs" Link="Linked\FallbackCamera.cs" />
+    <Compile Include="..\src\CameraManager\CodecCameraOutageTracker.cs" Link="Linked\CodecCameraOutageTracker.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Rebuilds the plugin before tests run (no direct assembly reference / no Crestron deps pulled in). -->
