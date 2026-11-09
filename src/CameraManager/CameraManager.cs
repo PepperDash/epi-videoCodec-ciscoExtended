@@ -72,10 +72,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // its re-entrancy guard), so it needs no lock.
         private readonly CodecCameraOutageTracker codecOutageTracker = new CodecCameraOutageTracker(TimeSpan.FromMilliseconds(CodecOutageMaxHoldMs));
 
-        // Serials of managed cameras that are assigned to more than one codec across the configured
-        // scenarios (the cameras the manager moves). Every other camera a codec reports (Quads,
-        // fixed cameras, unmanaged cameras) is an outage "anchor". Built once at activation.
-        private readonly HashSet<string> movingCameraSerials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Managed camera serial -> the codecs it is assigned to across the configured scenarios.
+        // Used to classify outage "anchors" per codec: a managed camera is an anchor only on its
+        // single configured owner codec (a moving camera, or a fixed camera seen on another codec
+        // during probing or recovery, is not). Unmanaged cameras (e.g. Quads) are anchors on
+        // whatever codec reports them. Built once at activation.
+        private readonly Dictionary<string, HashSet<string>> managedCameraOwnerCodecs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         // Switch-session health from the switch's own port events (see SwitchCommandHealth). While
         // commands are not completing, floating-recovery probes are held (one trial per back-off).
@@ -497,7 +499,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            BuildMovingCameraSerials();
+            BuildManagedCameraOwners();
 
             foreach (var kvp in managedCodecs)
             {
@@ -525,11 +527,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         }
 
         /// <summary>
-        /// Records the serials of managed cameras assigned to more than one codec across the
-        /// configured scenarios. Those are the cameras the manager moves; any other camera a codec
-        /// reports is an anchor for outage detection.
+        /// Records, per managed camera serial, the codecs it is assigned to across the configured
+        /// scenarios, for codec-specific anchor classification in outage detection.
         /// </summary>
-        private void BuildMovingCameraSerials()
+        private void BuildManagedCameraOwners()
         {
             var codecsByCamera = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var scenario in config.RoomCombinerConfig.CombineScenarios.Values)
@@ -549,18 +550,25 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            movingCameraSerials.Clear();
+            managedCameraOwnerCodecs.Clear();
             foreach (var kvp in codecsByCamera)
             {
-                if (kvp.Value.Count > 1
-                    && managedCameras.TryGetValue(kvp.Key, out var camera)
+                if (managedCameras.TryGetValue(kvp.Key, out var camera)
                     && !string.IsNullOrWhiteSpace(camera.SerialNumber))
                 {
-                    movingCameraSerials.Add(camera.SerialNumber.Trim());
+                    var serial = camera.SerialNumber.Trim();
+                    if (!managedCameraOwnerCodecs.TryGetValue(serial, out var owners))
+                    {
+                        owners = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        managedCameraOwnerCodecs[serial] = owners;
+                    }
+
+                    owners.UnionWith(kvp.Value);
                 }
             }
 
-            this.LogDebug($"Camera Manager {Key} outage detection: {movingCameraSerials.Count} moving camera(s); every other camera a codec reports counts as an anchor");
+            var fixedCount = managedCameraOwnerCodecs.Values.Count(o => o.Count == 1);
+            this.LogDebug($"Camera Manager {Key} outage detection: {managedCameraOwnerCodecs.Count - fixedCount} moving and {fixedCount} fixed managed camera(s); a fixed camera is an anchor only on its own codec, unmanaged cameras are anchors on any codec");
         }
 
         /// <summary>
@@ -591,7 +599,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
 
                 var codecOnline = codec.CommunicationMonitor == null || codec.CommunicationMonitor.IsOnline;
-                CodecCameraOutageTracker.CountCameras(statusSnapshot, movingCameraSerials, out var onlineCount, out var anchorCount);
+                CodecCameraOutageTracker.CountCameras(statusSnapshot, kvp.Key, managedCameraOwnerCodecs, out var onlineCount, out var anchorCount);
 
                 var transition = codecOutageTracker.Update(kvp.Key, codecOnline, onlineCount, anchorCount, now);
                 if (transition == CodecOutageTransition.Started)
@@ -1861,28 +1869,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            if (probeCodecKeys.Count == 0)
-            {
-                return null;
-            }
-
-            probeTotal = probeCodecKeys.Count;
-
             // Never probe through a codec that is in outage: a camera moved onto its VLAN cannot
-            // register there, so the probe would only power-cycle the camera for nothing.
-            for (var offset = 0; offset < probeCodecKeys.Count; offset++)
-            {
-                var selectedIndex = (attempt - 1 + offset) % probeCodecKeys.Count;
-                if (codecOutageTracker.IsHolding(probeCodecKeys[selectedIndex]))
-                {
-                    continue;
-                }
-
-                probeIndex = selectedIndex + 1;
-                return probeCodecKeys[selectedIndex];
-            }
-
-            return null;
+            // register there, so the probe would only power-cycle the camera for nothing. Held
+            // codecs are dropped before rotating, so the rotation and probeTotal (used for
+            // pacing) only cover codecs that can actually be probed.
+            return FloatingProbePolicy.SelectProbeCodec(probeCodecKeys, codecOutageTracker.IsHolding, attempt, out probeIndex, out probeTotal);
         }
 
         /// <summary>

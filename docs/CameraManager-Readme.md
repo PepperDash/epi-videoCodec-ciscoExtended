@@ -281,7 +281,7 @@ Actions:
 - If online on wrong codec: start migration immediately.
 - If online nowhere: run bounded floating recovery:
   - first sighting starts a floating episode: one `CAMERA_FLOATING_DETECTED` warning, then a 60 s grace (`FloatingDetectGraceMs`) before the first probe
-  - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs), skipping codecs in outage
+  - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs), with codecs in outage removed before rotating (A, B, C with B held probes A, C, A, C; a full pass then has 2 probes)
   - PoE bounce per attempt
   - pacing: one full pass over the candidate codecs at 2 min between probes, then doubling per probe up to 10 min (`FloatingProbePolicy`)
   - at most one probe per sweep across all cameras (`MaxFloatingProbesPerSweep`)
@@ -293,7 +293,7 @@ State is reset on scenario change.
 
 ### 6.6 Codec/network outage hold
 
-Every timer tick each managed codec's own camera-status records are sampled (`CiscoCodec.GetCameraStatusSnapshot`, fed to `CodecCameraOutageTracker`); the `Cameras` control collection is not used, since it drops codec-built cameras for good on disconnect and its config-built wrappers carry no serial. An "anchor" camera is a connected camera whose codec-reported serial is known and is not a moving camera (so a camera assigned to the same codec in every scenario, or not managed at all, e.g. a Quad). A camera with no serial yet is not an anchor. A codec is in outage when:
+Every timer tick each managed codec's own camera-status records are sampled (`CiscoCodec.GetCameraStatusSnapshot`, fed to `CodecCameraOutageTracker`); the `Cameras` control collection is not used, since it drops codec-built cameras for good on disconnect and its config-built wrappers carry no serial. An "anchor" for a codec is a connected camera whose codec-reported serial is known and that is either not managed at all (e.g. a Quad), or a managed camera assigned to that codec, and only that codec, in every scenario. A moving camera is never an anchor, and a fixed managed camera seen on another codec (during a probe or wrong-codec recovery) is not an anchor there. A camera with no serial yet is not an anchor. A codec is in outage when:
 - its control connection is offline, or
 - it reports no online camera after it has been seen with an online anchor.
 

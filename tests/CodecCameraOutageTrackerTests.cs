@@ -12,7 +12,14 @@ public class CodecCameraOutageTrackerTests
 {
     private static readonly DateTime T0 = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
     private static readonly TimeSpan MaxHold = TimeSpan.FromMinutes(30);
-    private static readonly string[] Moving = { "PTZ-1", "PTZ-2" };
+    // PTZ-1/PTZ-2 move between codec-1 and codec-2; FIXED-1 is a managed camera that only ever
+    // belongs on codec-1. Anything else (e.g. QUAD-1) is unmanaged.
+    private static readonly Dictionary<string, HashSet<string>> Owners = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["PTZ-1"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "codec-1", "codec-2" },
+        ["PTZ-2"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "codec-1", "codec-2" },
+        ["FIXED-1"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "codec-1" },
+    };
 
     [Fact]
     public void All_Cameras_Lost_After_An_Anchor_Was_Seen_Is_An_Outage()
@@ -117,10 +124,48 @@ public class CodecCameraOutageTrackerTests
     }
     private static CodecCameraStatusSample Cam(bool connected, string? serial) => new CodecCameraStatusSample(connected, serial);
 
-    private static (int Online, int Anchors) Count(params CodecCameraStatusSample[] cameras)
+    private static (int Online, int Anchors) Count(params CodecCameraStatusSample[] cameras) => CountOn("codec-1", cameras);
+
+    private static (int Online, int Anchors) CountOn(string codecKey, params CodecCameraStatusSample[] cameras)
     {
-        CodecCameraOutageTracker.CountCameras(cameras, new HashSet<string>(Moving, StringComparer.OrdinalIgnoreCase), out var online, out var anchors);
+        CodecCameraOutageTracker.CountCameras(cameras, codecKey, Owners, out var online, out var anchors);
         return (online, anchors);
+    }
+
+    [Fact]
+    public void Fixed_Managed_Camera_Is_An_Anchor_Only_On_Its_Own_Codec()
+    {
+        CountOn("codec-1", Cam(true, "FIXED-1")).Should().Be((1, 1));
+        // Seen on codec-2 during a probe or wrong-codec recovery: online there, but not an anchor.
+        CountOn("CODEC-2", Cam(true, "fixed-1")).Should().Be((1, 0));
+    }
+
+    [Fact]
+    public void Unmanaged_Camera_Is_An_Anchor_On_Any_Codec()
+    {
+        CountOn("codec-2", Cam(true, "QUAD-9")).Should().Be((1, 1));
+    }
+
+    [Fact]
+    public void Moving_Camera_Is_Never_An_Anchor()
+    {
+        CountOn("codec-1", Cam(true, "PTZ-1")).Should().Be((1, 0));
+        CountOn("codec-2", Cam(true, "PTZ-2")).Should().Be((1, 0));
+    }
+
+    [Fact]
+    public void Fixed_Camera_Visiting_Another_Codec_Does_Not_Arm_It()
+    {
+        // FIXED-1 shows up on codec-2 while being recovered, then goes home: codec-2 is left
+        // empty but was never armed, so it must not be put in outage.
+        var tracker = new CodecCameraOutageTracker(MaxHold);
+        var (online, anchors) = CountOn("codec-2", Cam(true, "FIXED-1"));
+        tracker.Update("codec-2", true, online, anchors, T0);
+
+        (online, anchors) = CountOn("codec-2");
+        tracker.Update("codec-2", true, online, anchors, T0.AddMinutes(1)).Should().Be(CodecOutageTransition.None);
+        tracker.IsArmed("codec-2").Should().BeFalse();
+        tracker.IsInOutage("codec-2").Should().BeFalse();
     }
 
     [Fact]

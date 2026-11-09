@@ -100,12 +100,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         }
 
         /// <summary>
-        /// Counts the connected cameras in a codec's status records, and how many of them are
-        /// identified anchors (a known serial that is not one of the moving cameras).
+        /// Counts the connected cameras in one codec's status records, and how many of them are
+        /// anchors for that codec. A camera is an anchor when its serial is known and either it is
+        /// not a managed camera (e.g. a Quad), or it is a managed camera whose only configured
+        /// owner is this codec. A moving camera, or a fixed camera seen on another codec (during a
+        /// probe or wrong-codec recovery), is never an anchor, so it cannot arm that codec.
         /// </summary>
+        /// <param name="cameras">The codec's camera-status records.</param>
+        /// <param name="codecKey">The codec the records belong to.</param>
+        /// <param name="managedCameraOwnerCodecs">Managed camera serial to the codecs it is assigned to in any scenario.</param>
+        /// <param name="connectedCount">Connected cameras.</param>
+        /// <param name="connectedAnchorCount">Connected anchors for this codec.</param>
         public static void CountCameras(
             IEnumerable<CodecCameraStatusSample> cameras,
-            ICollection<string> movingCameraSerials,
+            string codecKey,
+            IReadOnlyDictionary<string, HashSet<string>> managedCameraOwnerCodecs,
             out int connectedCount,
             out int connectedAnchorCount)
         {
@@ -127,8 +136,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     continue;
                 }
 
-                if (!movingCameraSerials.Contains(serial!))
+                if (!managedCameraOwnerCodecs.TryGetValue(serial!, out var owners))
                 {
+                    // Unmanaged: the manager never moves it.
+                    connectedAnchorCount++;
+                }
+                else if (owners.Count == 1 && owners.Contains(codecKey))
+                {
+                    // Fixed managed camera on its own codec.
                     connectedAnchorCount++;
                 }
             }

@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 {
@@ -41,6 +42,46 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             return ticks > maxDelay.Ticks ? maxDelay : TimeSpan.FromTicks(ticks);
+        }
+
+        /// <summary>
+        /// Picks the codec for probe number <paramref name="attempt"/>. Held codecs (in outage) are
+        /// removed first, then the remaining candidates are rotated in order, so with A, B, C and
+        /// B held the probes go A, C, A, C rather than repeating C. <paramref name="probeTotal"/> is
+        /// the number of usable candidates, which is also the length of one full pass for pacing.
+        /// </summary>
+        /// <param name="candidates">Candidate codec keys in preference order.</param>
+        /// <param name="isHeld">True for a codec that must not be probed through.</param>
+        /// <param name="attempt">1-based probe number.</param>
+        /// <param name="probeIndex">1-based position of the selection among the usable candidates, 0 when none.</param>
+        /// <param name="probeTotal">Number of usable candidates.</param>
+        /// <returns>The selected codec key, or null when no candidate is usable.</returns>
+        public static string? SelectProbeCodec(
+            IReadOnlyList<string> candidates,
+            Func<string, bool> isHeld,
+            int attempt,
+            out int probeIndex,
+            out int probeTotal)
+        {
+            var usable = new List<string>();
+            foreach (var candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && !isHeld(candidate))
+                {
+                    usable.Add(candidate);
+                }
+            }
+
+            probeTotal = usable.Count;
+            if (usable.Count == 0 || attempt <= 0)
+            {
+                probeIndex = 0;
+                return null;
+            }
+
+            var selectedIndex = (attempt - 1) % usable.Count;
+            probeIndex = selectedIndex + 1;
+            return usable[selectedIndex];
         }
     }
 }
