@@ -70,7 +70,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // floating recovery is held for cameras that belong on it, and the codec is never used as a
         // probe VLAN. Only touched from the attach-verification timer handler (single-threaded via
         // its re-entrancy guard), so it needs no lock.
-        private readonly CodecCameraOutageTracker codecOutageTracker = new CodecCameraOutageTracker();
+        private readonly CodecCameraOutageTracker codecOutageTracker = new CodecCameraOutageTracker(TimeSpan.FromMilliseconds(CodecOutageMaxHoldMs));
 
         // Serials of managed cameras that are assigned to more than one codec across the configured
         // scenarios (the cameras the manager moves). Every other camera a codec reports (Quads,
@@ -185,6 +185,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // outage; this gives the outage detector time to see every camera on the codec gone before
         // any port is touched, and lets a camera that is just rebooting come back on its own.
         private const int FloatingDetectGraceMs = 60000;
+
+        // Ceiling on how long an "all cameras lost" codec outage holds floating recovery. That
+        // outage is inferred from camera status, so it must not hold forever (for example a broken
+        // Quad on a codec whose other cameras all moved away). A codec-offline outage has no
+        // ceiling: the codec state is known, and a camera cannot attach to an offline codec.
+        private const int CodecOutageMaxHoldMs = 30 * 60 * 1000;
 
         // A switch command session that has not completed this long after it started counts as
         // failed. Well above a normal console session (a few seconds) and the switch driver's own
@@ -573,22 +579,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     continue;
                 }
 
-                List<CiscoCamera> onlineCameras;
-                try
+                // Sample the codec's own camera-status records, not codec.Cameras: that collection
+                // holds control wrappers, drops a codec-built (unmanaged) camera for good once it
+                // disconnects, and its config-built wrappers carry no serial, so it can neither see
+                // a returning Quad nor tell an anchor from a moving camera.
+                var statusSnapshot = codec.GetCameraStatusSnapshot();
+                if (statusSnapshot == null)
                 {
-                    onlineCameras = codec.Cameras?.OfType<CiscoCamera>().Where(c => c.IsOnline).ToList() ?? new List<CiscoCamera>();
-                }
-                catch (InvalidOperationException)
-                {
-                    // Camera list changed while sampling; take the next tick's sample instead.
+                    // Status list changed while sampling; take the next tick's sample instead.
                     continue;
                 }
 
                 var codecOnline = codec.CommunicationMonitor == null || codec.CommunicationMonitor.IsOnline;
-                var anchorCount = onlineCameras.Count(c => string.IsNullOrWhiteSpace(c.SerialNumber)
-                    || !movingCameraSerials.Contains(c.SerialNumber.Trim()));
+                CodecCameraOutageTracker.CountCameras(statusSnapshot, movingCameraSerials, out var onlineCount, out var anchorCount);
 
-                var transition = codecOutageTracker.Update(kvp.Key, codecOnline, onlineCameras.Count, anchorCount, now);
+                var transition = codecOutageTracker.Update(kvp.Key, codecOnline, onlineCount, anchorCount, now);
                 if (transition == CodecOutageTransition.Started)
                 {
                     var reason = codecOutageTracker.GetReason(kvp.Key);
@@ -598,7 +603,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         ClearFloatingRecoveryState(cameraKey, "codecOutage");
                     }
 
-                    this.LogWarning($"CAMERA_CODEC_OUTAGE_START codec='{kvp.Key}' reason='{reason}' codecOnline='{codecOnline}' onlineCameras='{onlineCameras.Count}' heldCameras='{string.Join(",", heldCameras)}' action='holdFloatingRecovery' — every camera on the codec is gone (or the codec is offline); waiting for cameras to return instead of probing switch ports");
+                    this.LogWarning($"CAMERA_CODEC_OUTAGE_START codec='{kvp.Key}' reason='{reason}' codecOnline='{codecOnline}' onlineCameras='{onlineCount}' heldCameras='{string.Join(",", heldCameras)}' action='holdFloatingRecovery' — every camera on the codec is gone (or the codec is offline); waiting for cameras to return instead of probing switch ports");
                 }
                 else if (transition == CodecOutageTransition.Ended)
                 {
@@ -612,7 +617,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         }
                     }
 
-                    this.LogInformation($"CAMERA_CODEC_OUTAGE_END codec='{kvp.Key}' onlineCameras='{onlineCameras.Count}' resumedCameras='{string.Join(",", resumedCameras)}' graceMs='{ReconcileBackoffMs}' action='resumeReconciliation' — cameras are back; floating recovery resumes after the grace period for any camera still missing");
+                    this.LogInformation($"CAMERA_CODEC_OUTAGE_END codec='{kvp.Key}' onlineCameras='{onlineCount}' resumedCameras='{string.Join(",", resumedCameras)}' graceMs='{ReconcileBackoffMs}' action='resumeReconciliation' — cameras are back; floating recovery resumes after the grace period for any camera still missing");
+                }
+                else if (transition == CodecOutageTransition.HoldExpired)
+                {
+                    this.LogWarning($"CAMERA_CODEC_OUTAGE_HOLD_EXPIRED codec='{kvp.Key}' reason='{codecOutageTracker.GetReason(kvp.Key)}' sinceUtc='{codecOutageTracker.GetOutageSinceUtc(kvp.Key):O}' maxHoldMs='{CodecOutageMaxHoldMs}' cameras='{string.Join(",", GetCurrentScenarioCameraKeysForCodec(kvp.Key))}' action='resumeFloatingRecovery' — the codec still reports no camera; no longer holding floating recovery for it (switch back-off and probe pacing still apply)");
                 }
             }
         }
@@ -1591,7 +1600,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     // The codec this camera belongs on is down (every camera on it is gone, or it is
                     // offline). The camera is not floating; its codec is. Wait for the outage to end
                     // rather than moving the port between VLANs and power-cycling the camera.
-                    if (codecOutageTracker.IsInOutage(targetCodecKey))
+                    if (codecOutageTracker.IsHolding(targetCodecKey))
                     {
                         this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' scenario='{currentScenario.Key}' action='hold' reason='targetCodecOutage' outageReason='{codecOutageTracker.GetReason(targetCodecKey)}'");
                         continue;
@@ -1676,6 +1685,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // Attempt budget first: a camera that has used every attempt must not take
+                    // the per-sweep slot or the switch trial slot and then send nothing.
+                    int floatingCount;
+                    lock (activeMigrationsLock)
+                    {
+                        floatingRecoveryCounts.TryGetValue(cameraKey, out var priorCount);
+                        floatingCount = priorCount + 1;
+                    }
+
+                    if (floatingCount > FloatingRecoveryAttemptLimit)
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = DateTime.MaxValue;
+                        }
+
+                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='attemptLimitReached' attempts='{floatingCount - 1}' limit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        continue;
+                    }
+
                     // At most MaxFloatingProbesPerSweep probes per sweep across all cameras, so
                     // several floating cameras never queue their VLAN/PoE bursts on the switch
                     // console at the same time. The rest wait for the next sweep.
@@ -1685,10 +1714,34 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // Resolve the probe target before taking the switch slot, so a camera with no
+                    // usable probe codec never consumes the switch trial. Neither case spends an
+                    // attempt; the camera is looked at again after the base delay.
+                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
+                    ICiscoCodecCameraFactoryReset probeCodecDevice = null;
+                    if (string.IsNullOrWhiteSpace(probeCodecKey) || !managedCodecs.TryGetValue(probeCodecKey, out probeCodecDevice))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                        }
+
+                        if (string.IsNullOrWhiteSpace(probeCodecKey))
+                        {
+                            // The episode was already warned about once; this repeats per probe slot.
+                            this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        }
+                        else
+                        {
+                            this.LogError($"Camera Manager {Key} cannot run floating recovery for camera '{cameraKey}': probe codec '{probeCodecKey}' is not managed");
+                        }
+                        continue;
+                    }
+
                     // Do not start a probe while the switch session is failing: its commands would
                     // time out and pile up on the console. One trial probe is let through per
-                    // back-off window so a recovered switch is noticed. A held probe does not
-                    // count against the camera's attempt limit.
+                    // back-off window so a recovered switch is noticed. Only reached when a probe
+                    // will really be sent. A held probe does not count against the attempt limit.
                     var switchWasFailing = switchHealth.IsFailing;
                     if (!switchHealth.TryAcquireProbe(now, out var switchRetryAtUtc))
                     {
@@ -1706,31 +1759,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' action='trialProbe' reason='switchSessionFailing' failures='{switchHealth.ConsecutiveFailures}' nextTrialUtc='{switchRetryAtUtc:O}' — one probe allowed to test whether the switch is answering again");
                     }
 
-                    int floatingCount;
-                    lock (activeMigrationsLock)
-                    {
-                        if (!floatingRecoveryCounts.TryGetValue(cameraKey, out var priorCount))
-                        {
-                            priorCount = 0;
-                        }
-
-                        floatingCount = priorCount + 1;
-                        floatingRecoveryCounts[cameraKey] = floatingCount;
-                    }
-
-                    if (floatingCount > FloatingRecoveryAttemptLimit)
-                    {
-                        lock (activeMigrationsLock)
-                        {
-                            reconcileNextActionUtc[cameraKey] = DateTime.MaxValue;
-                        }
-
-                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='attemptLimitReached' attempts='{floatingCount - 1}' limit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
-                        continue;
-                    }
-
-                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
-
                     // Pace the next probe: one full pass over the candidate codecs at the base
                     // delay, then doubling per probe up to FloatingProbeMaxDelayMs.
                     var nextProbeDelay = FloatingProbePolicy.GetRetryDelay(
@@ -1740,20 +1768,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         TimeSpan.FromMilliseconds(FloatingProbeMaxDelayMs));
                     lock (activeMigrationsLock)
                     {
+                        floatingRecoveryCounts[cameraKey] = floatingCount;
                         reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.Add(nextProbeDelay);
-                    }
-
-                    if (string.IsNullOrWhiteSpace(probeCodecKey))
-                    {
-                        // The episode was already warned about once; this repeats per probe slot.
-                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
-                        continue;
-                    }
-
-                    if (!managedCodecs.TryGetValue(probeCodecKey, out var probeCodecDevice))
-                    {
-                        this.LogError($"Camera Manager {Key} cannot run floating recovery for camera '{cameraKey}': probe codec '{probeCodecKey}' is not managed");
-                        continue;
                     }
 
                     this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' nextProbeDelayS='{(int)nextProbeDelay.TotalSeconds}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
@@ -1857,7 +1873,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             for (var offset = 0; offset < probeCodecKeys.Count; offset++)
             {
                 var selectedIndex = (attempt - 1 + offset) % probeCodecKeys.Count;
-                if (codecOutageTracker.IsInOutage(probeCodecKeys[selectedIndex]))
+                if (codecOutageTracker.IsHolding(probeCodecKeys[selectedIndex]))
                 {
                     continue;
                 }

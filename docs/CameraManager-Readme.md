@@ -293,13 +293,13 @@ State is reset on scenario change.
 
 ### 6.6 Codec/network outage hold
 
-Every timer tick each managed codec is sampled (`CodecCameraOutageTracker`). An "anchor" camera is any camera the codec reports that the manager never moves (assigned to the same codec in every scenario, or not managed at all, e.g. a Quad). A codec is in outage when:
+Every timer tick each managed codec's own camera-status records are sampled (`CiscoCodec.GetCameraStatusSnapshot`, fed to `CodecCameraOutageTracker`); the `Cameras` control collection is not used, since it drops codec-built cameras for good on disconnect and its config-built wrappers carry no serial. An "anchor" camera is a connected camera whose codec-reported serial is known and is not a moving camera (so a camera assigned to the same codec in every scenario, or not managed at all, e.g. a Quad). A camera with no serial yet is not an anchor. A codec is in outage when:
 - its control connection is offline, or
 - it reports no online camera after it has been seen with an online anchor.
 
 A codec whose cameras are all moving cameras is never put in outage by camera count, since it can legitimately end up empty.
 
-While a codec is in outage, floating recovery holds every camera that belongs on it and never probes through its VLAN. When a camera comes back the outage ends, and those cameras get a fresh grace period (`ReconcileBackoffMs`) before recovery may touch their ports. Markers: `CAMERA_CODEC_OUTAGE_START`, `CAMERA_CODEC_OUTAGE_END`.
+While a codec is in outage, floating recovery holds every camera that belongs on it and never probes through its VLAN. When any camera comes back (an anchor alone is enough) the outage ends, and those cameras get a fresh grace period (`ReconcileBackoffMs`) before recovery may touch their ports. An "all cameras lost" outage holds recovery for at most 30 min (`CodecOutageMaxHoldMs`); after that recovery resumes (switch back-off and probe pacing still apply). A codec-offline outage holds for as long as the codec is offline. Markers: `CAMERA_CODEC_OUTAGE_START`, `CAMERA_CODEC_OUTAGE_END`, `CAMERA_CODEC_OUTAGE_HOLD_EXPIRED`.
 
 ### 6.7 Switch session back-off
 

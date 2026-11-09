@@ -21,6 +21,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             EnqueueCommand($"xCommand Camera FactoryReset CameraId: {cameraId} Confirm: Yes");
         }
 
+        /// <summary>
+        /// Copies the codec's live camera-status records (every camera the codec reports, managed
+        /// or not) as (connected, serial) pairs. Unlike <see cref="Cameras"/>, which only holds
+        /// control wrappers and drops a codec-built camera for good once it disconnects, this
+        /// follows the codec's own status. Returns null when the list changed while copying; the
+        /// caller should take the next sample.
+        /// </summary>
+        public System.Collections.Generic.List<CodecCameraStatusSample> GetCameraStatusSnapshot()
+        {
+            try
+            {
+                var list = CodecStatus?.Status?.Cameras?.CameraList;
+                if (list == null)
+                {
+                    return new System.Collections.Generic.List<CodecCameraStatusSample>();
+                }
+
+                return list.ToList()
+                    .Where(c => c != null)
+                    .Select(c => new CodecCameraStatusSample(
+                        string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase),
+                        c.SerialNumber?.Value))
+                    .ToList();
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                // List<T>.ToList can throw this when another thread resizes the list mid-copy.
+                return null;
+            }
+        }
+
         public string GetCameraSerialNumber(uint cameraId)
         {
             var camera = Cameras.Where(c => c is CiscoCamera cam && cam.CameraId == cameraId).FirstOrDefault() as CiscoCamera;
