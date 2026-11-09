@@ -42,7 +42,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     .Where(c => c != null)
                     .Select(c => new CodecCameraStatusSample(
                         string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase),
-                        c.SerialNumber?.Value))
+                        c.SerialNumber?.Value,
+                        uint.TryParse(c.CameraId, out var cameraId) ? cameraId : 0))
                     .ToList();
             }
             catch (InvalidOperationException)

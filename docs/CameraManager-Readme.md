@@ -59,6 +59,7 @@ Important properties:
 - `roomCombinerConfig.roomCombinerKey`: required
 - `roomCombinerConfig.combineScenarios`: required
 - `factoryResetSettleMs`: optional, default 2000
+- `cameraBootWindowMs`: optional, default 180000. Boot window after the manager PoE-cycles or re-VLANs a camera's port; floating recovery does not count the camera as lost or probe it during this window. Set it longer than the slowest camera's boot.
 - `disablePoeCycling`: optional, default false
 - `useCameraFactoryResetDisconnectFeedback`: optional, default false
 
@@ -279,6 +280,9 @@ Periodic sweep( ReconcileSweepIntervalMs = 30000) finds cameras that are:
 Actions:
 - If the camera's target codec is in outage (see 6.6): hold, do nothing.
 - If online on wrong codec: start migration immediately.
+- If the target codec's own camera-status records report the camera connected (any slot), it is present: no probe. A slot other than the configured one is warned about once (`CAMERA_SLOT_MISMATCH`).
+- If the manager itself PoE-cycled or re-VLANed the camera's port within `cameraBootWindowMs` (default 180 s), the camera is rebooting: no episode, no probe until the window closes. Every manager switch command (probe, migration, reseed, port ensure) restarts the window.
+- If another codec's status reports the camera connected, it is alive: no probe; looked at again after `ReconcileBackoffMs`.
 - If online nowhere: run bounded floating recovery:
   - first sighting starts a floating episode: one `CAMERA_FLOATING_DETECTED` warning, then a 60 s grace (`FloatingDetectGraceMs`) before the first probe
   - rotate probe VLANs (target codec first, then scenario codecs, then remaining managed codecs), with codecs in outage removed before rotating (A, B, C with B held probes A, C, A, C; a full pass then has 2 probes)

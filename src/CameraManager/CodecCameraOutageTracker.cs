@@ -26,16 +26,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
     }
 
     /// <summary>
-    /// One camera-status record as the codec reports it: whether it is connected and its serial.
+    /// One camera-status record as the codec reports it: whether it is connected, its serial and
+    /// the slot (CameraId) it occupies.
     /// </summary>
     public readonly struct CodecCameraStatusSample
     {
         /// <summary>Creates a sample.</summary>
-        public CodecCameraStatusSample(bool connected, string? serialNumber)
+        public CodecCameraStatusSample(bool connected, string? serialNumber, uint cameraId = 0)
         {
             Connected = connected;
             SerialNumber = serialNumber;
+            CameraId = cameraId;
         }
+
+        /// <summary>Slot (CameraId) the codec reports the camera in; 0 when unknown.</summary>
+        public uint CameraId { get; }
 
         /// <summary>True when the codec reports the camera connected.</summary>
         public bool Connected { get; }
