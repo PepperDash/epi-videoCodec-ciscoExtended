@@ -754,9 +754,30 @@ catch (Exception ex)
         // Where and how the lockout is displayed: the current lockout's settings, or the default.
         private WebViewDisplayConfig LockoutDisplayConfig => currentLockout?.UiWebViewDisplay ?? defaultUiWebViewDisplayConfig;
 
-        private static LockoutWebViewState EvaluateWebViews(WebViewStatus status, string path, string target) =>
+        private LockoutWebViewState EvaluateWebViews(WebViewStatus status, string mcPath, string target) =>
             LockoutWebViewCheck.Evaluate(
-                status.WebViews.Select(v => (v?.Status?.Value, v?.Target?.Value, v?.URL?.Value)), path, target);
+                status.WebViews.Select(v => (v?.Status?.Value, v?.Target?.Value, v?.URL?.Value)), ExpectedUrlPath(mcPath), target);
+
+        /// <summary>
+        /// The URL path a mobile-control page is displayed at, built the way GetMobileControlUrl builds the
+        /// URL (app URL path + mcPath), so the check matches what was actually sent. Null (the check then
+        /// says Unknown) until the app URL is known.
+        /// </summary>
+        private string ExpectedUrlPath(string mcPath)
+        {
+            var appUrl = mcTpController.AppUrlFeedback.StringValue;
+            if (string.IsNullOrEmpty(appUrl) || string.IsNullOrEmpty(mcPath)) return null;
+            try
+            {
+                var uriBuilder = new UriBuilder(appUrl);
+                uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + mcPath;
+                return uriBuilder.Uri.AbsolutePath;
+            }
+            catch (UriFormatException)
+            {
+                return null;
+            }
+        }
 
         private async void VideoCodecUiExtensionsClickedMcEventHandler(
             object sender,

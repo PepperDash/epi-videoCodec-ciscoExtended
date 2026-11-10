@@ -34,21 +34,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         /// ("Controller", "OSD", "PersistentWebApp", or null when the firmware doesn't report it) and URL
         /// (null in partial feedback)
         /// </param>
-        /// <param name="path">The page's mobile-control path as configured, e.g. "/lockout"</param>
+        /// <param name="expectedPath">
+        /// The full URL path the page is displayed at, built the way the URL is (app path + mobile-control
+        /// path), e.g. "/mc/app/lockout". Matched exactly, so "/mc/app/combinationlockout" isn't the lockout.
+        /// </param>
         /// <param name="target">The target the page is displayed on; null or empty means "Controller"</param>
-        public static LockoutWebViewState Evaluate(IEnumerable<(string Status, string Target, string Url)> views, string path, string target = null)
+        public static LockoutWebViewState Evaluate(IEnumerable<(string Status, string Target, string Url)> views, string expectedPath, string target = null)
         {
-            if (views == null || string.IsNullOrWhiteSpace(path)) return LockoutWebViewState.Unknown;
+            if (views == null || string.IsNullOrWhiteSpace(expectedPath)) return LockoutWebViewState.Unknown;
 
             var list = views.ToList();
 
             // Partial feedback lists only what changed, without URLs: it can't show what's on screen.
             if (list.Any(v => v.Url == null)) return LockoutWebViewState.Unknown;
 
-            // The configured path is appended to the app URL as is (escaped into the URL path), so it's
-            // compared decoded, query included, without adding a slash.
-            var wantedPath = Decode(path.Trim()).TrimEnd('/');
-            if (wantedPath.Trim('/').Length == 0) return LockoutWebViewState.Unknown; // "/" would match any URL
+            // Compared decoded: a query in the configured path was escaped into the URL path.
+            var wantedPath = Decode(expectedPath.Trim()).TrimEnd('/');
+            if (wantedPath.Length == 0) return LockoutWebViewState.Unknown;
             var wantedTarget = TargetOrDefault(target);
 
             // Shown = listed with a status other than NotVisible (a page still loading counts, so it
@@ -56,7 +58,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             return list.Any(v => v.Status != null
                     && !string.Equals(v.Status, "NotVisible", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(TargetOrDefault(v.Target), wantedTarget, StringComparison.OrdinalIgnoreCase)
-                    && EndsWithPath(UrlPath(v.Url), wantedPath))
+                    && string.Equals(UrlPath(v.Url), wantedPath, StringComparison.OrdinalIgnoreCase))
                 ? LockoutWebViewState.Showing
                 : LockoutWebViewState.NotShowing;
         }
@@ -71,14 +73,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             var s = url.Trim();
             var end = s.IndexOfAny(new[] { '?', '#' });
             if (end >= 0) s = s.Substring(0, end);
+            // "http://host:port/mc/app/lockout" -> "/mc/app/lockout" (path only, still escaped here)
+            if (Uri.TryCreate(s, UriKind.Absolute, out var uri)) s = uri.AbsolutePath;
             return Decode(s).TrimEnd('/');
         }
-
-        // A configured path starting with "/" carries its own segment boundary ("/lockout" doesn't match
-        // ".../combinationlockout"); one without is appended to the app URL with no slash, so neither
-        // does the URL.
-        private static bool EndsWithPath(string urlPath, string wantedPath) =>
-            urlPath.EndsWith(wantedPath, StringComparison.OrdinalIgnoreCase);
 
         private static string Decode(string s)
         {

@@ -12,7 +12,7 @@ public class LockoutWebViewCheckTests
     private const string Audio = "http://10.0.0.1:50002/mc/app/audio?token=abc";
 
     private static LockoutWebViewState Eval(params (string Status, string Target, string Url)[] views) =>
-        LockoutWebViewCheck.Evaluate(views, "/lockout");
+        LockoutWebViewCheck.Evaluate(views, "/mc/app/lockout");
 
     [Fact]
     public void Lockout_On_The_Controller_Is_Showing() =>
@@ -33,7 +33,7 @@ public class LockoutWebViewCheckTests
 
     [Fact]
     public void A_Lockout_Shown_On_Its_Configured_Target_Counts() =>
-        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "OSD", Lockout) }, "/lockout", "OSD").Should().Be(LockoutWebViewState.Showing);
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "OSD", Lockout) }, "/mc/app/lockout", "OSD").Should().Be(LockoutWebViewState.Showing);
 
     [Fact]
     public void A_Lockout_On_The_Room_Display_Does_Not_Count_For_The_Navigator() =>
@@ -69,38 +69,51 @@ public class LockoutWebViewCheckTests
         Eval(("Visible", "Controller", "http://h/mc/app/combinationlockout?token=x")).Should().Be(LockoutWebViewState.NotShowing);
 
     [Fact]
+    public void A_Slashless_Configured_Path_Is_Matched_As_Built_Not_As_A_Suffix()
+    {
+        // mcPath "lockout" is appended without a slash: GetMobileControlUrl builds /mc/applockout.
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/combinationlockout?token=x") }, "/mc/applockout")
+            .Should().Be(LockoutWebViewState.NotShowing);
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/applockout?token=x") }, "/mc/applockout")
+            .Should().Be(LockoutWebViewState.Showing);
+    }
+
+    [Fact]
+    public void The_Same_Page_Under_Another_App_Path_Does_Not_Match() =>
+        Eval(("Visible", "Controller", "http://h/other/app/lockout?token=x")).Should().Be(LockoutWebViewState.NotShowing);
+
+    [Fact]
     public void A_Query_In_The_Configured_Path_Matches_The_Escaped_Url() =>
         // The configured path is escaped into the URL path: /lockout%3Fmode=fire?token=...
-        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/lockout%3Fmode=fire?token=x") }, "/lockout?mode=fire")
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/lockout%3Fmode=fire?token=x") }, "/mc/app/lockout%3Fmode=fire")
             .Should().Be(LockoutWebViewState.Showing);
 
     [Theory]
-    [InlineData("/lockout")]
-    [InlineData("lockout")]
-    [InlineData("/lockout/")]
-    [InlineData("/LOCKOUT")]
-    [InlineData(" /lockout ")]
+    [InlineData("/mc/app/lockout")]
+    [InlineData("/mc/app/lockout/")]
+    [InlineData("/MC/APP/LOCKOUT")]
+    [InlineData(" /mc/app/lockout ")]
     public void Path_Matching_Ignores_Slashes_Case_And_Query(string lockoutPath) =>
         LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", Lockout) }, lockoutPath).Should().Be(LockoutWebViewState.Showing);
 
     [Fact]
     public void Percent_Encoded_Paths_Match() =>
-        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/fire%20alarm?token=x") }, "/fire alarm")
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/fire%20alarm?token=x") }, "/mc/app/fire%20alarm")
             .Should().Be(LockoutWebViewState.Showing);
 
     [Fact]
     public void A_Custom_Lockout_Path_Is_Matched_By_Path()
     {
-        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", Lockout) }, "/fireAlarm").Should().Be(LockoutWebViewState.NotShowing);
-        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/fireAlarm?token=x") }, "/fireAlarm").Should().Be(LockoutWebViewState.Showing);
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", Lockout) }, "/mc/app/fireAlarm").Should().Be(LockoutWebViewState.NotShowing);
+        LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", "http://h/mc/app/fireAlarm?token=x") }, "/mc/app/fireAlarm").Should().Be(LockoutWebViewState.Showing);
     }
 
     [Fact]
     public void No_Views_Is_Not_Showing_And_No_Path_Is_Unknown()
     {
-        LockoutWebViewCheck.Evaluate(Array.Empty<(string, string, string)>(), "/lockout").Should().Be(LockoutWebViewState.NotShowing);
+        LockoutWebViewCheck.Evaluate(Array.Empty<(string, string, string)>(), "/mc/app/lockout").Should().Be(LockoutWebViewState.NotShowing);
         LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", Lockout) }, "").Should().Be(LockoutWebViewState.Unknown);
-        LockoutWebViewCheck.Evaluate(null!, "/lockout").Should().Be(LockoutWebViewState.Unknown);
+        LockoutWebViewCheck.Evaluate(null!, "/mc/app/lockout").Should().Be(LockoutWebViewState.Unknown);
         LockoutWebViewCheck.Evaluate(new[] { ("Visible", "Controller", Lockout) }, "/").Should().Be(LockoutWebViewState.Unknown);
     }
 }
@@ -203,7 +216,7 @@ public class WebViewStatusMessageTests
     }
 
     private static LockoutWebViewState Eval(Ui ui) =>
-        LockoutWebViewCheck.Evaluate((ui.WebViews ?? new()).Select(v => (v.Status?.Value, v.Target?.Value, v.URL?.Value)), "/lockout");
+        LockoutWebViewCheck.Evaluate((ui.WebViews ?? new()).Select(v => (v.Status?.Value, v.Target?.Value, v.URL?.Value)), "/mc/app/lockout");
 
     [Fact]
     public void A_Full_Reply_With_The_Stale_Page_And_The_Lockout_Shows_The_Lockout() =>
@@ -226,4 +239,18 @@ public class WebViewStatusMessageTests
     [Fact]
     public void A_Ghost_Only_Message_Lists_Nothing() =>
         Read(@"{ ""WebView"": [ { ""ghost"": ""True"", ""id"": ""2"" } ] }").WebViews.Should().BeNullOrEmpty();
+}
+
+public class WebViewStatusCompatibilityTests
+{
+    [Fact]
+    public void Obsolete_UiWebView_Keeps_Its_Public_Setter()
+    {
+        var type = AssemblyFixture.PluginAssembly.GetTypes()
+            .First(t => t.FullName == "PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView.WebViewStatus");
+        var prop = type.GetProperty("UiWebView");
+        prop.Should().NotBeNull();
+        prop!.SetMethod.Should().NotBeNull("callers that assign UiWebView must keep compiling");
+        prop.SetMethod!.IsPublic.Should().BeTrue();
+    }
 }
