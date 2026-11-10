@@ -29,6 +29,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.WebView
 		[JsonProperty("URL")]
 		public Url URL { get; set; }
 
+		/// <summary>Controller (navigator), OSD or PersistentWebApp.</summary>
+		[JsonProperty("Target")]
+		public WebViewTarget Target { get; set; }
+
 		public string id { get; set; }
+	}
+
+	public class WebViewTarget
+	{
+		public string Value { get; set; }
 	}
 }

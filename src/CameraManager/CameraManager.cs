@@ -61,6 +61,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // bounce on every attempt and stops once the attempt limit is reached.
         private readonly Dictionary<string, int> floatingRecoveryCounts = new Dictionary<string, int>();
 
+        // Per-camera UTC at which the floating sweep first saw the camera online nowhere (the start
+        // of a floating episode). Used to hold off the first probe for FloatingDetectGraceMs and to
+        // log the episode once at start and once at end. Guarded by activeMigrationsLock.
+        private readonly Dictionary<string, DateTime> floatingSinceUtc = new Dictionary<string, DateTime>();
+
+        // Codec/network outage detection (see CodecCameraOutageTracker). While a codec is in outage,
+        // floating recovery is held for cameras that belong on it, and the codec is never used as a
+        // probe VLAN. Only touched from the attach-verification timer handler (single-threaded via
+        // its re-entrancy guard), so it needs no lock.
+        private readonly CodecCameraOutageTracker codecOutageTracker = new CodecCameraOutageTracker(TimeSpan.FromMilliseconds(CodecOutageMaxHoldMs));
+
+        // Managed camera serial -> the codecs it is assigned to across the configured scenarios.
+        // Used to classify outage "anchors" per codec: a managed camera is an anchor only on its
+        // single configured owner codec (a moving camera, or a fixed camera seen on another codec
+        // during probing or recovery, is not). Unmanaged cameras (e.g. Quads) are anchors on
+        // whatever codec reports them. Built once at activation.
+        // Boot window after the manager touches a camera's port (see CameraBootWindow).
+        private readonly CameraBootWindow cameraBootWindow;
+
+        // At most one full camera-status request per codec per CameraStatusRefreshIntervalMs, sent
+        // when a codec's status shows a managed camera its wrappers never picked up.
+        private readonly KeyedRateLimiter cameraStatusRefreshLimiter = new KeyedRateLimiter(TimeSpan.FromMilliseconds(CameraStatusRefreshIntervalMs));
+
+        // Cameras already warned about being connected on their target codec in a slot other than
+        // the configured one (one warning per camera until it is seen in the right slot or the
+        // scenario changes). Guarded by activeMigrationsLock.
+        private readonly HashSet<string> slotMismatchWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly Dictionary<string, HashSet<string>> managedCameraOwnerCodecs = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // Switch-session health from the switch's own port events (see SwitchCommandHealth). While
+        // commands are not completing, floating-recovery probes are held (one trial per back-off).
+        private readonly SwitchCommandHealth switchHealth = new SwitchCommandHealth(
+            TimeSpan.FromMilliseconds(SwitchCommandStaleMs),
+            TimeSpan.FromMilliseconds(SwitchProbeBackoffBaseMs),
+            TimeSpan.FromMilliseconds(SwitchProbeBackoffMaxMs));
+
         // Skip-if-unchanged cache for the port-state-ensure pass. TryEnsureScenarioCameraPortStates
         // re-asserts VLAN/PoE for every already-placed camera on every reconcile pass (which runs on
         // every codec connect event), flooding the switch with redundant commands for cameras that
@@ -157,6 +194,43 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         private const int ReconcileBackoffMs = AttachWaitTimeoutMs;
         private const int FloatingRecoveryAttemptLimit = 12;
 
+        // How long a camera must be seen online nowhere before the first floating-recovery probe.
+        // Cameras drop off their codecs one by one over several seconds during a codec or network
+        // outage; this gives the outage detector time to see every camera on the codec gone before
+        // any port is touched, and lets a camera that is just rebooting come back on its own.
+        private const int FloatingDetectGraceMs = 60000;
+
+        // Default boot window after the manager PoE-cycles or re-VLANs a camera's port: long
+        // enough for a PTZ camera to power up and re-register (a Room Vision PTZ takes 90 s+).
+        // Configurable via cameraBootWindowMs.
+        private const int DefaultCameraBootWindowMs = 180000;
+
+        // Minimum time between full camera-status requests to the same codec from the floating sweep.
+        private const int CameraStatusRefreshIntervalMs = 60000;
+
+        // Ceiling on how long an "all cameras lost" codec outage holds floating recovery. That
+        // outage is inferred from camera status, so it must not hold forever (for example a broken
+        // Quad on a codec whose other cameras all moved away). A codec-offline outage has no
+        // ceiling: the codec state is known, and a camera cannot attach to an offline codec.
+        private const int CodecOutageMaxHoldMs = 30 * 60 * 1000;
+
+        // A switch command session that has not completed this long after it started counts as
+        // failed. Well above a normal console session (a few seconds) and the switch driver's own
+        // per-step session timeout.
+        private const int SwitchCommandStaleMs = 60000;
+
+        // Back-off between trial probes while the switch session is failing: 1 min after the first
+        // failure, doubling per further failure, capped at 10 min.
+        private const int SwitchProbeBackoffBaseMs = 60000;
+        private const int SwitchProbeBackoffMaxMs = 600000;
+
+        // Floating-probe pacing (see FloatingProbePolicy): the first pass over the candidate codecs
+        // waits ReconcileBackoffMs between probes, later probes double up to this cap.
+        private const int FloatingProbeMaxDelayMs = 600000;
+
+        // Most floating-recovery probes started in one sweep, across all cameras.
+        private const int MaxFloatingProbesPerSweep = 1;
+
         // Maximum time to wait for source-side assigned-serial clear feedback before forcing the
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
@@ -208,6 +282,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 : DefaultFactoryResetSettleMs;
             disablePoeCycling = config != null && config.DisablePoeCycling;
             useCameraFactoryResetDisconnectFeedback = config != null && config.UseCameraFactoryResetDisconnectFeedback;
+            cameraBootWindow = new CameraBootWindow(TimeSpan.FromMilliseconds(
+                config != null && config.CameraBootWindowMs > 0 ? config.CameraBootWindowMs : DefaultCameraBootWindowMs));
             attachVerificationTimer = new Timer(1000) { AutoReset = true };
             attachVerificationTimer.Elapsed += AttachVerificationTimer_Elapsed;
             AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
@@ -445,6 +521,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
+            BuildManagedCameraOwners();
+
             foreach (var kvp in managedCodecs)
             {
                 var codec = kvp.Value;
@@ -470,9 +548,271 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             return base.CustomActivate();
         }
 
+        /// <summary>
+        /// Records, per managed camera serial, the codecs it is assigned to across the configured
+        /// scenarios, for codec-specific anchor classification in outage detection.
+        /// </summary>
+        private void BuildManagedCameraOwners()
+        {
+            var codecsByCamera = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var scenario in config.RoomCombinerConfig.CombineScenarios.Values)
+            {
+                foreach (var codecConfig in scenario.CodecConfigs)
+                {
+                    foreach (var cameraKey in codecConfig.CameraKeys)
+                    {
+                        if (!codecsByCamera.TryGetValue(cameraKey, out var codecKeys))
+                        {
+                            codecKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            codecsByCamera[cameraKey] = codecKeys;
+                        }
+
+                        codecKeys.Add(codecConfig.CodecKey);
+                    }
+                }
+            }
+
+            managedCameraOwnerCodecs.Clear();
+            foreach (var kvp in codecsByCamera)
+            {
+                if (managedCameras.TryGetValue(kvp.Key, out var camera)
+                    && !string.IsNullOrWhiteSpace(camera.SerialNumber))
+                {
+                    var serial = camera.SerialNumber.Trim();
+                    if (!managedCameraOwnerCodecs.TryGetValue(serial, out var owners))
+                    {
+                        owners = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        managedCameraOwnerCodecs[serial] = owners;
+                    }
+
+                    owners.UnionWith(kvp.Value);
+                }
+            }
+
+            var fixedCount = managedCameraOwnerCodecs.Values.Count(o => o.Count == 1);
+            this.LogDebug($"Camera Manager {Key} outage detection: {managedCameraOwnerCodecs.Count - fixedCount} moving and {fixedCount} fixed managed camera(s); a fixed camera is an anchor only on its own codec, unmanaged cameras are anchors on any codec");
+        }
+
+        /// <summary>
+        /// Samples every managed codec into the outage tracker and acts on transitions. On outage
+        /// start, floating episodes for cameras that belong on the codec are dropped (they are not
+        /// floating, their codec is down). On outage end, those cameras get a fresh grace period to
+        /// boot and re-register before floating recovery may touch their ports.
+        /// </summary>
+        private void UpdateCodecOutageState(DateTime now)
+        {
+            foreach (var kvp in managedCodecs)
+            {
+                var codec = kvp.Value as CiscoCodec;
+                if (codec == null)
+                {
+                    continue;
+                }
+
+                // Sample the codec's own camera-status records, not codec.Cameras: that collection
+                // holds control wrappers, drops a codec-built (unmanaged) camera for good once it
+                // disconnects, and its config-built wrappers carry no serial, so it can neither see
+                // a returning Quad nor tell an anchor from a moving camera.
+                var statusSnapshot = codec.GetCameraStatusSnapshot();
+                if (statusSnapshot == null)
+                {
+                    // Status list changed while sampling; take the next tick's sample instead.
+                    continue;
+                }
+
+                var codecOnline = codec.CommunicationMonitor == null || codec.CommunicationMonitor.IsOnline;
+                CodecCameraOutageTracker.CountCameras(statusSnapshot, kvp.Key, managedCameraOwnerCodecs, out var onlineCount, out var anchorCount);
+
+                var transition = codecOutageTracker.Update(kvp.Key, codecOnline, onlineCount, anchorCount, now);
+                if (transition == CodecOutageTransition.Started)
+                {
+                    var reason = codecOutageTracker.GetReason(kvp.Key);
+                    var heldCameras = GetCurrentScenarioCameraKeysForCodec(kvp.Key);
+                    foreach (var cameraKey in heldCameras)
+                    {
+                        ClearFloatingRecoveryState(cameraKey, "codecOutage");
+                    }
+
+                    this.LogWarning($"CAMERA_CODEC_OUTAGE_START codec='{kvp.Key}' reason='{reason}' codecOnline='{codecOnline}' onlineCameras='{onlineCount}' heldCameras='{string.Join(",", heldCameras)}' action='holdFloatingRecovery' — every camera on the codec is gone (or the codec is offline); waiting for cameras to return instead of probing switch ports");
+                }
+                else if (transition == CodecOutageTransition.Ended)
+                {
+                    var resumedCameras = GetCurrentScenarioCameraKeysForCodec(kvp.Key);
+                    foreach (var cameraKey in resumedCameras)
+                    {
+                        ClearFloatingRecoveryState(cameraKey);
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = now.AddMilliseconds(ReconcileBackoffMs);
+                        }
+                    }
+
+                    this.LogInformation($"CAMERA_CODEC_OUTAGE_END codec='{kvp.Key}' onlineCameras='{onlineCount}' resumedCameras='{string.Join(",", resumedCameras)}' graceMs='{ReconcileBackoffMs}' action='resumeReconciliation' — cameras are back; floating recovery resumes after the grace period for any camera still missing");
+                }
+                else if (transition == CodecOutageTransition.HoldExpired)
+                {
+                    this.LogWarning($"CAMERA_CODEC_OUTAGE_HOLD_EXPIRED codec='{kvp.Key}' reason='{codecOutageTracker.GetReason(kvp.Key)}' sinceUtc='{codecOutageTracker.GetOutageSinceUtc(kvp.Key):O}' maxHoldMs='{CodecOutageMaxHoldMs}' cameras='{string.Join(",", GetCurrentScenarioCameraKeysForCodec(kvp.Key))}' action='resumeFloatingRecovery' — the codec still reports no camera; no longer holding floating recovery for it (switch back-off and probe pacing still apply)");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reads every managed codec's camera-status records. A codec whose list changed while
+        /// copying is left out of this sample and <paramref name="allSampled"/> is false, so a
+        /// camera that is not found cannot be taken as absent.
+        /// </summary>
+        private List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> BuildCameraStatusByCodec(out bool allSampled)
+        {
+            allSampled = true;
+            var result = new List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>>();
+            foreach (var kvp in managedCodecs)
+            {
+                var codec = kvp.Value as CiscoCodec;
+                if (codec == null)
+                {
+                    continue;
+                }
+
+                var snapshot = codec.GetCameraStatusSnapshot();
+                if (snapshot == null)
+                {
+                    allSampled = false;
+                    continue;
+                }
+
+                result.Add(new KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>(kvp.Key, snapshot));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// The target codec reports the camera connected, but the manager's wrapper view did not
+        /// see it (usually because it is in a different slot than configured). Treated as present;
+        /// a slot mismatch is warned about once per camera.
+        /// </summary>
+        private void NoteCameraPresentInCodecStatus(string cameraKey, string codecKey, uint reportedSlot, string scenarioKey)
+        {
+            uint configuredSlot = 0;
+            if (managedCameras.TryGetValue(cameraKey, out var camera))
+            {
+                configuredSlot = GetScenarioConfiguredCameraId(scenarioKey, codecKey, cameraKey) ?? camera.DefaultCameraId;
+            }
+
+            if (reportedSlot == 0 || configuredSlot == 0 || reportedSlot == configuredSlot)
+            {
+                this.LogVerbose($"CAMERA_PRESENT_IN_CODEC_STATUS camera='{cameraKey}' codec='{codecKey}' reportedSlot='{reportedSlot}' configuredSlot='{configuredSlot}' action='treatAsPresent'");
+                return;
+            }
+
+            bool firstWarning;
+            lock (activeMigrationsLock)
+            {
+                firstWarning = slotMismatchWarned.Add(cameraKey);
+            }
+
+            if (firstWarning)
+            {
+                this.LogWarning($"CAMERA_SLOT_MISMATCH camera='{cameraKey}' codec='{codecKey}' reportedSlot='{reportedSlot}' configuredSlot='{configuredSlot}' scenario='{scenarioKey}' action='treatAsPresent' - the codec reports the camera connected in a different slot than configured; not probing it");
+            }
+        }
+
+        private void ClearSlotMismatchWarning(string cameraKey)
+        {
+            lock (activeMigrationsLock)
+            {
+                slotMismatchWarned.Remove(cameraKey);
+            }
+        }
+
+        /// <summary>
+        /// Managed camera keys the current scenario assigns to the given codec.
+        /// </summary>
+        private List<string> GetCurrentScenarioCameraKeysForCodec(string codecKey)
+        {
+            var scenarioKey = roomCombiner?.CurrentScenario?.Key;
+            if (string.IsNullOrEmpty(scenarioKey)
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return new List<string>();
+            }
+
+            return scenarioConfig.CodecConfigs
+                .Where(cc => string.Equals(cc.CodecKey, codecKey, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(cc => cc.CameraKeys)
+                .Where(k => managedCameras.ContainsKey(k))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Feeds a switch port event into the switch-session health tracker. "In progress" events
+        /// mark a command session starting; VlanChanged/PoEEnabled/PoEDisabled mark one completing.
+        /// </summary>
+        private void TrackSwitchCommandHealth(NetworkSwitchPortEventArgs e)
+        {
+            var now = DateTime.UtcNow;
+            switch (e.EventType)
+            {
+                case NetworkSwitchPortEventType.VlanChangeInProgress:
+                case NetworkSwitchPortEventType.PoeDisableInProgress:
+                case NetworkSwitchPortEventType.PoeEnableInProgress:
+                    LogSwitchHealthTransition(switchHealth.OnCommandStarted(now), "previousSessionNotCompleted", e.Port);
+                    break;
+                case NetworkSwitchPortEventType.VlanChanged:
+                case NetworkSwitchPortEventType.PoEDisabled:
+                case NetworkSwitchPortEventType.PoEEnabled:
+                    LogSwitchHealthTransition(switchHealth.OnCommandCompleted(now), "commandCompleted", e.Port);
+
+                    // A queued command can complete long after it was sent; the camera only starts
+                    // booting when power actually returns (PoE on, or a VLAN change done with a
+                    // PoE cycle). Restart the port's boot window from the completion.
+                    if (cameraBootWindow.RefreshOnCompletion(e.Port, now))
+                    {
+                        this.LogVerbose($"CAMERA_BOOT_WINDOW_RESTARTED port='{e.Port}' event='{e.EventType}' windowMs='{(int)cameraBootWindow.Window.TotalMilliseconds}'");
+                    }
+                    break;
+            }
+        }
+
+        private void LogSwitchHealthTransition(SwitchHealthTransition transition, string reason, string port = null)
+        {
+            if (transition == SwitchHealthTransition.Failing)
+            {
+                this.LogWarning($"CAMERA_SWITCH_SESSION_FAILING reason='{reason}' port='{port}' failures='{switchHealth.ConsecutiveFailures}' backoffMs='{(int)switchHealth.CurrentBackoff.TotalMilliseconds}' action='holdFloatingProbes' — a switch command did not complete; floating-recovery probes wait until a switch command succeeds (one trial probe per back-off window)");
+            }
+            else if (transition == SwitchHealthTransition.Recovered)
+            {
+                this.LogInformation($"CAMERA_SWITCH_SESSION_RECOVERED port='{port}' action='resumeFloatingProbes' — a switch command completed");
+            }
+        }
+
+        /// <summary>
+        /// Every VLAN change the manager sends goes through here. Some switch drivers change the
+        /// access VLAN with a PoE cycle, so the camera on the port is put in its boot window.
+        /// </summary>
+        private void SendPortVlan(string port, uint vlanId)
+        {
+            cameraBootWindow.RecordPortAction(port, DateTime.UtcNow);
+            networkSwitch.SetPortVlan(port, vlanId);
+        }
+
+        /// <summary>
+        /// Every PoE command the manager sends goes through here, putting the camera on the port
+        /// in its boot window so floating recovery does not mistake the reboot for a lost camera.
+        /// </summary>
+        private void SendPortPoe(string port, bool enabled)
+        {
+            cameraBootWindow.RecordPortAction(port, DateTime.UtcNow);
+            networkSwitch.SetPortPoeState(port, enabled);
+        }
+
         private void NetworkSwitch_PortStateChanged(object sender, NetworkSwitchPortEventArgs e)
         {
             this.LogVerbose($"Camera Manager {Key} detected network switch port state change on port '{e.Port}' to state '{e.EventType}'");
+
+            TrackSwitchCommandHealth(e);
 
             if (e.EventType == NetworkSwitchPortEventType.PoEDisabled)
             {
@@ -553,7 +893,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 if (shouldEnablePoe)
                 {
                     this.LogDebug($"CAMERA_SWITCHOVER_POE_ON_AFTER_VLAN camera='{cameraKey}' port='{e.Port}' reason='vlanChangedConfirmed'");
-                    networkSwitch.SetPortPoeState(e.Port, true);
+                    SendPortPoe(e.Port, true);
                     this.LogVerbose($"Camera Manager {Key} confirmed VLAN changed for camera '{cameraKey}', re-enabling PoE on port '{e.Port}'");
                 }
                 else if (shouldStartAttachWait)
@@ -1057,7 +1397,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             this.LogDebug($"CAMERA_SWITCHOVER_MIGRATION_STARTED camera='{migration.CameraKey}' sourceCodec='{migration.SourceCodecKey}' sourceCameraId='{migration.SourceCameraId}' targetCodec='{migration.TargetCodecKey}' port='{migration.Port}' actions='PoeOff+ClearAssignedSerial'");
             this.LogVerbose($"Camera Manager {Key} turning off PoE for camera '{migration.CameraKey}' on network switch port '{migration.Port}'");
-            networkSwitch.SetPortPoeState(migration.Port, false);
+            SendPortPoe(migration.Port, false);
 
             this.LogVerbose($"Camera Manager {Key} clearing assigned serial number for camera '{migration.CameraKey}' on source codec '{migration.SourceCodecKey}'");
             sourceCodec?.ClearCameraAssignedSerialNumber(migration.SourceCameraId);
@@ -1214,7 +1554,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     this.LogDebug($"CAMERA_SWITCHOVER_POE_REENABLE_RETRY camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' reason='poeEnabledEventNotConfirmed'");
                     this.LogDebug($"Camera Manager {Key} retrying PoE re-enable for camera '{cameraKey}' on port '{port}' — PoEEnabled event was not confirmed after VLAN change");
-                    networkSwitch.SetPortPoeState(port, true);
+                    SendPortPoe(port, true);
                 }
 
                 foreach (var migrationKey in pendingPoeSafeguardKeys)
@@ -1246,7 +1586,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                     this.LogDebug($"CAMERA_SWITCHOVER_POE_SAFEGUARD_TRIGGERED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' action='forcePoeOnAfterOffTimeout' maxOffMs='{MaxPoeOffDurationMs}'");
                     this.LogDebug($"Camera Manager {Key} forcing PoE on for camera '{cameraKey}' after extended PoE-off interval");
-                    networkSwitch.SetPortPoeState(port, true);
+                    SendPortPoe(port, true);
                 }
 
                 foreach (var migrationKey in pendingAttachKeys)
@@ -1300,10 +1640,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     if (managedCodecs.TryGetValue(sourceCodecKey, out var sourceCodecDevice))
                     {
                         this.LogDebug($"Camera Manager {Key} re-seeding source VLAN for camera '{cameraKey}' after attach failure to force rediscovery (poeCycling='{(disablePoeCycling ? "disabled" : "enabled")}')");
-                        networkSwitch.SetPortVlan(port, sourceCodecDevice.VLanId);
+                        SendPortVlan(port, sourceCodecDevice.VLanId);
                         if (!disablePoeCycling)
                         {
-                            networkSwitch.SetPortPoeState(port, true);
+                            SendPortPoe(port, true);
                         }
                     }
                     else
@@ -1311,6 +1651,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         this.LogError($"Camera Manager {Key} cannot run attach failure reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
                     }
                 }
+
+                // Sample every codec for a codec/network outage each tick, so an outage is seen as
+                // soon as the last camera drops and before the floating sweep can act on it.
+                UpdateCodecOutageState(now);
+
+                // Count a switch session that never completed as a failure.
+                LogSwitchHealthTransition(switchHealth.Evaluate(now), "sessionNotCompleted");
 
                 // Periodic safety-net sweep: catch cameras that ended up floating with no active
                 // migration (the recovery dead-end). Throttled to ReconcileSweepIntervalMs.
@@ -1344,6 +1691,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 return;
             }
 
+            var probesThisSweep = 0;
+
+            // Codec camera-status records, read once per sweep when first needed.
+            List<KeyValuePair<string, IReadOnlyList<CodecCameraStatusSample>>> statusByCodec = null;
+            var statusComplete = false;
+
             foreach (var codecConfig in scenarioConfig.CodecConfigs)
             {
                 var targetCodecKey = codecConfig.CodecKey;
@@ -1371,7 +1724,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     // Correctly placed = confirmed online on the target codec with a matching serial.
                     if (IsCameraOnlineOnCodec(targetCodecKey, camera))
                     {
-                        ClearFloatingRecoveryState(cameraKey);
+                        ClearSlotMismatchWarning(cameraKey);
+                        ClearFloatingRecoveryState(cameraKey, "placedOnTarget");
+                        continue;
+                    }
+
+                    // The manager's view above only sees control wrappers. Check the codecs' own
+                    // camera-status records (any slot): a camera the target codec reports connected,
+                    // even in a different slot than configured, is present and must not be probed.
+                    if (statusByCodec == null)
+                    {
+                        statusByCodec = BuildCameraStatusByCodec(out statusComplete);
+                    }
+
+                    var presenceState = CameraPresence.Evaluate(statusByCodec, statusComplete, camera.SerialNumber, targetCodecKey, out var presence);
+                    if (presenceState == CameraPresenceState.OnTarget)
+                    {
+                        NoteCameraPresentInCodecStatus(cameraKey, targetCodecKey, presence.CameraId, currentScenario.Key);
+                        ClearFloatingRecoveryState(cameraKey, "presentInCodecStatus");
+                        continue;
+                    }
+
+                    // The codec this camera belongs on is down (every camera on it is gone, or it is
+                    // offline). The camera is not floating; its codec is. Wait for the outage to end
+                    // rather than moving the port between VLANs and power-cycling the camera.
+                    if (codecOutageTracker.IsHolding(targetCodecKey))
+                    {
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' scenario='{currentScenario.Key}' action='hold' reason='targetCodecOutage' outageReason='{codecOutageTracker.GetReason(targetCodecKey)}'");
                         continue;
                     }
 
@@ -1394,7 +1773,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         if (managedCodecs.TryGetValue(currentCodecKey, out var sourceCodecDevice)
                             && sourceCodecDevice is CiscoCodec sourceCiscoCodec)
                         {
-                            ClearFloatingRecoveryState(cameraKey);
+                            ClearFloatingRecoveryState(cameraKey, "onlineOnWrongCodec");
                             lock (activeMigrationsLock)
                             {
                                 reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
@@ -1429,16 +1808,87 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // The manager itself power-cycled or re-VLANed this port recently: the camera is
+                    // rebooting, not lost. Don't start an episode or probe until the boot window
+                    // closes; a probe now would cycle PoE again and restart the boot.
+                    if (cameraBootWindow.IsBooting(port, now, out var bootingUntilUtc))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = bootingUntilUtc;
+                        }
+
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='cameraBooting' bootingUntilUtc='{bootingUntilUtc:O}' bootWindowMs='{(int)cameraBootWindow.Window.TotalMilliseconds}'");
+                        continue;
+                    }
+
+                    // Connected on another codec per that codec's status, but not visible to the
+                    // wrapper-based wrong-codec path above. It is alive, so a probe would only
+                    // power-cycle it. This happens when the codec reported Connected before the
+                    // serial: the later serial-only update never attaches the wrapper or raises
+                    // CameraConnected. Ask that codec for its full camera status (rate-limited per
+                    // codec) so the normal connect -> migration path runs, and look again later.
+                    if (presenceState == CameraPresenceState.OnOtherCodec)
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = now.AddMilliseconds(ReconcileBackoffMs);
+                        }
+
+                        var refreshRequested = false;
+                        if (managedCodecs.TryGetValue(presence.CodecKey, out var reportingCodecDevice)
+                            && reportingCodecDevice is CiscoCodec reportingCodec
+                            && cameraStatusRefreshLimiter.TryAcquire(presence.CodecKey, now))
+                        {
+                            reportingCodec.RequestCameraStatus();
+                            refreshRequested = true;
+                        }
+
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='connectedOnOtherCodecInStatus' statusCodec='{presence.CodecKey}' statusCameraId='{presence.CameraId}' statusRefreshRequested='{refreshRequested}'");
+                        continue;
+                    }
+
+                    // Not found, but a codec could not be sampled this sweep (its list was changing).
+                    // The camera may be connected there; never probe on an incomplete picture. Look
+                    // again next sweep without starting an episode.
+                    if (presenceState == CameraPresenceState.Unknown)
+                    {
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='defer' reason='codecStatusIncomplete'");
+                        continue;
+                    }
+
+                    // Start of a floating episode: warn once, then hold the first probe for
+                    // FloatingDetectGraceMs. If this is really the first camera of a codec or network
+                    // outage, the outage detector sees the rest of the cameras drop in that window and
+                    // the probe never runs.
+                    bool episodeStarted = false;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!floatingSinceUtc.ContainsKey(cameraKey))
+                        {
+                            floatingSinceUtc[cameraKey] = now;
+                            var graceUntil = now.AddMilliseconds(FloatingDetectGraceMs);
+                            if (!reconcileNextActionUtc.TryGetValue(cameraKey, out var existingNext) || existingNext < graceUntil)
+                            {
+                                reconcileNextActionUtc[cameraKey] = graceUntil;
+                            }
+                            episodeStarted = true;
+                        }
+                    }
+
+                    if (episodeStarted)
+                    {
+                        this.LogWarning($"CAMERA_FLOATING_DETECTED camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' graceMs='{FloatingDetectGraceMs}' managed='{BuildManagedCameraSnapshot(cameraKey)}' — camera is online on no codec; floating recovery starts after the grace period unless it returns or its codec is found to be in outage");
+                        continue;
+                    }
+
+                    // Attempt budget first: a camera that has used every attempt must not take
+                    // the per-sweep slot or the switch trial slot and then send nothing.
                     int floatingCount;
                     lock (activeMigrationsLock)
                     {
-                        if (!floatingRecoveryCounts.TryGetValue(cameraKey, out var priorCount))
-                        {
-                            priorCount = 0;
-                        }
-
+                        floatingRecoveryCounts.TryGetValue(cameraKey, out var priorCount);
                         floatingCount = priorCount + 1;
-                        floatingRecoveryCounts[cameraKey] = floatingCount;
                     }
 
                     if (floatingCount > FloatingRecoveryAttemptLimit)
@@ -1452,31 +1902,81 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                         continue;
                     }
 
+                    // At most MaxFloatingProbesPerSweep probes per sweep across all cameras, so
+                    // several floating cameras never queue their VLAN/PoE bursts on the switch
+                    // console at the same time. The rest wait for the next sweep.
+                    if (probesThisSweep >= MaxFloatingProbesPerSweep)
+                    {
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='probeCapPerSweep' cap='{MaxFloatingProbesPerSweep}'");
+                        continue;
+                    }
+
+                    // Resolve the probe target before taking the switch slot, so a camera with no
+                    // usable probe codec never consumes the switch trial. Neither case spends an
+                    // attempt; the camera is looked at again after the base delay.
+                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
+                    ICiscoCodecCameraFactoryReset probeCodecDevice = null;
+                    if (string.IsNullOrWhiteSpace(probeCodecKey) || !managedCodecs.TryGetValue(probeCodecKey, out probeCodecDevice))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                        }
+
+                        if (string.IsNullOrWhiteSpace(probeCodecKey))
+                        {
+                            // The episode was already warned about once; this repeats per probe slot.
+                            this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                        }
+                        else
+                        {
+                            this.LogError($"Camera Manager {Key} cannot run floating recovery for camera '{cameraKey}': probe codec '{probeCodecKey}' is not managed");
+                        }
+                        continue;
+                    }
+
+                    // Do not start a probe while the switch session is failing: its commands would
+                    // time out and pile up on the console. One trial probe is let through per
+                    // back-off window so a recovered switch is noticed. Only reached when a probe
+                    // will really be sent. A held probe does not count against the attempt limit.
+                    var switchWasFailing = switchHealth.IsFailing;
+                    if (!switchHealth.TryAcquireProbe(now, out var switchRetryAtUtc))
+                    {
+                        lock (activeMigrationsLock)
+                        {
+                            reconcileNextActionUtc[cameraKey] = switchRetryAtUtc;
+                        }
+
+                        this.LogVerbose($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='hold' reason='switchSessionFailing' failures='{switchHealth.ConsecutiveFailures}' retryAtUtc='{switchRetryAtUtc:O}'");
+                        continue;
+                    }
+
+                    if (switchWasFailing)
+                    {
+                        this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' action='trialProbe' reason='switchSessionFailing' failures='{switchHealth.ConsecutiveFailures}' nextTrialUtc='{switchRetryAtUtc:O}' — one probe allowed to test whether the switch is answering again");
+                    }
+
+                    // Pace the next probe: one full pass over the candidate codecs at the base
+                    // delay, then doubling per probe up to FloatingProbeMaxDelayMs.
+                    var nextProbeDelay = FloatingProbePolicy.GetRetryDelay(
+                        floatingCount,
+                        probeTotal,
+                        TimeSpan.FromMilliseconds(ReconcileBackoffMs),
+                        TimeSpan.FromMilliseconds(FloatingProbeMaxDelayMs));
                     lock (activeMigrationsLock)
                     {
-                        reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                        floatingRecoveryCounts[cameraKey] = floatingCount;
+                        reconcileNextActionUtc[cameraKey] = DateTime.UtcNow.Add(nextProbeDelay);
                     }
 
-                    var probeCodecKey = GetFloatingRecoveryProbeCodecKey(cameraKey, targetCodecKey, scenarioConfig, floatingCount, out var probeIndex, out var probeTotal);
-                    if (string.IsNullOrWhiteSpace(probeCodecKey))
-                    {
-                        this.LogWarning($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' port='{port}' scenario='{currentScenario.Key}' action='none' reason='noProbeCodec' attempt='{floatingCount}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
-                        continue;
-                    }
-
-                    if (!managedCodecs.TryGetValue(probeCodecKey, out var probeCodecDevice))
-                    {
-                        this.LogError($"Camera Manager {Key} cannot run floating recovery for camera '{cameraKey}': probe codec '{probeCodecKey}' is not managed");
-                        continue;
-                    }
-
-                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
-                    networkSwitch.SetPortVlan(port, probeCodecDevice.VLanId);
-                    networkSwitch.SetPortPoeState(port, false);
+                    this.LogDebug($"CAMERA_SWITCHOVER_RECONCILE_FLOATING camera='{cameraKey}' targetCodec='{targetCodecKey}' probeCodec='{probeCodecKey}' probeIndex='{probeIndex}' probeTotal='{probeTotal}' port='{port}' scenario='{currentScenario.Key}' action='probeAndBouncePoe' attempt='{floatingCount}' poeAttempt='{floatingCount}' poeAttemptLimit='{FloatingRecoveryAttemptLimit}' nextProbeDelayS='{(int)nextProbeDelay.TotalSeconds}' managed='{BuildManagedCameraSnapshot(cameraKey)}'");
+                    probesThisSweep++;
+                    SendPortVlan(port, probeCodecDevice.VLanId);
+                    SendPortPoe(port, false);
                     ScheduleDelayed(MigrationPoeOffDelayMs, () =>
                     {
                         this.LogDebug($"Camera Manager {Key} reconcile re-enabling PoE for floating camera '{cameraKey}' on port '{port}'");
-                        networkSwitch.SetPortPoeState(port, true);
+                        SendPortPoe(port, true);
                     });
                 }
             }
@@ -1558,28 +2058,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
             }
 
-            if (probeCodecKeys.Count == 0)
-            {
-                return null;
-            }
-
-            var selectedIndex = (attempt - 1) % probeCodecKeys.Count;
-            probeIndex = selectedIndex + 1;
-            probeTotal = probeCodecKeys.Count;
-            return probeCodecKeys[selectedIndex];
+            // Never probe through a codec that is in outage: a camera moved onto its VLAN cannot
+            // register there, so the probe would only power-cycle the camera for nothing. Held
+            // codecs are dropped before rotating, so the rotation and probeTotal (used for
+            // pacing) only cover codecs that can actually be probed.
+            return FloatingProbePolicy.SelectProbeCodec(probeCodecKeys, codecOutageTracker.IsHolding, attempt, out probeIndex, out probeTotal);
         }
 
-        private void ClearFloatingRecoveryState(string cameraKey)
+        /// <summary>
+        /// Drops the floating-recovery state for a camera. When <paramref name="episodeOutcome"/> is
+        /// given and the camera was in a floating episode, logs the end of that episode once.
+        /// </summary>
+        private void ClearFloatingRecoveryState(string cameraKey, string episodeOutcome = null)
         {
             if (string.IsNullOrWhiteSpace(cameraKey))
             {
                 return;
             }
 
+            bool hadEpisode;
+            DateTime episodeStartUtc;
+            int probes;
             lock (activeMigrationsLock)
             {
+                hadEpisode = floatingSinceUtc.TryGetValue(cameraKey, out episodeStartUtc);
+                floatingRecoveryCounts.TryGetValue(cameraKey, out probes);
                 floatingRecoveryCounts.Remove(cameraKey);
                 reconcileNextActionUtc.Remove(cameraKey);
+                floatingSinceUtc.Remove(cameraKey);
+            }
+
+            if (hadEpisode && episodeOutcome != null)
+            {
+                var durationS = (int)(DateTime.UtcNow - episodeStartUtc).TotalSeconds;
+                this.LogInformation($"CAMERA_FLOATING_EPISODE_END camera='{cameraKey}' outcome='{episodeOutcome}' probes='{Math.Min(probes, FloatingRecoveryAttemptLimit)}' durationS='{durationS}'");
             }
         }
 
@@ -1589,6 +2101,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             {
                 floatingRecoveryCounts.Clear();
                 reconcileNextActionUtc.Clear();
+                floatingSinceUtc.Clear();
             }
         }
 
@@ -1814,6 +2327,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
                 // New scenario -> re-apply primary/PresenterTrack roles once its cameras settle.
                 rolesAppliedScenarioByCodec.Clear();
+                slotMismatchWarned.Clear();
             }
 
             this.LogDebug($"Camera Manager {Key} detected room combination scenario change to '{currentScenario?.Key}'");
@@ -1952,7 +2466,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_PORT_ENSURE_VLAN_SET camera='{cameraKey}' port='{port}' vlan='{vlanId}'");
-            networkSwitch.SetPortVlan(port, vlanId);
+            SendPortVlan(port, vlanId);
         }
 
         /// <summary>
@@ -1978,7 +2492,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             }
 
             this.LogDebug($"CAMERA_PORT_ENSURE_POE_SET camera='{cameraKey}' port='{port}' enabled='{enabled}'");
-            networkSwitch.SetPortPoeState(port, enabled);
+            SendPortPoe(port, enabled);
         }
 
         /// <summary>
@@ -2298,7 +2812,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     {
                         this.LogDebug($"CAMERA_SWITCHOVER_POE_DISABLE_RETRY camera='{camera.Key}' sourceCodec='{existingMigration.SourceCodecKey}' targetCodec='{existingMigration.TargetCodecKey}' port='{existingMigration.Port}' reason='previousPoeDisableNotConfirmed'");
                         this.LogVerbose($"Camera Manager {Key} retrying PoE disable for camera '{camera.Key}' on port '{existingMigration.Port}' — previous disable was never confirmed");
-                        networkSwitch.SetPortPoeState(existingMigration.Port, false);
+                        SendPortPoe(existingMigration.Port, false);
                     }
 
                     this.LogVerbose($"Camera Manager {Key} ignoring duplicate CameraDisconnected for camera '{camera.Key}' while migration is already in progress");
@@ -2350,7 +2864,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     attachFailureCounts.TryGetValue(camera.Key, out priorFailedAttempts);
                     attachFailureCounts.Remove(camera.Key);
                 }
-                ClearFloatingRecoveryState(camera.Key);
+                ClearFloatingRecoveryState(camera.Key, "attachConfirmed");
 
                 this.LogDebug($"CAMERA_SWITCHOVER_ATTACH_CONFIRMED camera='{activeMigration.CameraKey}' sourceCodec='{activeMigration.SourceCodecKey}' sourceCameraId='{activeMigration.SourceCameraId}' targetCodec='{activeMigration.TargetCodecKey}' port='{activeMigration.Port}' failedAttempts='{priorFailedAttempts}'");
                 lock (activeMigrationsLock)
@@ -2358,9 +2872,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     activeMigrations.Remove(camera.Key);
                 }
 
-                // Final guard: ensure the migration port is left with PoE enabled.
-                this.LogVerbose($"CAMERA_SWITCHOVER_POE_GUARD_ENSURE_ON camera='{activeMigration.CameraKey}' port='{activeMigration.Port}' targetCodec='{activeMigration.TargetCodecKey}'");
-                networkSwitch.SetPortPoeState(activeMigration.Port, true);
+                // No PoE command here. The camera just attached, so its port is powered; the old
+                // "ensure PoE on" guard sent another switch session right after the attach, which
+                // can disturb a camera that is still settling and made it look lost again.
+                this.LogVerbose($"CAMERA_SWITCHOVER_POE_GUARD_SKIPPED camera='{activeMigration.CameraKey}' port='{activeMigration.Port}' targetCodec='{activeMigration.TargetCodecKey}' reason='cameraAttached'");
             }
 
             UpdateScenarioReconciledStatus();
@@ -2609,7 +3124,7 @@ foreach (var codecConfig in scenarioConfig.CodecConfigs)
             migration.AttachWaitDeadlineUtc = DateTime.MinValue;
             var targetVlanId = targetCodec.VLanId;
             this.LogVerbose($"Camera Manager {Key} confirmed feedback prerequisites for camera '{migration.CameraKey}', changing VLAN on port '{migration.Port}' to {targetVlanId} for target codec '{migration.TargetCodecKey}'");
-            networkSwitch.SetPortVlan(migration.Port, targetVlanId);
+            SendPortVlan(migration.Port, targetVlanId);
         }
 
         private void TryConfirmAssignmentClearedFromSourceCodecState(CameraMigrationState migration)

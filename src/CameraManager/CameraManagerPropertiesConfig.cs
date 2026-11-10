@@ -84,6 +84,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         public int FactoryResetSettleMs { get; set; }
 
         /// <summary>
+        /// Boot window, in milliseconds, after the manager itself PoE-cycles or changes the VLAN of
+        /// a camera's switch port (probe, migration, reseed). During it the camera is expected to be
+        /// rebooting, so floating recovery does not count it as lost or probe it. Set it longer than
+        /// the slowest camera's power-up and registration time. When omitted or non-positive,
+        /// defaults to 180 000 ms.
+        /// </summary>
+        [JsonProperty("cameraBootWindowMs")]
+        public int CameraBootWindowMs { get; set; }
+
+        /// <summary>
         /// When true, the manager does NOT wait a fixed <see cref="FactoryResetSettleMs"/> timer
         /// after issuing the camera factory reset before tearing down PoE and moving the camera.
         /// Instead it waits for the source codec to report the camera <b>disconnected</b> — the

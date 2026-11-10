@@ -56,6 +56,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
         // for the same target can skip the redundant clear/re-push cycle.
         private string _currentLockoutPath;
 
+        // The lockout's mobile-control path: the current lockout's, or "/lockout" by default.
+        private string LockoutPath => string.IsNullOrEmpty(currentLockout?.MobileControlPath) ? "/lockout" : currentLockout.MobileControlPath;
+
+        // Caps re-pushes made because a full status shows another page instead (see LockoutRepairThrottle):
+        // one for the lockout, one for the combining overlay.
+        private readonly LockoutRepairThrottle _lockoutRepairThrottle = new LockoutRepairThrottle();
+        private readonly LockoutRepairThrottle _inProgressRepairThrottle = new LockoutRepairThrottle();
+
+        // The combining overlay: the mobile-control app's /lockout route (NOT "/", which redirects to
+        // the Tech PIN gate), on the navigator.
+        private const string InProgressPath = "/lockout";
+        private const string InProgressTarget = "Controller";
+
         private bool inProgressWebViewActive;
 
         private EventHandler<EventArgs> _combinationOperationStatusChangedHandler;
@@ -406,15 +419,52 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
                 return;
             }
 
-            // IsError == the codec reports NO webview currently displayed. If a webview IS up
-            // (no error) we do nothing so a visible page is never reloaded.
+            // IsError == the codec reports NO webview currently displayed. Otherwise re-open only if
+            // no visible Controller web view is the overlay ("/lockout"), so the overlay is never
+            // reloaded, yet a different page left open (or a stale one) can't stand in for it.
             if (!args.UiWebViewStatus.IsError)
             {
+                RepairIfAnotherPageShown(args.UiWebViewStatus, InProgressPath, InProgressTarget, _inProgressRepairThrottle,
+                    "Combining overlay", () => { OpenInProgressWebView(reassert: true); return true; });
                 return;
             }
 
             this.LogVerbose("In-progress webview not shown; re-opening for {DefaultRoomKey}", defaultRoomKey);
             OpenInProgressWebView(reassert: true);
+        }
+
+        /// <summary>
+        /// A full status that lists another page but not this one (path on target): push this one again,
+        /// at most as often as the throttle allows. Showing resets the throttle; Unknown (partial
+        /// feedback) does nothing.
+        /// </summary>
+        /// <param name="push">Pushes the page; returns false if it skipped the push (its own debounce)</param>
+        private void RepairIfAnotherPageShown(WebViewStatus status, string path, string target,
+            LockoutRepairThrottle throttle, string what, Func<bool> push)
+        {
+            switch (EvaluateWebViews(status, path, target))
+            {
+                case LockoutWebViewState.Showing:
+                    throttle.Reset();
+                    return;
+                case LockoutWebViewState.Unknown:
+                    return;
+            }
+
+            if (!throttle.CanAttempt(DateTime.UtcNow))
+            {
+                this.LogVerbose("{What} repair held back ({Attempts} pushes without it showing)", what, throttle.Attempts);
+                return;
+            }
+
+            this.LogDebug("{What}: no visible web view shows {Path} ({Count} web view(s) listed); pushing it again",
+                what, path, status.WebViews.Count);
+
+            if (push() && throttle.Record(DateTime.UtcNow) == LockoutRepairThrottle.FreeAttempts)
+            {
+                this.LogWarning("{What}: {Attempts} pushes haven't shown {Path} in the codec's web view status; pushing at most once a minute from now",
+                    what, LockoutRepairThrottle.FreeAttempts, path);
+            }
         }
 
         private void CancelInProgressFailureCloseTimer()
@@ -532,13 +582,15 @@ catch (Exception ex)
             // the Tech PIN gate, so a churn/flicker leaves the Tech PIN page showing. /lockout
             // is a defined, static route; the React "combination in progress" overlay still
             // renders on top of it while the combiner operation state is InProgress.
+            if (!reassert) _inProgressRepairThrottle.Reset();
+
             var inProgressConfig = new WebViewDisplayConfig
             {
                 Title = "Room Combining",
                 Mode = "Fullscreen",
-                Target = "Controller"
+                Target = InProgressTarget
             };
-            SendWebViewMcUrl("/lockout", inProgressConfig, true);
+            SendWebViewMcUrl(InProgressPath, inProgressConfig, true);
 
             StartInProgressPollTimer();
         }
@@ -553,6 +605,7 @@ catch (Exception ex)
             inProgressWebViewActive = false;
 
             StopInProgressPollTimer();
+            _inProgressRepairThrottle.Reset();
 
             if (mcTpController.LockedOut)
             {
@@ -567,9 +620,7 @@ catch (Exception ex)
         private void StartLockout(bool isCombinationLockout = true)
         {
             var wasAlreadyLockedOut = mcTpController.LockedOut;
-            var newPath = string.IsNullOrEmpty(currentLockout?.MobileControlPath)
-                ? "/lockout"
-                : currentLockout.MobileControlPath;
+            var newPath = LockoutPath;
             var samePathAsBefore = wasAlreadyLockedOut
                 && string.Equals(_currentLockoutPath, newPath, StringComparison.OrdinalIgnoreCase);
 
@@ -584,6 +635,7 @@ catch (Exception ex)
             // can tear down the still-loading app (blank).
             if (!samePathAsBefore)
             {
+                _lockoutRepairThrottle.Reset();
                 ClearWebView();
             }
 
@@ -617,6 +669,7 @@ catch (Exception ex)
 
             _currentLockoutPath = null;
             _lastLockoutPushUtc = DateTime.MinValue;
+            _lockoutRepairThrottle.Reset();
 
             CancelInProgressFailureCloseTimer();
 
@@ -631,26 +684,24 @@ catch (Exception ex)
         {
             bool isError = args.UiWebViewStatus.IsError;
 
-            // Case 1: No error AND not locked out → Clear web view
-            if (!isError && !mcTpController.LockedOut)
+            // No error (web views listed): when locked out, fine only if a visible web view IS the
+            // lockout. Another page (left open, or one the codec still reports Visible after the
+            // navigator stopped showing it, which WebView Clear doesn't remove) kept the lockout from
+            // popping after a combine and from re-popping. Not locked out: leave the user's page alone
+            // (this used to clear it, but a non-error status never reached here before the WebView
+            // list was mapped).
+            if (!isError)
             {
-                WebView.WebView uiWebView = args.UiWebViewStatus.UiWebView;
-
-                extensionsHandler.UiWebViewClearAction?.Invoke(
-                    new WebViewDisplayClearActionArgs() { Target = "Controller" }
-                );
-
-                return;
-            }
-
-            // Case 2: No error AND locked out → Do nothing
-            if (!isError && mcTpController.LockedOut)
-            {
+                if (mcTpController.LockedOut)
+                {
+                    RepairIfAnotherPageShown(args.UiWebViewStatus, LockoutPath, LockoutDisplayConfig.Target,
+                        _lockoutRepairThrottle, "Lockout", () => SendLockout(defaultRoomKey, primaryRoomKey));
+                }
                 return;
             }
 
             // Case 3: Error (regardless of lockout state) → Log error
-            this.LogDebug("Error in UiWebViewChangedEventHandler.  XPath: {XPath}Reason: {Reason}", args.UiWebViewStatus.ErrorStatus.XPath.Value, args.UiWebViewStatus.ErrorStatus.Reason.Value);
+            this.LogDebug("Error in UiWebViewChangedEventHandler.  XPath: {XPath}Reason: {Reason}", args.UiWebViewStatus.ErrorStatus?.XPath?.Value, args.UiWebViewStatus.ErrorStatus?.Reason?.Value);
 
             // Case 4: Error AND not locked out → Do nothing (just logged)
             if (!mcTpController.LockedOut)
@@ -665,7 +716,8 @@ catch (Exception ex)
         }
 
 
-        private void SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
+        /// <returns>true if the lockout was pushed; false if the debounce skipped it</returns>
+        private bool SendLockout(string thisUisDefaultRoomKey, string primaryRoomKey)
         {
             // Suppress burst re-pushes (scenario-change clear + poll both emit webview "Error"
             // events) so a re-push can't land while the React app is still loading and joining.
@@ -674,21 +726,15 @@ catch (Exception ex)
             {
                 this.LogVerbose("Skipping lockout re-push; last push {ms}ms ago (< {debounce}ms debounce)",
                     (int)sinceLastPush, LockoutPushDebounceMs);
-                return;
+                return false;
             }
             _lastLockoutPushUtc = DateTime.UtcNow;
 
             this.LogDebug("UiMap default room key: {DefaultRoomKey} is in lockout state", thisUisDefaultRoomKey);
 
-            var path = currentLockout?.MobileControlPath;
+            var path = LockoutPath;
 
-            if (path == null || path.Length == 0)
-                path = "/lockout";
-
-            var webViewConfig =
-                currentLockout?.UiWebViewDisplay == null
-                    ? defaultUiWebViewDisplayConfig
-                    : currentLockout.UiWebViewDisplay;
+            var webViewConfig = LockoutDisplayConfig;
 
             if (!string.IsNullOrEmpty(primaryRoomKey))
             {
@@ -702,6 +748,35 @@ catch (Exception ex)
             }
 
             SendWebViewMcUrl(path, webViewConfig, true);
+            return true;
+        }
+
+        // Where and how the lockout is displayed: the current lockout's settings, or the default.
+        private WebViewDisplayConfig LockoutDisplayConfig => currentLockout?.UiWebViewDisplay ?? defaultUiWebViewDisplayConfig;
+
+        private LockoutWebViewState EvaluateWebViews(WebViewStatus status, string mcPath, string target) =>
+            LockoutWebViewCheck.Evaluate(
+                status.WebViews.Select(v => (v?.Status?.Value, v?.Target?.Value, v?.URL?.Value)), ExpectedUrlPath(mcPath), target);
+
+        /// <summary>
+        /// The URL path a mobile-control page is displayed at, built the way GetMobileControlUrl builds the
+        /// URL (app URL path + mcPath), so the check matches what was actually sent. Null (the check then
+        /// says Unknown) until the app URL is known.
+        /// </summary>
+        private string ExpectedUrlPath(string mcPath)
+        {
+            var appUrl = mcTpController.AppUrlFeedback.StringValue;
+            if (string.IsNullOrEmpty(appUrl) || string.IsNullOrEmpty(mcPath)) return null;
+            try
+            {
+                var uriBuilder = new UriBuilder(appUrl);
+                uriBuilder.Path = uriBuilder.Path.TrimEnd('/') + mcPath;
+                return uriBuilder.Uri.AbsolutePath;
+            }
+            catch (UriFormatException)
+            {
+                return null;
+            }
         }
 
         private async void VideoCodecUiExtensionsClickedMcEventHandler(
