@@ -41,6 +41,7 @@
     <Compile Include="..\src\Cameras\CameraBinding.cs" Link="Linked\CameraBinding.cs" />
     <Compile Include="..\src\Cameras\FallbackCamera.cs" Link="Linked\FallbackCamera.cs" />
     <Compile Include="..\src\CameraManager\CodecCameraOutageTracker.cs" Link="Linked\CodecCameraOutageTracker.cs" />
+    <Compile Include="..\src\UserInterface\Navigator\LockoutWebViewCheck.cs" Link="Linked\LockoutWebViewCheck.cs" />
     <Compile Include="..\src\CameraManager\SwitchCommandHealth.cs" Link="Linked\SwitchCommandHealth.cs" />
     <Compile Include="..\src\CameraManager\FloatingProbePolicy.cs" Link="Linked\FloatingProbePolicy.cs" />
     <Compile Include="..\src\CameraManager\CameraBootWindow.cs" Link="Linked\CameraBootWindow.cs" />

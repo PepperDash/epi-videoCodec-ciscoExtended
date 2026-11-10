@@ -4430,7 +4430,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			Timings.RecordSince("model.populate", started);
 		}
 
-		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target)
+		private void PopulateObjectWithToken(JToken jToken, string tokenSelector, object target, JsonSerializerSettings settings = null)
 		{
 			JToken token = null;
 			try
@@ -4440,7 +4440,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 
 				// Straight from the parsed token: no ToString() and second parse (#129).
-				CodecJson.PopulateFromToken(token, target);
+				CodecJson.PopulateFromToken(token, target, settings);
 			}
 			catch (Exception e)
 			{
@@ -4626,8 +4626,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Each area below reads its own token. The whole document is no longer populated into a
 			// throwaway Status object first (#129, stage 6): only UserInterface and RoomPreset were read
 			// from it, and one bad area threw and stopped every other area from being parsed.
+			// Web views as this message lists them. A full status reply lists every web view with its
+			// URL; partial feedback has no URL, and the lockout check treats such a message as "can't
+			// tell". (Not the merged model: a reply doesn't remove entries it omits.) ModelSettings, so
+			// a one-item list sent as a single object is read and ghost entries are dropped.
 			var userInterface = new CiscoCodecStatus.UserInterface();
-			PopulateObjectWithToken(statusToken, "UserInterface", userInterface);
+			PopulateObjectWithToken(statusToken, "UserInterface", userInterface, ModelSettings);
 			if (userInterface.WebViews != null && userInterface.WebViews.Count > 0)
 			{
 				UiExtensionsHandler?.ParseStatus(userInterface.WebViews);
