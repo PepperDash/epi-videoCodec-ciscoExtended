@@ -63,13 +63,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.UserInterf
 
 		public void ParseStatus(List<WebView.WebView> webViews)
 		{
-			if (webViews == null || webViews.Count > 1)
+			if (webViews == null || webViews.Count == 0)
 			{
 				return;
 			}
-			//assume 1 navigator only allows 1 webview to display at a time
-			//api testing shows only one after changing or closing and reopening
-			CurrentUiWebViewStatus = new WebViewStatus(webViews[0]);
+			// Pass every web view the message lists on. A navigator can have more than one: a page left
+			// open plus a lockout pushed on top, or a view the codec still lists as Visible after the
+			// navigator stopped showing it (seen on site: an audio page that WebView Clear doesn't
+			// remove). Dropping multi-view status hid that from the lockout handler.
+			CurrentUiWebViewStatus = new WebViewStatus(webViews);
 			UiWebViewChangedEvent?.Invoke(this, new WebViewChangedEventArgs(CurrentUiWebViewStatus));
 		}
 

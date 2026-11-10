@@ -1854,6 +1854,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public class UserInterface
         {
             public ContactInfo ContactInfo { get; set; }
+            // The codec names the list "WebView" (one entry per item). Without this mapping the list was
+            // never filled, so only web view *errors* reached the lockout handler.
+            [JsonProperty("WebView")]
             public List<WebView> WebViews { get; set; }
         }
 
