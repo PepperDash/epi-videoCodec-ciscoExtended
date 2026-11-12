@@ -2909,18 +2909,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					"CODEC_SEND_STALL_DROPPED count={count} — commands that waited out the stall were not sent: {commands}{more}",
 					dropped, string.Join(", ", described), dropped > described.Count ? ", ..." : "");
 
-			if (cause == SendStallCause.WorkerNotRunning || !(Communication is ISocketStatus))
-			{
-				// Over RS-232 there is no session to reconnect: a new worker is all that can be done.
-				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
-				SyncState.RestartWorker();
-				return;
-			}
+			var action = SendStallRecovery.Choose(cause, Communication is ISocketStatus);
+			this.LogWarning("CODEC_SEND_STALL_RECOVERY action={action} cause={cause}", action, cause);
 
-			// A blocked write or a JSON response that never ends is cleared by a new session: the
-			// disconnect ends the write and resets the receive state, and the codec is re-synced.
-			this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
-			DisconnectClientAndReconnect();
+			if (action == SendStallAction.RestartWorker)
+				SyncState.RestartWorker();
+			else
+				DisconnectClientAndReconnect(); // re-syncs the codec on the new session
 		}
 
 		// ---- RS-232 login prompt (#115) ------------------------------------------------------------

@@ -32,6 +32,30 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         WorkerNotRunning
     }
 
+    /// <summary>How the send watchdog recovers a stall.</summary>
+    public enum SendStallAction
+    {
+        /// <summary>Start a new send worker.</summary>
+        RestartWorker,
+
+        /// <summary>End the session and connect again (also ends a blocked write and resets the receive state).</summary>
+        Reconnect
+    }
+
+    /// <summary>Chooses how to recover a stall (#194).</summary>
+    public static class SendStallRecovery
+    {
+        /// <summary>
+        /// A worker that isn't running is replaced. A blocked write or a JSON response that never ends
+        /// is cleared by a new session, when there is one to reconnect (not over RS-232, where a new
+        /// worker is all that can be done).
+        /// </summary>
+        public static SendStallAction Choose(SendStallCause cause, bool canReconnect) =>
+            cause == SendStallCause.WorkerNotRunning || !canReconnect
+                ? SendStallAction.RestartWorker
+                : SendStallAction.Reconnect;
+    }
+
     /// <summary>
     /// Decides from <see cref="SendQueueSnapshot"/>s whether the codec's send path is stalled (#194):
     /// actions have waited <c>stallAfter</c> with none taken off a queue, or the worker has run one

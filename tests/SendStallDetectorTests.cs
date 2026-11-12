@@ -162,6 +162,18 @@ public class SendStallDetectorTests
         detector.RecoveryFailed(T0.AddMinutes(2)).Should().BeFalse("this stall hasn't had a recovery attempt yet");
     }
 
+    [Theory]
+    [InlineData(SendStallCause.WorkerNotRunning, true, SendStallAction.RestartWorker)]
+    [InlineData(SendStallCause.WorkerBlocked, true, SendStallAction.Reconnect)]
+    [InlineData(SendStallCause.JsonHold, true, SendStallAction.Reconnect)]
+    [InlineData(SendStallCause.WorkerNotRunning, false, SendStallAction.RestartWorker)]
+    [InlineData(SendStallCause.WorkerBlocked, false, SendStallAction.RestartWorker)]
+    [InlineData(SendStallCause.JsonHold, false, SendStallAction.RestartWorker)]
+    public void Recovery_Restarts_A_Dead_Worker_And_Reconnects_Otherwise(SendStallCause cause, bool canReconnect, SendStallAction expected)
+    {
+        SendStallRecovery.Choose(cause, canReconnect).Should().Be(expected);
+    }
+
     [Fact]
     public void Threshold_Must_Be_Positive()
     {
