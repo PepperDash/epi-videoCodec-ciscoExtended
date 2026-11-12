@@ -24,8 +24,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(QueueCapacity);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(QueueCapacity);
+        private readonly CrestronQueue<QueuedAction> _systemActions = new CrestronQueue<QueuedAction>(QueueCapacity);
+        private readonly CrestronQueue<QueuedAction> _commandActions = new CrestronQueue<QueuedAction>(QueueCapacity);
 
         private Thread _worker;
         private readonly CEvent _waitHandle = new CEvent();
@@ -110,11 +110,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Enqueue(_systemActions, _systemQueueFullDrops, action, caller);
         }
 
-        private void Enqueue(CrestronQueue<Action> queue, DropEpisodeTracker drops, Action action, string what)
-        {
-            var name = queue == _commandActions ? "command" : "system";
+        /// <summary>What the send path is doing, for codecperf and the send watchdog (#194).</summary>
+        internal SendQueueHealth SendHealth { get; } = new SendQueueHealth();
 
-            if (queue.TryToEnqueue(action))
+        /// <summary>A queued action with a short description of it, so a stuck worker can say what it is stuck on.</summary>
+        private sealed class QueuedAction
+        {
+            public QueuedAction(Action run, string what)
+            {
+                Run = run;
+                What = what;
+            }
+
+            public Action Run { get; }
+            public string What { get; }
+        }
+
+        private void ClearCommands()
+        {
+            _commandActions.Clear();
+            SendHealth.OnCleared(SendQueueKind.Command);
+        }
+
+        private SendQueueKind KindOf(CrestronQueue<QueuedAction> queue) =>
+            queue == _commandActions ? SendQueueKind.Command : SendQueueKind.System;
+
+        private void Enqueue(CrestronQueue<QueuedAction> queue, DropEpisodeTracker drops, Action action, string what)
+        {
+            var kind = KindOf(queue);
+            var name = kind == SendQueueKind.Command ? "command" : "system";
+
+            // Counted before it goes on the queue: the worker may take it off and run it before this
+            // thread continues, and a count made afterwards would then stay one too high for good.
+            SendHealth.OnEnqueued(kind, DateTime.UtcNow);
+            if (queue.TryToEnqueue(new QueuedAction(action, what)))
             {
                 var dropped = drops.OnSucceeded();
                 if (dropped > 0)
@@ -122,6 +151,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return;
             }
 
+            SendHealth.OnEnqueueRejected(kind);
             if (drops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
                 this.LogWarning(
                     "The codec {queue} queue is full ({capacity} waiting), so {what} was dropped ({count} dropped since the last warning, {total} in this episode). Nothing is being taken off the queue: the worker that sends to the codec may be stuck.",
@@ -331,12 +361,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         public void SessionLost()
         {
-            _commandActions.Clear();
+            ClearCommands();
 
             EnqueueSystemAction(() =>
             {
                 this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
-                _commandActions.Clear();
+                ClearCommands();
                 ResetSync();
             });
 
@@ -554,42 +584,47 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 // which corrupts the JSON buffer being parsed.
                 if (_parent.IsReceivingJsonMessage)
                 {
+                    SendHealth.OnJsonHold(DateTime.UtcNow);
                     _waitHandle.Wait(20);
                     continue;
                 }
 
-                if (_systemActions.TryToDequeue(out Action sys))
-                {
-                    try
-                    {
-                        sys();
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogError("Error processing system action: {message}", ex.Message);
-                        this.LogVerbose(ex, "Exception");
-                    }
-                    continue;
-                }
+                SendHealth.OnJsonHoldEnded();
 
-                if (_commandActions.TryToDequeue(out Action cmd))
-                {
-                    try
-                    {
-                        cmd();
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogError("Error processing user action: {message}", ex.Message);
-                        this.LogVerbose(ex, "Exception");
-                    }
+                // System actions always go first.
+                if (RunNext(_systemActions, "system action") || RunNext(_commandActions, "user action"))
                     continue;
-                }
 
+                // Both queues are empty: whatever the bookkeeping says, nothing is waiting.
+                SendHealth.OnQueuesEmpty();
                 _waitHandle.Wait();
             }
 
             return null;
+        }
+
+        /// <summary>Runs the next action on <paramref name="queue"/>, if any. Runs on the worker thread.</summary>
+        private bool RunNext(CrestronQueue<QueuedAction> queue, string label)
+        {
+            if (!queue.TryToDequeue(out var next))
+                return false;
+
+            SendHealth.OnStarted(KindOf(queue), next.What, DateTime.UtcNow);
+            try
+            {
+                next.Run();
+            }
+            catch (Exception ex)
+            {
+                this.LogError("Error processing {label}: {message}", label, ex.Message);
+                this.LogVerbose(ex, "Exception");
+            }
+            finally
+            {
+                SendHealth.OnFinished();
+            }
+
+            return true;
         }
     }
 }

@@ -2407,6 +2407,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
 					+ "Cameras: listed={14} connected={15} devices={16}\r\n"
 					+ "Calls: listed={17} active={18}\r\n"
+					+ "Send: connected={19} notSent={20} {21}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
@@ -2419,7 +2420,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				cameraList.Count(c => string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase)),
 				Cameras?.Count ?? 0,
 				CodecStatus.Status.Calls?.Count ?? 0,
-				ActiveCalls?.Count ?? 0
+				ActiveCalls?.Count ?? 0,
+				// Send path (#194): not sent = dropped in the current not-connected episode.
+				Communication?.IsConnected ?? false,
+				_notConnectedDrops.DroppedInEpisode,
+				sync.SendHealth.Snapshot(DateTime.UtcNow).Format()
 			);
 		}
 
@@ -2791,6 +2796,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Logged outside the lock, so a slow log write never holds up sending.
 			if (sent)
 			{
+				SyncState.SendHealth.OnSent(DateTime.UtcNow);
 				var dropped = _notConnectedDrops.OnSucceeded();
 				if (dropped > 0)
 					this.LogInformation(
