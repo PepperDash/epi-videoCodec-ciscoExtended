@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 {
@@ -77,6 +76,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         // an old worker that wakes up again exits, so two never take actions together.
         private int _generation;
 
+        // Every change to the queues, the generation and the worker state happens under this lock,
+        // together with its SendQueueHealth update, so the bookkeeping always matches the queues and a
+        // replaced worker can't take another action. Actions themselves run outside it.
+        private readonly object _gate = new object();
+
         /// <param name="system">System actions; always taken first.</param>
         /// <param name="command">Commands for the codec.</param>
         /// <param name="signal">Wakes the worker when something is queued.</param>
@@ -103,30 +107,71 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public SendQueueHealth Health { get; }
 
         /// <summary>The current worker generation (it changes on <see cref="RestartWorker"/>).</summary>
-        public int Generation => Interlocked.CompareExchange(ref _generation, 0, 0);
+        public int Generation
+        {
+            get { lock (_gate) return _generation; }
+        }
 
         /// <summary>
         /// Puts <paramref name="action"/> on a queue without waking the worker (call <see cref="Schedule"/>).
-        /// False when the queue is full: the action was dropped.
+        /// False when the queue is full: the action was dropped. <paramref name="onResult"/>, if given,
+        /// runs under the same lock with the result, so a caller's own bookkeeping of drops stays in the
+        /// order the queue saw them; it must not block or log.
         /// </summary>
-        public bool Enqueue(SendQueueKind kind, Action action, string what)
+        public bool Enqueue(SendQueueKind kind, Action action, string what, Action<bool>? onResult = null)
         {
-            // Counted before it goes on the queue: the worker may take it off and run it before this
-            // thread continues, and a count made afterwards would then stay one too high for good.
-            Health.OnEnqueued(kind, _utcNow());
-            if (QueueOf(kind).TryEnqueue(new QueuedAction(action, what)))
-                return true;
+            lock (_gate)
+            {
+                Health.OnEnqueued(kind, _utcNow());
+                var accepted = QueueOf(kind).TryEnqueue(new QueuedAction(action, what));
+                if (!accepted)
+                    Health.OnEnqueueRejected(kind);
+                onResult?.Invoke(accepted);
+                return accepted;
+            }
+        }
 
-            Health.OnEnqueueRejected(kind);
-            return false;
+        /// <summary>
+        /// Queues a system action that must not be lost, such as a session reset. If the system queue
+        /// is full, the actions waiting in it are dropped first (they belong to the session being
+        /// reset, and must not run after the reset either) and their count returned; otherwise 0.
+        /// Never blocks.
+        /// </summary>
+        public int EnqueueReset(Action action, string what)
+        {
+            lock (_gate)
+            {
+                var discarded = 0;
+                var queued = new QueuedAction(action, what);
+                if (!_system.TryEnqueue(queued))
+                {
+                    while (_system.TryDequeue(out _))
+                        discarded++;
+                    Health.OnCleared(SendQueueKind.System);
+                    _system.TryEnqueue(queued); // the queue is empty now
+                }
+
+                Health.OnEnqueued(SendQueueKind.System, _utcNow());
+                return discarded;
+            }
         }
 
         /// <summary>Starts the worker if it isn't running, and wakes it.</summary>
         public void Schedule()
         {
-            if (Interlocked.CompareExchange(ref _state, Processing, Idle) == Idle)
+            int? start = null;
+            lock (_gate)
             {
-                var generation = Generation;
+                if (_state == Idle)
+                {
+                    _state = Processing;
+                    start = _generation;
+                }
+            }
+
+            if (start != null)
+            {
+                var generation = start.Value;
                 _startThread(() => Run(generation));
             }
 
@@ -135,28 +180,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         /// <summary>
         /// Starts a new worker when the current one has stopped taking actions off the queues. The old
-        /// one, if it ever returns, exits.
+        /// one, if it ever returns, exits without taking another action or touching the new one's state.
         /// </summary>
         public void RestartWorker()
         {
-            Interlocked.Increment(ref _generation);
-            Interlocked.Exchange(ref _state, Idle);
-            Health.OnWorkerReplaced(); // its action may never return: not a completion
+            lock (_gate)
+            {
+                _generation++;
+                _state = Idle;
+                Health.OnWorkerReplaced(); // its action may never return: not a completion
+            }
+
             Schedule();
         }
 
         /// <summary>Stops the worker (program stopping).</summary>
         public void Stop()
         {
-            Interlocked.Exchange(ref _state, Idle);
+            lock (_gate)
+                _state = Idle;
             _signal.Set();
         }
 
         /// <summary>Empties the command queue without running anything.</summary>
         public void ClearCommands()
         {
-            _command.Clear();
-            Health.OnCleared(SendQueueKind.Command);
+            lock (_gate)
+            {
+                _command.Clear();
+                Health.OnCleared(SendQueueKind.Command);
+            }
         }
 
         /// <summary>
@@ -167,69 +220,108 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             described = new List<string>();
             var dropped = 0;
-            while (_command.TryDequeue(out var action))
+            lock (_gate)
             {
-                dropped++;
-                if (action != null && described.Count < describe)
-                    described.Add(action.What);
+                while (_command.TryDequeue(out var action))
+                {
+                    dropped++;
+                    if (action != null && described.Count < describe)
+                        described.Add(action.What);
+                }
+
+                Health.OnCleared(SendQueueKind.Command);
             }
 
-            Health.OnCleared(SendQueueKind.Command);
             return dropped;
         }
 
         private IActionQueue QueueOf(SendQueueKind kind) => kind == SendQueueKind.Command ? _command : _system;
 
+        private enum Next
+        {
+            Action,
+            Empty,
+            Superseded
+        }
+
+        /// <summary>
+        /// Under the lock: checks this worker is still current, then takes the next action (system
+        /// first) and records its start, or records that both queues are empty.
+        /// </summary>
+        private Next TakeNext(int generation, out QueuedAction? action, out SendQueueKind kind)
+        {
+            action = null;
+            kind = SendQueueKind.System;
+            lock (_gate)
+            {
+                if (_state != Processing || generation != _generation)
+                    return Next.Superseded;
+
+                if (_system.TryDequeue(out action) && action != null)
+                    kind = SendQueueKind.System;
+                else if (_command.TryDequeue(out action) && action != null)
+                    kind = SendQueueKind.Command;
+                else
+                {
+                    // Both queues are empty: whatever the bookkeeping says, nothing is waiting.
+                    Health.OnQueuesEmpty();
+                    return Next.Empty;
+                }
+
+                Health.OnStarted(kind, action.What, _utcNow());
+                return Next.Action;
+            }
+        }
+
         private void Run(int generation)
         {
-            while (Volatile.Read(ref _state) == Processing && generation == Generation)
+            while (true)
             {
                 // Hold off sending anything to the codec while a JSON response is currently being
                 // accumulated - the codec can echo in-flight commands back into the response stream,
                 // which corrupts the JSON buffer being parsed.
                 if (_isReceivingJson())
                 {
-                    Health.OnJsonHold(_utcNow());
+                    lock (_gate)
+                    {
+                        if (_state != Processing || generation != _generation)
+                            return;
+                        Health.OnJsonHold(_utcNow());
+                    }
                     _signal.Wait(JsonHoldPollMs);
                     continue;
                 }
 
                 Health.OnJsonHoldEnded();
 
-                // System actions always go first.
-                if (RunNext(SendQueueKind.System, "system action", generation)
-                    || RunNext(SendQueueKind.Command, "user action", generation))
-                    continue;
+                switch (TakeNext(generation, out var next, out var kind))
+                {
+                    case Next.Superseded:
+                        return;
+                    case Next.Empty:
+                        _signal.Wait();
+                        continue;
+                }
 
-                // Both queues are empty: whatever the bookkeeping says, nothing is waiting.
-                Health.OnQueuesEmpty();
-                _signal.Wait();
+                try
+                {
+                    next!.Run();
+                }
+                catch (Exception ex)
+                {
+                    _onActionError(kind == SendQueueKind.System ? "system action" : "user action", ex);
+                }
+                finally
+                {
+                    // A worker replaced by RestartWorker while blocked here must not clear the busy
+                    // state of the worker that replaced it, which would hide that one being blocked.
+                    lock (_gate)
+                    {
+                        if (generation == _generation)
+                            Health.OnFinished(_utcNow());
+                    }
+                }
             }
-        }
-
-        private bool RunNext(SendQueueKind kind, string label, int generation)
-        {
-            if (!QueueOf(kind).TryDequeue(out var next) || next == null)
-                return false;
-
-            Health.OnStarted(kind, next.What, _utcNow());
-            try
-            {
-                next.Run();
-            }
-            catch (Exception ex)
-            {
-                _onActionError(label, ex);
-            }
-            finally
-            {
-                // A worker replaced by RestartWorker while blocked here must not clear the busy state
-                // of the worker that replaced it, which would hide that one being blocked.
-                if (generation == Generation)
-                    Health.OnFinished(_utcNow());
-            }
-
-            return true;
         }
     }
 }

@@ -226,6 +226,85 @@ public class SendWorkerTests : IDisposable
         h.Check().Cause.Should().Be(SendStallCause.None, "an idle worker with empty queues is not stalled");
     }
 
+    [Fact]
+    public void Reset_Arriving_At_A_Full_System_Queue_Replaces_The_Stale_Actions()
+    {
+        var h = new Harness(capacity: 3, startFirstWorker: false);
+        var ran = new ConcurrentQueue<string>();
+        for (var i = 0; i < 3; i++)
+        {
+            var n = i;
+            h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("stale" + n), "stale" + n).Should().BeTrue();
+        }
+        h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("dropped"), "dropped").Should().BeFalse("the queue is full");
+
+        var discarded = h.Worker.EnqueueReset(() => ran.Enqueue("reset"), "CodecDisconnected");
+
+        discarded.Should().Be(3);
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(1, "only the reset waits");
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => ran.Contains("reset"));
+        ran.Should().Equal(new[] { "reset" }, "the stale actions of the old session never run, before or after the reset");
+    }
+
+    [Fact]
+    public void Reset_With_Room_In_The_Queue_Keeps_Its_Place()
+    {
+        var h = new Harness(startFirstWorker: false);
+        var ran = new ConcurrentQueue<string>();
+        h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("before"), "before");
+        h.Worker.EnqueueReset(() => ran.Enqueue("reset"), "SessionLost").Should().Be(0);
+        h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("after"), "after");
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => ran.Count == 3);
+        ran.Should().Equal("before", "reset", "after");
+    }
+
+    [Fact]
+    public void A_Replaced_Worker_Never_Takes_Another_Action()
+    {
+        var h = new Harness(canReconnect: false);
+        var oldWrite = Gate();
+        var oldThread = 0;
+        h.Worker.Enqueue(SendQueueKind.Command, () => { oldThread = Environment.CurrentManagedThreadId; oldWrite.Wait(); }, "stuck");
+        h.Worker.Schedule();
+        WaitUntil(() => Volatile.Read(ref oldThread) != 0);
+
+        h.Worker.RestartWorker();
+
+        // While the old worker is still blocked, and after it returns: every action runs on a newer worker.
+        var threads = new ConcurrentBag<int>();
+        void Queue(int count)
+        {
+            for (var i = 0; i < count; i++)
+                h.Worker.Enqueue(SendQueueKind.Command, () => threads.Add(Environment.CurrentManagedThreadId), "c");
+            h.Worker.Schedule();
+        }
+
+        Queue(50);
+        WaitUntil(() => threads.Count == 50);
+        oldWrite.Set();
+        Queue(50);
+        WaitUntil(() => threads.Count == 100);
+
+        threads.Should().NotContain(oldThread);
+    }
+
+    [Fact]
+    public void Enqueue_Reports_Its_Result_Under_The_Lock()
+    {
+        var h = new Harness(capacity: 1, startFirstWorker: false);
+        var results = new List<bool>();
+
+        h.Worker.Enqueue(SendQueueKind.Command, () => { }, "a", results.Add);
+        h.Worker.Enqueue(SendQueueKind.Command, () => { }, "b", results.Add);
+
+        results.Should().Equal(true, false);
+    }
+
     // ---- helpers -------------------------------------------------------------------------------
 
     private ManualResetEventSlim Gate()
@@ -302,6 +381,10 @@ public class SendWorkerTests : IDisposable
                 Worker.RestartWorker();
             else
                 OnReconnect();
+
+            // As CiscoCodec does: a probe whose completion confirms the recovery.
+            Worker.Enqueue(SendQueueKind.System, () => { }, "SendWatchdogProbe");
+            Worker.Schedule();
 
             return new Check(transition, cause, action, dropped, snapshot.BusyWith);
         }
