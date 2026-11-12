@@ -125,18 +125,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             var name = kind == SendQueueKind.Command ? "command" : "system";
 
-            if (_worker.Enqueue(kind, action, what))
+            // The drop episode is updated under the worker's lock, in the order the queue saw the
+            // results, so a success can't end an episode another caller has just started; logged after.
+            int recovered = 0, droppedSinceLog = 0, droppedInEpisode = 0;
+            var logDrop = false;
+            _worker.Enqueue(kind, action, what, accepted =>
             {
-                var dropped = drops.OnSucceeded();
-                if (dropped > 0)
-                    this.LogInformation("The codec {queue} queue accepts actions again: {count} were dropped while it was full.", name, dropped);
-                return;
-            }
+                if (accepted)
+                    recovered = drops.OnSucceeded();
+                else
+                {
+                    logDrop = drops.OnDropped(DateTime.UtcNow, out droppedSinceLog);
+                    droppedInEpisode = drops.DroppedInEpisode;
+                }
+            });
 
-            if (drops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
+            if (recovered > 0)
+                this.LogInformation("The codec {queue} queue accepts actions again: {count} were dropped while it was full.", name, recovered);
+
+            if (logDrop)
                 this.LogWarning(
                     "The codec {queue} queue is full ({capacity} waiting), so {what} was dropped ({count} dropped since the last warning, {total} in this episode). Nothing is being taken off the queue: the worker that sends to the codec may be stuck.",
-                    name, QueueCapacity, what, droppedSinceLog, drops.DroppedInEpisode);
+                    name, QueueCapacity, what, droppedSinceLog, droppedInEpisode);
+        }
+
+        /// <summary>
+        /// Queues a session reset, which must never be dropped: with its flags left set, a reconnect in
+        /// JSON mode would never re-sync (#194). If the system queue is full, its stale actions are
+        /// dropped instead (they belong to the session being reset). Never blocks.
+        /// </summary>
+        private void EnqueueReset(Action action, [CallerMemberName] string caller = "")
+        {
+            var discarded = _worker.EnqueueReset(action, caller);
+            if (discarded > 0)
+                this.LogWarning(
+                    "The codec system queue was full when {what} arrived: dropped the {count} sync action(s) waiting in it so the reset is not lost.",
+                    caller, discarded);
         }
 
         // How a session is recognised (#113). Over RS-232 there are no socket events, and the codec's
@@ -344,7 +368,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             ClearCommands();
 
-            EnqueueSystemAction(() =>
+            EnqueueReset(() =>
             {
                 this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
                 ClearCommands();
@@ -356,7 +380,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void CodecDisconnected()
         {
-            EnqueueSystemAction(() =>
+            EnqueueReset(() =>
             {
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
                 ResetSync();
