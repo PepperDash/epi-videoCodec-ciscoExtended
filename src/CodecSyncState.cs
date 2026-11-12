@@ -630,7 +630,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 SendHealth.OnJsonHoldEnded();
 
                 // System actions always go first.
-                if (RunNext(_systemActions, "system action") || RunNext(_commandActions, "user action"))
+                if (RunNext(_systemActions, "system action", generation) || RunNext(_commandActions, "user action", generation))
                     continue;
 
                 // Both queues are empty: whatever the bookkeeping says, nothing is waiting.
@@ -642,7 +642,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>Runs the next action on <paramref name="queue"/>, if any. Runs on the worker thread.</summary>
-        private bool RunNext(CrestronQueue<QueuedAction> queue, string label)
+        private bool RunNext(CrestronQueue<QueuedAction> queue, string label, int generation)
         {
             if (!queue.TryToDequeue(out var next))
                 return false;
@@ -659,7 +659,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
             finally
             {
-                SendHealth.OnFinished();
+                // A worker replaced by RestartWorker while blocked here must not clear the busy state
+                // of the worker that replaced it, which would hide that one being blocked.
+                if (generation == CurrentGeneration)
+                    SendHealth.OnFinished();
             }
 
             return true;
