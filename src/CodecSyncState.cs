@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
@@ -23,8 +24,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(100);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(100);
+        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(QueueCapacity);
+        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(QueueCapacity);
 
         private Thread _worker;
         private readonly CEvent _waitHandle = new CEvent();
@@ -91,18 +92,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(query))
                 return;
 
-            _commandActions.Enqueue(() =>
-             {
-                 _parent.SendTextWithoutQueue(query);
-             });
-
-            // if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
-            // {
-            //     this.LogError("Unable to enqueue command:{query}", query);
-            //     this.LogError("commandActions queue is full. Consider increasing the queue size if this is a common occurrence. Count = {CommandQueueCount}", _commandActions.Count);
-            // }
+            Enqueue(_commandActions, _commandQueueFullDrops, () => _parent.SendTextWithoutQueue(query),
+                DropEpisodeTracker.Describe(query));
 
             Schedule();
+        }
+
+        // Each queue holds QueueCapacity actions. CrestronQueue.Enqueue blocks indefinitely when the
+        // queue is full, so with the worker stalled every caller (the receive thread, UI and timer
+        // threads) would hang one by one, silently (#194). Full queues drop the action and log instead.
+        private const int QueueCapacity = 100;
+        private readonly DropEpisodeTracker _systemQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
+        private readonly DropEpisodeTracker _commandQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
+
+        private void EnqueueSystemAction(Action action, [CallerMemberName] string caller = "")
+        {
+            Enqueue(_systemActions, _systemQueueFullDrops, action, caller);
+        }
+
+        private void Enqueue(CrestronQueue<Action> queue, DropEpisodeTracker drops, Action action, string what)
+        {
+            var name = queue == _commandActions ? "command" : "system";
+
+            if (queue.TryToEnqueue(action))
+            {
+                var dropped = drops.OnSucceeded();
+                if (dropped > 0)
+                    this.LogInformation("The codec {queue} queue accepts actions again: {count} were dropped while it was full.", name, dropped);
+                return;
+            }
+
+            if (drops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
+                this.LogWarning(
+                    "The codec {queue} queue is full ({capacity} waiting), so {what} was dropped ({count} dropped since the last warning, {total} in this episode). Nothing is being taken off the queue: the worker that sends to the codec may be stuck.",
+                    name, QueueCapacity, what, droppedSinceLog, drops.DroppedInEpisode);
         }
 
         // How a session is recognised (#113). Over RS-232 there are no socket events, and the codec's
@@ -119,7 +142,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         public void LoginMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 StartSession("poll echoed");
                 CheckSyncStatus();
@@ -138,7 +161,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && JsonResponseModeSet)
                 return; // the usual case: nothing to do, and no action queued per message
 
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (LoginMessageWasReceived && JsonResponseModeSet)
                     return;
@@ -179,7 +202,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && !JsonResponseModeSet)
                 return; // the session is already being set up; the watchdog retries if that stalls
 
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (JsonResponseModeSet)
                 {
@@ -228,7 +251,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
         public void FullStatusReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!FullStatusWasReceived)
                     this.LogDebug("Full Codec Status received.");
@@ -243,7 +266,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialStatusMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialStatusMessageWasReceived)
                     this.LogDebug("Initial Codec Status Message Received.");
@@ -258,7 +281,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialConfigurationMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialConfigurationMessageWasReceived)
                     this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
@@ -273,7 +296,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialSoftwareVersionMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
                     this.LogDebug("Initial Codec Software Information received");
@@ -289,7 +312,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void FeedbackRegistered()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!FeedbackWasRegistered)
                     this.LogDebug("Initial Codec Feedback Registration Successful.");
@@ -310,7 +333,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             _commandActions.Clear();
 
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
                 _commandActions.Clear();
@@ -322,7 +345,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void CodecDisconnected()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
                 ResetSync();
@@ -366,7 +389,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (InitialSyncComplete)
                 return;
 
-            _systemActions.Enqueue(RetryMissingSyncSteps);
+            EnqueueSystemAction(RetryMissingSyncSteps);
             Schedule();
         }
 

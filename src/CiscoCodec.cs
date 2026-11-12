@@ -2779,17 +2779,41 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// Writes come from the receive thread, the sync worker and the communication monitor's
 			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
 			// codec gets garbled commands and loses some of them (#123).
+			bool sent;
 			lock (_sendLock)
 			{
 				// Skip writes while the connection is down or being torn down (always true on RS-232).
-				if (!Communication.IsConnected)
-					return;
-
-				Communication.SendText(normalized + Delimiter);
+				sent = Communication.IsConnected;
+				if (sent)
+					Communication.SendText(normalized + Delimiter);
 			}
+
+			// Logged outside the lock, so a slow log write never holds up sending.
+			if (sent)
+			{
+				var dropped = _notConnectedDrops.OnSucceeded();
+				if (dropped > 0)
+					this.LogInformation(
+						"Sending to the codec again: {count} command(s) were not sent while the connection reported not connected.",
+						dropped);
+				return;
+			}
+
+			// A drop used to be silent, so a connection stuck reporting "not connected" while its status
+			// kept arriving looked healthy (#194). Logged once per episode, then every few minutes.
+			if (_notConnectedDrops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
+				this.LogWarning(
+					"Not sent, the connection to the codec reports not connected: {command} ({count} not sent since the last warning, {total} in this episode).",
+					DropEpisodeTracker.Describe(command), droppedSinceLog, _notConnectedDrops.DroppedInEpisode);
 		}
 
 		private readonly object _sendLock = new object();
+
+		// Commands dropped by SendTextWithoutQueue because the connection reported not connected (#194).
+		private readonly DropEpisodeTracker _notConnectedDrops = new DropEpisodeTracker(DropReminderInterval);
+
+		/// <summary>How often a long run of dropped commands is logged again (#194).</summary>
+		internal static readonly TimeSpan DropReminderInterval = TimeSpan.FromMinutes(5);
 
 		// ---- RS-232 login prompt (#115) ------------------------------------------------------------
 		// With xConfiguration SerialPort LoginRequired: On the serial session drops to a login prompt.
