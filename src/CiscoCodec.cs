@@ -2949,27 +2949,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ResetFramerFromAnotherThread(reason);
 			}
 
-			if (cause == SendStallCause.WorkerNotRunning)
+			var action = SendStallRecovery.Choose(cause, Communication is ISocketStatus);
+			this.LogWarning("CODEC_SEND_STALL_RECOVERY action={action} cause={cause}", action, cause);
+
+			switch (action)
 			{
-				// A worker that isn't running is replaced, whatever the transport.
-				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
-				SyncState.RestartWorker();
-			}
-			else if (!(Communication is ISocketStatus))
-			{
-				// Over RS-232 there is no session to reconnect, and a new worker doesn't help: a blocked
-				// write keeps the send lock, so a replacement would block on it too, and every retry
-				// would leave another thread stuck. The JSON hold was reset above, so the current worker
-				// carries on by itself; a blocked write is left to finish, and is reported as
-				// unrecovered if it doesn't.
-				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=keepWorker cause={cause} — no session to reconnect over RS-232", cause);
-			}
-			else
-			{
-				// A blocked write or a JSON response that never ends is cleared by a new session: the
-				// disconnect ends the write and resets the receive state, and the codec is re-synced.
-				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
-				DisconnectClientAndReconnect();
+				case SendStallAction.RestartWorker:
+					SyncState.RestartWorker();
+					break;
+				case SendStallAction.Reconnect:
+					DisconnectClientAndReconnect(); // re-syncs the codec on the new session
+					break;
+				case SendStallAction.KeepWorker:
+					// Over RS-232: the JSON hold was reset above, so the current worker carries on; a
+					// blocked write is left to finish, and is reported as unrecovered if it doesn't.
+					break;
 			}
 
 			// Whatever was done, an empty queue after the drain proves nothing: the stall ends only

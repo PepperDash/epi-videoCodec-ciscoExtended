@@ -16,19 +16,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         bool _initialSyncComplete;
 
-        private const int Idle = 0;
-        private const int Processing = 1;
-        private int _isProcessing;
-
         private readonly CiscoCodec _parent;
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<QueuedAction> _systemActions = new CrestronQueue<QueuedAction>(QueueCapacity);
-        private readonly CrestronQueue<QueuedAction> _commandActions = new CrestronQueue<QueuedAction>(QueueCapacity);
-
-        private Thread _worker;
-        private readonly CEvent _waitHandle = new CEvent();
+        // The worker that sends to the codec (#194). Its loop has no Crestron dependencies, so it is
+        // unit tested; here it gets the processor's thread, queues and signal.
+        private readonly SendWorker _worker;
 
         public string Key { get; private set; }
 
@@ -72,6 +66,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             Key = key;
             _parent = parent;
 
+            _worker = new SendWorker(
+                new CrestronActionQueue(QueueCapacity),
+                new CrestronActionQueue(QueueCapacity),
+                new CEventSignal(),
+                loop => new Thread(_ => { loop(); return null; }, null, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" },
+                () => _parent.IsReceivingJsonMessage,
+                new SendQueueHealth(),
+                (label, ex) =>
+                {
+                    this.LogError("Error processing {label}: {message}", label, ex.Message);
+                    this.LogVerbose(ex, "Exception");
+                });
+
             _syncWatchdogTimer = new CTimer(o => CheckSyncProgress(), null, SyncWatchdogIntervalMs, SyncWatchdogIntervalMs);
 
             CrestronEnvironment.ProgramStatusEventHandler += type =>
@@ -82,8 +89,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _syncWatchdogTimer.Stop();
                     _syncWatchdogTimer.Dispose();
 
-                    Interlocked.Exchange(ref _isProcessing, Idle);
-                    _waitHandle.Set();
+                    _worker.Stop();
                 };
         }
 
@@ -92,7 +98,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(query))
                 return;
 
-            Enqueue(_commandActions, _commandQueueFullDrops, () => _parent.SendTextWithoutQueue(query),
+            Enqueue(SendQueueKind.Command, _commandQueueFullDrops, () => _parent.SendTextWithoutQueue(query),
                 DropEpisodeTracker.Describe(query));
 
             Schedule();
@@ -107,43 +113,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private void EnqueueSystemAction(Action action, [CallerMemberName] string caller = "")
         {
-            Enqueue(_systemActions, _systemQueueFullDrops, action, caller);
+            Enqueue(SendQueueKind.System, _systemQueueFullDrops, action, caller);
         }
 
         /// <summary>What the send path is doing, for codecperf and the send watchdog (#194).</summary>
-        internal SendQueueHealth SendHealth { get; } = new SendQueueHealth();
+        internal SendQueueHealth SendHealth => _worker.Health;
 
-        /// <summary>A queued action with a short description of it, so a stuck worker can say what it is stuck on.</summary>
-        private sealed class QueuedAction
+        private void ClearCommands() => _worker.ClearCommands();
+
+        private void Enqueue(SendQueueKind kind, DropEpisodeTracker drops, Action action, string what)
         {
-            public QueuedAction(Action run, string what)
-            {
-                Run = run;
-                What = what;
-            }
-
-            public Action Run { get; }
-            public string What { get; }
-        }
-
-        private void ClearCommands()
-        {
-            _commandActions.Clear();
-            SendHealth.OnCleared(SendQueueKind.Command);
-        }
-
-        private SendQueueKind KindOf(CrestronQueue<QueuedAction> queue) =>
-            queue == _commandActions ? SendQueueKind.Command : SendQueueKind.System;
-
-        private void Enqueue(CrestronQueue<QueuedAction> queue, DropEpisodeTracker drops, Action action, string what)
-        {
-            var kind = KindOf(queue);
             var name = kind == SendQueueKind.Command ? "command" : "system";
 
-            // Counted before it goes on the queue: the worker may take it off and run it before this
-            // thread continues, and a count made afterwards would then stay one too high for good.
-            SendHealth.OnEnqueued(kind, DateTime.UtcNow);
-            if (queue.TryToEnqueue(new QueuedAction(action, what)))
+            if (_worker.Enqueue(kind, action, what))
             {
                 var dropped = drops.OnSucceeded();
                 if (dropped > 0)
@@ -151,7 +133,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return;
             }
 
-            SendHealth.OnEnqueueRejected(kind);
             if (drops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
                 this.LogWarning(
                     "The codec {queue} queue is full ({capacity} waiting), so {what} was dropped ({count} dropped since the last warning, {total} in this episode). Nothing is being taken off the queue: the worker that sends to the codec may be stuck.",
@@ -563,35 +544,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"), SyncPhaseMs("fullStatus"));
         }
 
-        private void Schedule()
-        {
-            if (Interlocked.CompareExchange(
-                ref _isProcessing,
-                Processing,
-                Idle) ==
-                Idle)
-                _worker = new Thread(RunSyncState, CurrentGeneration, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
-
-            _waitHandle.Set();
-        }
-
-        // Each worker runs only while the generation it started with is current (#194): after
-        // RestartWorker an old worker that wakes up again exits, so two never take actions together.
-        private int _workerGeneration;
-
-        private int CurrentGeneration => Interlocked.CompareExchange(ref _workerGeneration, 0, 0);
+        private void Schedule() => _worker.Schedule();
 
         /// <summary>
         /// Starts a new worker when the current one has stopped taking actions off the queues (#194).
         /// Called by the send watchdog, from its own timer.
         /// </summary>
-        internal void RestartWorker()
-        {
-            Interlocked.Increment(ref _workerGeneration);
-            Interlocked.Exchange(ref _isProcessing, Idle);
-            SendHealth.OnWorkerReplaced();
-            Schedule();
-        }
+        internal void RestartWorker() => _worker.RestartWorker();
 
         /// <summary>
         /// Queues a probe so the send watchdog can see the worker finish something after a recovery
@@ -613,75 +572,36 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// Empties the command queue without sending, so commands that waited out a stall aren't sent
         /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
         /// </summary>
-        internal int DrainCommands(int describe, out List<string> described)
+        internal int DrainCommands(int describe, out List<string> described) =>
+            _worker.DrainCommands(describe, out described);
+
+        /// <summary>A CrestronQueue for the send worker. TryToEnqueue never blocks (Enqueue would, when full).</summary>
+        private sealed class CrestronActionQueue : IActionQueue
         {
-            described = new List<string>();
-            var dropped = 0;
-            while (_commandActions.TryToDequeue(out var action))
+            private readonly CrestronQueue<QueuedAction> _queue;
+
+            public CrestronActionQueue(int capacity)
             {
-                dropped++;
-                if (described.Count < describe)
-                    described.Add(action.What);
+                _queue = new CrestronQueue<QueuedAction>(capacity);
             }
 
-            SendHealth.OnCleared(SendQueueKind.Command);
-            return dropped;
+            public bool TryEnqueue(QueuedAction action) => _queue.TryToEnqueue(action);
+
+            public bool TryDequeue(out QueuedAction action) => _queue.TryToDequeue(out action);
+
+            public void Clear() => _queue.Clear();
         }
 
-        private object RunSyncState(object o)
+        /// <summary>A CEvent (auto-reset) as the send worker's wake-up signal.</summary>
+        private sealed class CEventSignal : IWorkerSignal
         {
-            var generation = (int)o;
-            while (_isProcessing == Processing && generation == CurrentGeneration)
-            {
-                // Hold off sending anything to the codec while a JSON response is currently being
-                // accumulated - the codec can echo in-flight commands back into the response stream,
-                // which corrupts the JSON buffer being parsed.
-                if (_parent.IsReceivingJsonMessage)
-                {
-                    SendHealth.OnJsonHold(DateTime.UtcNow);
-                    _waitHandle.Wait(20);
-                    continue;
-                }
+            private readonly CEvent _event = new CEvent();
 
-                SendHealth.OnJsonHoldEnded();
+            public void Set() => _event.Set();
 
-                // System actions always go first.
-                if (RunNext(_systemActions, "system action", generation) || RunNext(_commandActions, "user action", generation))
-                    continue;
+            public void Wait() => _event.Wait();
 
-                // Both queues are empty: whatever the bookkeeping says, nothing is waiting.
-                SendHealth.OnQueuesEmpty();
-                _waitHandle.Wait();
-            }
-
-            return null;
-        }
-
-        /// <summary>Runs the next action on <paramref name="queue"/>, if any. Runs on the worker thread.</summary>
-        private bool RunNext(CrestronQueue<QueuedAction> queue, string label, int generation)
-        {
-            if (!queue.TryToDequeue(out var next))
-                return false;
-
-            SendHealth.OnStarted(KindOf(queue), next.What, DateTime.UtcNow);
-            try
-            {
-                next.Run();
-            }
-            catch (Exception ex)
-            {
-                this.LogError("Error processing {label}: {message}", label, ex.Message);
-                this.LogVerbose(ex, "Exception");
-            }
-            finally
-            {
-                // A worker replaced by RestartWorker while blocked here must not clear the busy state
-                // of the worker that replaced it, which would hide that one being blocked.
-                if (generation == CurrentGeneration)
-                    SendHealth.OnFinished();
-            }
-
-            return true;
+            public void Wait(int timeoutMs) => _event.Wait(timeoutMs);
         }
     }
 }
