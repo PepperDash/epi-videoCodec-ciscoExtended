@@ -280,7 +280,7 @@ Provided under MIT license
 Commands to the codec go through one queue and one worker. If that worker stops taking commands off the queue, the codec can still look healthy: its status keeps arriving and the communication monitor stays OK. The plugin watches for this.
 
 - When commands have waited `commandStallTimeoutSeconds` (default 30) with none sent, or one command has been running that long, it logs `CODEC_SEND_STALL_START` with the cause and the queue's state.
-- It then drops the commands that waited (`CODEC_SEND_STALL_DROPPED`, with the first few named), so an old camera reset or standby isn't sent minutes late, and recovers: it restarts the worker, or reconnects the session if the worker is blocked or held off by a JSON response that never ends (`CODEC_SEND_STALL_RECOVERY`). It tries again at most every 5 minutes while the stall lasts.
+- It then drops the commands that waited (`CODEC_SEND_STALL_DROPPED`, with the first few named), so an old camera reset or standby isn't sent minutes late, and recovers (`CODEC_SEND_STALL_RECOVERY`): it restarts the worker if it isn't running; a JSON response that never ends is abandoned; and a worker that is blocked or held off reconnects the session. Over RS-232 there is no session to reconnect and a new worker would block the same way, so the current worker is kept and a blocked write is left to finish. It tries again at most every 5 minutes while the stall lasts.
 - `CODEC_SEND_STALL_END` is logged when commands go out again.
 
 Commands dropped because the connection reports not connected, or because the queue is full, are logged as warnings too: once when it starts, every 5 minutes while it lasts, and once when it ends.

@@ -2914,11 +2914,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ResetFramerFromAnotherThread(reason);
 			}
 
-			if (cause == SendStallCause.WorkerNotRunning || !(Communication is ISocketStatus))
+			// A worker that isn't running is replaced, whatever the transport.
+			if (cause == SendStallCause.WorkerNotRunning)
 			{
-				// Over RS-232 there is no session to reconnect: a new worker is all that can be done.
 				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
 				SyncState.RestartWorker();
+				return;
+			}
+
+			// Over RS-232 there is no session to reconnect, and a new worker doesn't help: a blocked
+			// write keeps the send lock, so a replacement would block on it too, and every retry would
+			// leave another thread stuck. The JSON hold was reset above, so the current worker carries
+			// on by itself; a blocked write is left to finish, and is reported as unrecovered if it
+			// doesn't.
+			if (!(Communication is ISocketStatus))
+			{
+				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=keepWorker cause={cause} — no session to reconnect over RS-232", cause);
 				return;
 			}
 
