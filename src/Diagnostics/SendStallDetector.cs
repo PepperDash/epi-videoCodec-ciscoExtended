@@ -50,6 +50,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private DateTime? _stalledSinceUtc;
         private DateTime _nextRecoveryUtc = DateTime.MinValue;
+        private DateTime? _lastRecoveryUtc;
 
         /// <param name="stallAfter">How long without progress counts as a stall.</param>
         /// <param name="recoveryInterval">Least time between two recovery attempts.</param>
@@ -101,6 +102,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return SendStallTransition.None;
 
                 _stalledSinceUtc = null;
+                _lastRecoveryUtc = null; // the next stall starts without a recovery attempt
                 return SendStallTransition.Recovered;
             }
         }
@@ -117,8 +119,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return false;
 
                 _nextRecoveryUtc = nowUtc + _recoveryInterval;
+                _lastRecoveryUtc = nowUtc;
                 return true;
             }
+        }
+
+        /// <summary>
+        /// True when a recovery was tried during this stall and the path is still stalled
+        /// <c>stallAfter</c> later: recovering didn't help, so the device should show a fault. False
+        /// when not stalled, or before a recovery has had time to work.
+        /// </summary>
+        public bool RecoveryFailed(DateTime nowUtc)
+        {
+            lock (_sync)
+                return _stalledSinceUtc != null && _lastRecoveryUtc != null && nowUtc - _lastRecoveryUtc.Value >= _stallAfter;
         }
 
         /// <summary>Why <paramref name="snapshot"/> counts as stalled, or <see cref="SendStallCause.None"/>.</summary>

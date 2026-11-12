@@ -2869,6 +2869,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						this.LogInformation(
 							"CODEC_SEND_STALL_END durationS={duration:0} — commands to the codec are going out again",
 							stalledFor.TotalSeconds);
+						(CommunicationMonitor as CiscoCommunicationMonitor)?.ReleaseHold(CommunicationHoldReason.SendStalled);
 						return;
 					case SendStallTransition.None:
 						if (!_sendStall.IsStalled)
@@ -2878,6 +2879,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				if (_sendStall.TryAcquireRecovery(now))
 					RecoverSendPath(cause);
+
+				// Recovering didn't help: show the fault on the device (devcommstatus, System Status)
+				// rather than leave it IsOk while nothing reaches the codec. Released at the stall's end.
+				if (_sendStall.RecoveryFailed(now)
+					&& CommunicationMonitor is CiscoCommunicationMonitor monitor
+					&& !monitor.IsHeldFor(CommunicationHoldReason.SendStalled))
+				{
+					this.LogError(
+						"CODEC_SEND_STALL_UNRECOVERED cause={cause} {state} — recovering didn't get commands to the codec moving; the communication monitor reports an error until they do",
+						cause, snapshot.Format());
+					monitor.HoldInError(CommunicationHoldReason.SendStalled);
+				}
 			}
 			catch (Exception ex)
 			{
