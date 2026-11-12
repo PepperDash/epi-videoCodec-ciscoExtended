@@ -419,9 +419,14 @@ public class SendWorkerTests : IDisposable
         // Every JSON document, status reply or text line asks for a sync step. While the worker is
         // stalled, each step waits once, however many messages ask for it.
         var h = Track(new Harness(capacity: 100, startFirstWorker: false));
-        var keys = new[] { "JsonMessageReceived", "TextOutputReceived", "InitialStatusMessageReceived", "InitialSoftwareVersionMessageReceived", "CheckSyncProgress" };
+        // The keys with the session modes production gives them.
+        var keys = new (string Key, string? Mode)[]
+        {
+            ("LoginMessageReceived", "text"), ("TextOutputReceived", "text"), ("InitialStatusMessageReceived", null),
+            ("InitialSoftwareVersionMessageReceived", null), ("CheckSyncProgress", null)
+        };
         for (var i = 0; i < 1000; i++)
-            h.Worker.EnqueueSystemOnce(keys[i % keys.Length], () => { }).Should().BeTrue();
+            h.Worker.EnqueueSystemOnce(keys[i % keys.Length].Key, () => { }, keys[i % keys.Length].Mode).Should().BeTrue();
 
         h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(keys.Length);
         h.Worker.Enqueue(SendQueueKind.System, () => { }, "room for more").Should().BeTrue("the queue is far from full");
@@ -501,6 +506,87 @@ public class SendWorkerTests : IDisposable
         h.Worker.RestartWorker();
         WaitUntil(() => ran.Count == 3);
         ran.Should().Equal("step", "reset", "step");
+    }
+
+    [Fact]
+    public void Steps_Keep_Their_Order_Across_A_Session_Mode_Change()
+    {
+        // JSON, then text output (the session left JSON mode), then JSON again: the second JSON must
+        // run after the text step, or JSON mode is left unset.
+        var h = Track(new Harness(startFirstWorker: false));
+        var ran = new ConcurrentQueue<string>();
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => ran.Enqueue("json"), sessionMode: "json");
+        h.Worker.EnqueueSystemOnce("TextOutputReceived", () => ran.Enqueue("text"), sessionMode: "text");
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => ran.Enqueue("json"), sessionMode: "json");
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => ran.Count == 3);
+        ran.Should().Equal("json", "text", "json");
+    }
+
+    [Fact]
+    public void Steps_Still_Coalesce_Across_Steps_That_Are_Not_Mode_Changes()
+    {
+        // JSON documents that are also status replies: JSON, status, JSON, status... The mode doesn't
+        // change, so each step still waits once.
+        var h = Track(new Harness(startFirstWorker: false));
+        for (var i = 0; i < 200; i++)
+        {
+            h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => { }, sessionMode: "json").Should().BeTrue();
+            h.Worker.EnqueueSystemOnce("InitialStatusMessageReceived", () => { }).Should().BeTrue();
+        }
+
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2);
+    }
+
+    [Fact]
+    public void An_Older_Copy_Does_Not_Release_A_Newer_Copys_Mark()
+    {
+        // K, reset, K: when the old K starts it must leave the new K's mark alone, so a request made
+        // while it runs is served by the new K instead of queuing a third copy.
+        var h = Track(new Harness(startFirstWorker: false));
+        var oldRunning = Gate();
+        var releaseOld = Gate();
+        var runs = 0;
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () =>
+        {
+            if (Interlocked.Increment(ref runs) == 1)
+            {
+                oldRunning.Set();
+                releaseOld.Wait();
+            }
+        });
+        h.Worker.EnqueueReset(() => { }, "CodecDisconnected");
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => Interlocked.Increment(ref runs));
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        oldRunning.Wait(Timeout).Should().BeTrue();
+
+        // The old copy is running; the reset and the new copy wait.
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => Interlocked.Increment(ref runs));
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2, "the reset and the new copy, no third copy");
+
+        releaseOld.Set();
+        WaitUntil(() => Volatile.Read(ref runs) == 2);
+        Thread.Sleep(50);
+        Volatile.Read(ref runs).Should().Be(2);
+    }
+
+    [Fact]
+    public void Steps_Of_The_Same_Session_Mode_Still_Collapse_When_They_Alternate()
+    {
+        // Text mode with echo on and a stalled worker: every poll brings an echoed poll line (login
+        // echo) and text output. Both mean "text mode", so they must not fence each other off.
+        var h = Track(new Harness(startFirstWorker: false));
+        for (var poll = 0; poll < 100; poll++)
+        {
+            h.Worker.EnqueueSystemOnce("LoginMessageReceived", () => { }, sessionMode: "text").Should().BeTrue();
+            h.Worker.EnqueueSystemOnce("TextOutputReceived", () => { }, sessionMode: "text").Should().BeTrue();
+        }
+
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2);
     }
 
     [Fact]
