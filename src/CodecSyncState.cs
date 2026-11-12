@@ -122,8 +122,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <param name="sessionMode">
         /// The session mode a step detects (<see cref="JsonMode"/> or <see cref="TextMode"/>): a copy of
         /// any step waiting from before the mode changed won't serve a request made after it, so steps
-        /// keep their order across the change. Steps of the same mode (a login echo and text output)
-        /// don't separate each other.
+        /// keep their order across the change. Steps of the same mode don't separate each other. A
+        /// poll echo (LoginMessageReceived) gives no mode: it only proves a session exists, and a session
+        /// in JSON mode with echo still on echoes polls too.
         /// </param>
         /// <param name="caller">The step's name (its caller).</param>
         private void EnqueueSystemAction(Action action, string sessionMode = null, [CallerMemberName] string caller = "")
@@ -204,7 +205,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 StartSession("poll echoed");
                 CheckSyncStatus();
-            }, TextMode);
+            });
 
             Schedule();
         }

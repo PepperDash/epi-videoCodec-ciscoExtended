@@ -203,7 +203,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _waitingSteps[key] = token; // the newest copy holds the mark
                     if (sessionMode != null && !string.Equals(sessionMode, _lastMode, StringComparison.Ordinal))
                     {
-                        _lastBoundaryToken = token;
+                        // Only a change from one known mode to another orders anything: the first
+                        // mode seen has nothing of another mode before it to keep steps on the other side of.
+                        if (_lastMode != null)
+                            _lastBoundaryToken = token;
                         _lastMode = sessionMode;
                     }
                 }

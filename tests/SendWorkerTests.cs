@@ -422,7 +422,7 @@ public class SendWorkerTests : IDisposable
         // The keys with the session modes production gives them.
         var keys = new (string Key, string? Mode)[]
         {
-            ("LoginMessageReceived", "text"), ("TextOutputReceived", "text"), ("InitialStatusMessageReceived", null),
+            ("LoginMessageReceived", null), ("TextOutputReceived", "text"), ("InitialStatusMessageReceived", null),
             ("InitialSoftwareVersionMessageReceived", null), ("CheckSyncProgress", null)
         };
         for (var i = 0; i < 1000; i++)
@@ -582,8 +582,23 @@ public class SendWorkerTests : IDisposable
         var h = Track(new Harness(startFirstWorker: false));
         for (var poll = 0; poll < 100; poll++)
         {
-            h.Worker.EnqueueSystemOnce("LoginMessageReceived", () => { }, sessionMode: "text").Should().BeTrue();
+            h.Worker.EnqueueSystemOnce("LoginMessageReceived", () => { }).Should().BeTrue();
             h.Worker.EnqueueSystemOnce("TextOutputReceived", () => { }, sessionMode: "text").Should().BeTrue();
+        }
+
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2);
+    }
+
+    [Fact]
+    public void Poll_Echoes_Do_Not_Separate_Json_Replies()
+    {
+        // A JSON-mode session with echo still on, worker stalled before JSON mode is recorded: every
+        // poll brings an echo (no mode) and JSON replies. The echo must not fence off the JSON step.
+        var h = Track(new Harness(startFirstWorker: false));
+        for (var poll = 0; poll < 100; poll++)
+        {
+            h.Worker.EnqueueSystemOnce("LoginMessageReceived", () => { }).Should().BeTrue();
+            h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => { }, sessionMode: "json").Should().BeTrue();
         }
 
         h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2);
