@@ -2898,6 +2898,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						break;
 				}
 
+				if (cause == SendStallCause.None)
+				{
+					// Still counted as stalled, but nothing is stuck now: the worker is taking actions, and
+					// only the probe's confirmation is missing (the probe may have been lost to a full
+					// queue or a session reset). Ask again on every check, and neither drain, restart or
+					// reconnect a path that is moving, nor report it as unrecovered.
+					SyncState.EnqueueWatchdogProbe();
+					return;
+				}
+
 				if (_sendStall.TryAcquireRecovery(now))
 					RecoverSendPath(cause);
 
