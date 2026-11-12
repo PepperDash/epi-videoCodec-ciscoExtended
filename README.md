@@ -269,10 +269,23 @@ Provided under MIT license
         "Name": "Presenter"
       }
     ],
-    "vlanId": 1 // optional property to specify the VLAN ID for the camera network on a managed switch. Used by the CameraManager
+    "vlanId": 1, // optional property to specify the VLAN ID for the camera network on a managed switch. Used by the CameraManager
+    "commandStallTimeoutSeconds": 30 // optional, see "Send watchdog" below. 0 turns the watchdog off
   }
 }
 ```
+
+### Send watchdog
+
+Commands to the codec go through one queue and one worker. If that worker stops taking commands off the queue, the codec can still look healthy: its status keeps arriving and the communication monitor stays OK. The plugin watches for this.
+
+- When commands have waited `commandStallTimeoutSeconds` (default 30) with none sent, or one command has been running that long, it logs `CODEC_SEND_STALL_START` with the cause and the queue's state.
+- It then drops the commands that waited (`CODEC_SEND_STALL_DROPPED`, with the first few named), so an old camera reset or standby isn't sent minutes late, and recovers: it restarts the worker, or reconnects the session if the worker is blocked or held off by a JSON response that never ends (`CODEC_SEND_STALL_RECOVERY`). It tries again at most every 5 minutes while the stall lasts.
+- `CODEC_SEND_STALL_END` is logged when commands go out again.
+
+Commands dropped because the connection reports not connected, or because the queue is full, are logged as warnings too: once when it starts, every 5 minutes while it lasts, and once when it ends.
+
+`codecperf <codecKey>` shows the send path on its `Send:` line: whether the connection reports connected, how many commands wait and for how long, what the worker is running, how long it has held off for an incoming JSON response, and when text last went out.
 
 ## Navigator
 
