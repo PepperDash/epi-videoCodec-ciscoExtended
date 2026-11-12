@@ -281,6 +281,7 @@ Commands to the codec go through one queue and one worker. If that worker stops 
 
 - When commands have waited `commandStallTimeoutSeconds` (default 30) with none sent, or one command has been running that long, it logs `CODEC_SEND_STALL_START` with the cause and the queue's state.
 - It then drops the commands that waited (`CODEC_SEND_STALL_DROPPED`, with the first few named), so an old camera reset or standby isn't sent minutes late, and recovers: it restarts the worker, or reconnects the session if the worker is blocked or held off by a JSON response that never ends (`CODEC_SEND_STALL_RECOVERY`). It tries again at most every 5 minutes while the stall lasts.
+- If the stall is still there `commandStallTimeoutSeconds` after a recovery attempt, it logs `CODEC_SEND_STALL_UNRECOVERED` and the communication monitor reports an error (`devcommstatus`, System Status) until commands go out again. Meanwhile the camera manager treats the codec as offline and holds floating-camera recovery for its cameras.
 - `CODEC_SEND_STALL_END` is logged when commands go out again.
 
 Commands dropped because the connection reports not connected, or because the queue is full, are logged as warnings too: once when it starts, every 5 minutes while it lasts, and once when it ends.
