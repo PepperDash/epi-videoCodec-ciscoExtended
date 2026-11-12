@@ -154,14 +154,71 @@ public class SendStallDetectorTests
     [Fact]
     public void A_New_Stall_Starts_Without_The_Old_Recovery_Attempt()
     {
+        // Once the interval has passed, a new attempt is allowed: the old one doesn't count.
         var detector = Create();
         detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
         detector.TryAcquireRecovery(T0);
         detector.Evaluate(Snapshot(T0.AddSeconds(10), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
 
-        detector.Evaluate(Snapshot(T0.AddMinutes(1), commands: 1, waiting: 31), out _, out _)
+        detector.Evaluate(Snapshot(T0.AddMinutes(6), commands: 1, waiting: 31, probes: 1), out _, out _)
             .Should().Be(SendStallTransition.Stalled);
-        detector.RecoveryFailed(T0.AddMinutes(2)).Should().BeFalse("this stall hasn't had a recovery attempt yet");
+        detector.RecoveryFailed(T0.AddMinutes(7)).Should().BeFalse("this stall hasn't had a recovery attempt yet");
+        detector.TryAcquireRecovery(T0.AddMinutes(7)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_Stall_Back_Within_The_Recovery_Interval_Shows_The_Fault()
+    {
+        // The reconnect cleared the stall, but it came straight back (e.g. a JSON response that never
+        // ends, sent again after the new session's sync). No new attempt is allowed for 5 minutes, so
+        // the earlier one counts: the fault shows stallAfter into this stall, not after the interval.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 3, waiting: 31, jsonHold: 31), out _, out _);
+        detector.TryAcquireRecovery(T0).Should().BeTrue();
+        detector.Evaluate(Snapshot(T0.AddSeconds(5), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+
+        var back = T0.AddSeconds(40); // commands waiting since T0+9, after the queue emptied at T0+5
+        detector.Evaluate(Snapshot(back, commands: 1, waiting: 31, jsonHold: 32, probes: 1), out _, out _)
+            .Should().Be(SendStallTransition.Stalled);
+        detector.TryAcquireRecovery(back).Should().BeFalse("still within the interval");
+        detector.RecoveryFailed(back).Should().BeFalse("not before stallAfter into this stall");
+        detector.RecoveryFailed(back.AddSeconds(29)).Should().BeFalse();
+        detector.RecoveryFailed(back.AddSeconds(30)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_Counted_Attempt_Still_Needs_A_Probe_After_The_Real_One()
+    {
+        // The stall carried the earlier attempt; when the interval allows a real one, its drain empties
+        // the queue, and only a probe completing after it ends the stall.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+        detector.Evaluate(Snapshot(T0.AddSeconds(5), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.Evaluate(Snapshot(T0.AddSeconds(40), commands: 1, waiting: 31, probes: 1), out _, out _)
+            .Should().Be(SendStallTransition.Stalled);
+
+        var retry = T0.AddMinutes(5);
+        detector.Evaluate(Snapshot(retry, commands: 2, waiting: 260, probes: 1), out _, out _);
+        detector.TryAcquireRecovery(retry).Should().BeTrue();
+        detector.Evaluate(Snapshot(retry.AddSeconds(2), probes: 1), out _, out _).Should().Be(SendStallTransition.None,
+            "the drain emptied the queue; nothing has got through since");
+        detector.Evaluate(Snapshot(retry.AddSeconds(4), probes: 2), out _, out _).Should().Be(SendStallTransition.Recovered);
+    }
+
+    [Fact]
+    public void A_Counted_Attempt_Ends_Without_A_Probe_When_The_Path_Clears_By_Itself()
+    {
+        // No attempt was run in this stall, so nothing was drained: an empty queue is real progress.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+        detector.Evaluate(Snapshot(T0.AddSeconds(5), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.Evaluate(Snapshot(T0.AddSeconds(40), commands: 1, waiting: 31, probes: 1), out _, out _)
+            .Should().Be(SendStallTransition.Stalled);
+
+        detector.Evaluate(Snapshot(T0.AddSeconds(50), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.RecoveryFailed(T0.AddSeconds(80)).Should().BeFalse();
     }
 
     [Fact]

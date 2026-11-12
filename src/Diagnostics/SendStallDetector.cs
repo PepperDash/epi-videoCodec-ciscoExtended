@@ -53,7 +53,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private DateTime? _firstRecoveryUtc;
 
         // Probe completions seen by the last Evaluate, and the count when this stall's first recovery
-        // was tried: the stall ends only once a probe completes after that.
+        // was actually run: the stall ends only once a probe completes after that.
         private long _lastSeenProbes;
         private long? _probesAtFirstRecovery;
 
@@ -101,6 +101,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                         return SendStallTransition.None;
 
                     _stalledSinceUtc = now;
+                    // A stall that starts while the last recovery's interval is still running means that
+                    // recovery didn't hold, and no new attempt is allowed yet. Count it as this stall's
+                    // attempt, so the fault shows stallAfter from now instead of after the interval.
+                    if (now < _nextRecoveryUtc)
+                        _firstRecoveryUtc = now;
                     return SendStallTransition.Stalled;
                 }
 
@@ -135,11 +140,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 _nextRecoveryUtc = nowUtc + _recoveryInterval;
                 // The first attempt of the stall: later retries must not restart the failure window.
                 if (_firstRecoveryUtc == null)
-                {
                     _firstRecoveryUtc = nowUtc;
-                    // Taken from this tick's Evaluate, before the recovery queues its probe.
+                // The first attempt actually run (a stall can start with the previous stall's attempt
+                // counted): from now on only a probe proves the path moves. Taken from this tick's
+                // Evaluate, before the recovery queues its probe.
+                if (_probesAtFirstRecovery == null)
                     _probesAtFirstRecovery = _lastSeenProbes;
-                }
                 return true;
             }
         }
@@ -147,8 +153,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>
         /// True when a recovery was first tried during this stall at least <c>stallAfter</c> ago and the
         /// path is still stalled: recovering didn't help, so the device should show a fault. Measured
-        /// from the first attempt, so retries can't postpone it. False when not stalled, or before a
-        /// recovery has had time to work.
+        /// from the first attempt, so retries can't postpone it. A stall that starts within the
+        /// recovery interval of an earlier attempt counts that attempt from its own start, since no new
+        /// one is allowed yet. False when not stalled, or before a recovery has had time to work.
         /// </summary>
         public bool RecoveryFailed(DateTime nowUtc)
         {
