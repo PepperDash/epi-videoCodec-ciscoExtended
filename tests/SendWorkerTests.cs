@@ -144,6 +144,34 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
+    public void Write_Blocked_Under_The_Send_Lock_Over_Serial_Is_Reported_As_Unrecovered()
+    {
+        // The write holds the send lock and never returns. Over RS-232 the watchdog can only start a
+        // new worker, which shares that lock: the probe must not finish, so the stall can't end and
+        // the failure gets reported instead of a recovery every 5 minutes.
+        var h = new Harness(canReconnect: false);
+        var write = Gate();
+        h.Worker.Enqueue(SendQueueKind.Command, () => { lock (h.SendLock) write.Wait(); }, "xCommand Standby Activate");
+        h.Worker.Schedule();
+
+        var check = h.WatchUntil(c => c.Action != null);
+        check.Cause.Should().Be(SendStallCause.WorkerBlocked);
+        check.Action.Should().Be(SendStallAction.RestartWorker);
+
+        // Past the failure window the stall is still on and the recovery counts as failed.
+        Thread.Sleep(StallAfter + TimeSpan.FromMilliseconds(300));
+        var after = h.Check();
+        after.Transition.Should().NotBe(SendStallTransition.Recovered);
+        h.Detector.IsStalled.Should().BeTrue();
+        h.Detector.RecoveryFailed(DateTime.UtcNow).Should().BeTrue();
+        after.Busy.Should().Be("SendWatchdogProbe", "the new worker waits on the probe behind the blocked write");
+
+        // The write returns at last: the probe finishes and the stall ends.
+        write.Set();
+        h.WatchUntil(c => c.Transition == SendStallTransition.Recovered);
+    }
+
+    [Fact]
     public void Json_Response_That_Never_Ends_Is_Detected_And_A_Reconnect_Clears_It()
     {
         var h = new Harness { ReceivingJson = true };
@@ -357,6 +385,11 @@ public class SendWorkerTests : IDisposable
 
         public Action OnReconnect { get; set; } = () => { };
 
+        /// <summary>Stands in for CiscoCodec's send lock: a write holds it while it runs.</summary>
+        public object SendLock { get; } = new();
+
+        public SendStallDetector Detector => _detector;
+
         public int Starts => Volatile.Read(ref _starts);
 
         private void StartThread(Action loop)
@@ -382,8 +415,9 @@ public class SendWorkerTests : IDisposable
             else
                 OnReconnect();
 
-            // As CiscoCodec does: a probe whose completion confirms the recovery.
-            Worker.Enqueue(SendQueueKind.System, () => { }, "SendWatchdogProbe");
+            // As CiscoCodec does: a probe whose completion confirms the recovery. It waits for the
+            // send lock, like a real command (CiscoCodec.WaitForSendPath).
+            Worker.Enqueue(SendQueueKind.System, () => { lock (SendLock) { } }, "SendWatchdogProbe");
             Worker.Schedule();
 
             return new Check(transition, cause, action, dropped, snapshot.BusyWith);
