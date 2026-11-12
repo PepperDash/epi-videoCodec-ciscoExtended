@@ -2905,6 +2905,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					"CODEC_SEND_STALL_DROPPED count={count} — commands that waited out the stall were not sent: {commands}{more}",
 					dropped, string.Join(", ", described), dropped > described.Count ? ", ..." : "");
 
+			// A JSON response that never ends holds every worker, a new one included: abandon it first.
+			// A reconnect would reset it too, but over RS-232 there is no session to reconnect.
+			if (cause == SendStallCause.JsonHold)
+			{
+				const string reason = "the send watchdog found commands held behind it";
+				ResetJsonReceiveState(reason);
+				ResetFramerFromAnotherThread(reason);
+			}
+
 			if (cause == SendStallCause.WorkerNotRunning || !(Communication is ISocketStatus))
 			{
 				// Over RS-232 there is no session to reconnect: a new worker is all that can be done.
