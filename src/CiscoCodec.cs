@@ -2939,30 +2939,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				ResetFramerFromAnotherThread(reason);
 			}
 
-			// A worker that isn't running is replaced, whatever the transport.
 			if (cause == SendStallCause.WorkerNotRunning)
 			{
+				// A worker that isn't running is replaced, whatever the transport.
 				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
 				SyncState.RestartWorker();
-				SyncState.EnqueueWatchdogProbe();
-				return;
 			}
-
-			// Over RS-232 there is no session to reconnect, and a new worker doesn't help: a blocked
-			// write keeps the send lock, so a replacement would block on it too, and every retry would
-			// leave another thread stuck. The JSON hold was reset above, so the current worker carries
-			// on by itself; a blocked write is left to finish, and is reported as unrecovered if it
-			// doesn't.
-			if (!(Communication is ISocketStatus))
+			else if (!(Communication is ISocketStatus))
 			{
+				// Over RS-232 there is no session to reconnect, and a new worker doesn't help: a blocked
+				// write keeps the send lock, so a replacement would block on it too, and every retry
+				// would leave another thread stuck. The JSON hold was reset above, so the current worker
+				// carries on by itself; a blocked write is left to finish, and is reported as
+				// unrecovered if it doesn't.
 				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=keepWorker cause={cause} — no session to reconnect over RS-232", cause);
-				return;
+			}
+			else
+			{
+				// A blocked write or a JSON response that never ends is cleared by a new session: the
+				// disconnect ends the write and resets the receive state, and the codec is re-synced.
+				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
+				DisconnectClientAndReconnect();
 			}
 
-			// A blocked write or a JSON response that never ends is cleared by a new session: the
-			// disconnect ends the write and resets the receive state, and the codec is re-synced.
-			this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
-			DisconnectClientAndReconnect();
+			// Whatever was done, an empty queue after the drain proves nothing: the stall ends only
+			// once this probe gets through the send path.
 			SyncState.EnqueueWatchdogProbe();
 		}
 
