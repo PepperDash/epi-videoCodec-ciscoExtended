@@ -62,6 +62,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <summary>How often the worker re-checks while holding off for a JSON response.</summary>
         public const int JsonHoldPollMs = 20;
 
+        /// <summary>
+        /// The longest an idle worker sleeps before checking the queues again, so a lost wake-up can
+        /// only delay work, never leave it queued for good.
+        /// </summary>
+        public const int IdleRecheckMs = 5000;
+
         private readonly IActionQueue _system;
         private readonly IActionQueue _command;
         private readonly IWorkerSignal _signal;
@@ -273,6 +279,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
+        /// <summary>
+        /// A replaced worker exiting may have taken a wake-up meant for its replacement (both wait on
+        /// the same auto-reset signal): it passes one on before it goes.
+        /// </summary>
+        private void PassWakeOn() => _signal.Set();
+
         private void Run(int generation)
         {
             while (true)
@@ -285,7 +297,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     lock (_gate)
                     {
                         if (_state != Processing || generation != _generation)
+                        {
+                            PassWakeOn();
                             return;
+                        }
                         Health.OnJsonHold(_utcNow());
                     }
                     _signal.Wait(JsonHoldPollMs);
@@ -297,9 +312,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 switch (TakeNext(generation, out var next, out var kind))
                 {
                     case Next.Superseded:
+                        PassWakeOn();
                         return;
                     case Next.Empty:
-                        _signal.Wait();
+                        _signal.Wait(IdleRecheckMs);
                         continue;
                 }
 
