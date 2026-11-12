@@ -7795,20 +7795,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public IHasCameraControls SelectedCamera
 		{
 			get { return _selectedCamera; }
-			private set
-			{
-				_selectedCamera = value;
-				// The status parse can add a camera and select it from MainVideoSource before
-				// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
-				SelectedCameraFeedback?.FireUpdate();
-				ControllingFarEndCameraFeedback?.FireUpdate();
-				if (CameraIsOffFeedback.BoolValue)
-					CameraMuteOff();
-				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
-			}
+			private set { SetSelectedCamera(value, unmuteIfOff: true); }
+		}
+
+		private void SetSelectedCamera(IHasCameraControls camera, bool unmuteIfOff)
+		{
+			_selectedCamera = camera;
+			// The status parse can add a camera and select it from MainVideoSource before
+			// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
+			SelectedCameraFeedback?.FireUpdate();
+			ControllingFarEndCameraFeedback?.FireUpdate();
+			if (unmuteIfOff && CameraIsOffFeedback.BoolValue)
+				CameraMuteOff();
+			CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
 		}
 
 		public void SelectCamera(string key)
+		{
+			SelectCamera(key, unmuteIfOff: true);
+		}
+
+		/// <summary>
+		/// Selects a camera as the main video source. With <paramref name="unmuteIfOff"/> false, a camera
+		/// the room turned off (main video muted) stays off: for automatic selections, such as the camera
+		/// manager's at call start, which must never show the room against the user's choice.
+		/// </summary>
+		internal void SelectCamera(string key, bool unmuteIfOff)
 		{
 			if (Cameras == null || Cameras.Count == 0)
 			{
@@ -7827,7 +7839,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
-			SelectedCamera = camera;
+			SetSelectedCamera(camera, unmuteIfOff);
 
 			if (!CameraSourceId.IsValid(camera.SourceId))
 			{

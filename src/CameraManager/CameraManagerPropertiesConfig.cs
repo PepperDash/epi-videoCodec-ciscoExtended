@@ -115,6 +115,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         [JsonProperty("disablePoeCycling")]
         public bool DisablePoeCycling { get; set; }
 
+        /// <summary>
+        /// When true, each time a codec goes from no active call to an active call, its "primary"
+        /// camera for the current scenario is selected again as the main video source, so calls start
+        /// on it even after someone picked another camera outside a call. A camera the room turned off
+        /// stays off. A call already up when the program starts (or when the codec comes back) isn't
+        /// treated as a call start. The codec's active-call count is used, so Teams and other platform
+        /// calls count. Defaults to false.
+        /// </summary>
+        [JsonProperty("selectPrimaryCameraOnCallStart")]
+        public bool SelectPrimaryCameraOnCallStart { get; set; }
+
         // /// <summary>
         // /// Maximum milliseconds to wait for the camera-ghost (unpaired) event after
         // /// issuing a factory-reset command. Defaults to 30 000 ms.

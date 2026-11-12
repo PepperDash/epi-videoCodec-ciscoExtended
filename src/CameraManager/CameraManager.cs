@@ -33,6 +33,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // Keyed by codec key -> scenario key. Cleared on scenario change. Guarded by activeMigrationsLock.
         private readonly Dictionary<string, string> rolesAppliedScenarioByCodec = new Dictionary<string, string>();
 
+        // Call starts per codec, for selectPrimaryCameraOnCallStart, and the codecs whose call started
+        // but whose primary camera couldn't be selected yet (offline or moving): retried while the call lasts.
+        // Both are only used on the attach-verification timer tick.
+        private readonly CallStartDetector callStarts = new CallStartDetector();
+        private readonly HashSet<string> pendingCallStartSelect = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // In-flight dynamic camera ID reservations. Between the moment we issue an
         // AssignedSerialNumber to a codec and the moment the codec reports it back in its Cameras
         // collection, the confirmed state does not yet reflect the assignment. Without tracking
@@ -1431,6 +1437,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 // applies once per codec per scenario.
                 TryApplyScenarioCameraRoles(roomCombiner?.CurrentScenario?.Key);
 
+                // A call just started on a codec: back to the scenario's primary camera.
+                if (config != null && config.SelectPrimaryCameraOnCallStart)
+                    SelectPrimaryCameraOnCallStart(roomCombiner?.CurrentScenario?.Key);
+
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
@@ -2207,6 +2217,91 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     rolesAppliedScenarioByCodec[codecKey] = scenarioKey;
                 }
+            }
+        }
+
+        /// <summary>
+        /// For each codec of the current scenario that has just gone from no active call to an active
+        /// call, selects its "primary" camera as the main video source again (the camera someone picked
+        /// outside the call doesn't carry into it). A camera the room turned off stays off. While the
+        /// primary camera isn't online on the codec or is moving, the selection waits and is retried on
+        /// each tick until it is made or the call ends. A codec that hasn't finished syncing is
+        /// forgotten, so a call already up when it comes back isn't treated as a new one.
+        /// </summary>
+        private void SelectPrimaryCameraOnCallStart(string scenarioKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey)
+                || config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                var codecKey = codecConfig?.CodecKey;
+                if (string.IsNullOrWhiteSpace(codecKey)
+                    || !managedCodecs.TryGetValue(codecKey, out var codecDevice)
+                    || !(codecDevice is CiscoCodec codec))
+                {
+                    continue;
+                }
+
+                if (codec.SyncState == null || !codec.SyncState.InitialSyncComplete)
+                {
+                    callStarts.Forget(codecKey);
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                var inCall = codec.IsAnyCallActive;
+                var started = callStarts.Observe(codecKey, inCall);
+                if (!inCall)
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                if (!started && !pendingCallStartSelect.Contains(codecKey))
+                {
+                    continue;
+                }
+
+                var primaryCameraKey = codecConfig.GetPrimaryCameraKey();
+                if (string.IsNullOrWhiteSpace(primaryCameraKey))
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                if (!IsPrimaryCameraReady(codecKey, primaryCameraKey, out var primaryCamera))
+                {
+                    if (started)
+                        this.LogInformation($"CAMERA_CALL_START_PRIMARY_WAITING codec='{codecKey}' scenario='{scenarioKey}' primaryCamera='{primaryCameraKey}' — a call started, but the primary camera isn't online on the codec or is moving; selecting it once it is, while the call lasts");
+                    pendingCallStartSelect.Add(codecKey);
+                    continue;
+                }
+
+                pendingCallStartSelect.Remove(codecKey);
+                this.LogInformation($"CAMERA_CALL_START_PRIMARY_SELECT codec='{codecKey}' scenario='{scenarioKey}' primaryCamera='{primaryCameraKey}' cameraOff='{codec.CameraIsOffFeedback?.BoolValue}' — {(started ? "a call started" : "the call's primary camera is ready")}: selecting it (a camera that is off stays off)");
+                codec.SelectCamera(primaryCamera.Key, unmuteIfOff: false);
+            }
+        }
+
+        /// <summary>The primary camera is managed, online on the codec, and has no active or queued move.</summary>
+        private bool IsPrimaryCameraReady(string codecKey, string primaryCameraKey, out CiscoCamera primaryCamera)
+        {
+            if (!managedCameras.TryGetValue(primaryCameraKey, out primaryCamera)
+                || !IsCameraOnlineOnCodec(codecKey, primaryCamera))
+            {
+                return false;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                return !activeMigrations.ContainsKey(primaryCameraKey)
+                    && !pendingMigrationStarts.Any(p => string.Equals(p.Camera?.Key, primaryCameraKey, StringComparison.Ordinal));
             }
         }
 
