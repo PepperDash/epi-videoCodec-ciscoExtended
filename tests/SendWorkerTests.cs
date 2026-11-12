@@ -414,6 +414,96 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
+    public void A_Stalled_Worker_Does_Not_Fill_The_Queue_With_Copies_Of_A_Sync_Step()
+    {
+        // Every JSON document, status reply or text line asks for a sync step. While the worker is
+        // stalled, each step waits once, however many messages ask for it.
+        var h = Track(new Harness(capacity: 100, startFirstWorker: false));
+        var keys = new[] { "JsonMessageReceived", "TextOutputReceived", "InitialStatusMessageReceived", "InitialSoftwareVersionMessageReceived", "CheckSyncProgress" };
+        for (var i = 0; i < 1000; i++)
+            h.Worker.EnqueueSystemOnce(keys[i % keys.Length], () => { }).Should().BeTrue();
+
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(keys.Length);
+        h.Worker.Enqueue(SendQueueKind.System, () => { }, "room for more").Should().BeTrue("the queue is far from full");
+    }
+
+    [Fact]
+    public void A_Sync_Step_Runs_Once_For_Requests_Made_While_It_Waits_And_Again_For_Later_Ones()
+    {
+        var h = Track(new Harness(startFirstWorker: false));
+        var runs = 0;
+        for (var i = 0; i < 10; i++)
+            h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => Interlocked.Increment(ref runs));
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => Volatile.Read(ref runs) == 1);
+        Thread.Sleep(50);
+        Volatile.Read(ref runs).Should().Be(1, "one copy served all ten requests");
+
+        // Once it has started, a new request queues it again.
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => Interlocked.Increment(ref runs));
+        h.Worker.Schedule();
+        WaitUntil(() => Volatile.Read(ref runs) == 2);
+    }
+
+    [Fact]
+    public void A_Step_Requested_While_It_Runs_Is_Queued_Again()
+    {
+        var h = Track(new Harness());
+        var running = Gate();
+        var release = Gate();
+        var runs = 0;
+        void Step()
+        {
+            if (Interlocked.Increment(ref runs) == 1)
+            {
+                running.Set();
+                release.Wait();
+            }
+        }
+
+        h.Worker.EnqueueSystemOnce("InitialStatusMessageReceived", Step);
+        h.Worker.Schedule();
+        running.Wait(Timeout).Should().BeTrue();
+
+        // A message arrives while the step runs: its state may be newer than what the step read.
+        h.Worker.EnqueueSystemOnce("InitialStatusMessageReceived", Step);
+        h.Worker.Schedule();
+        release.Set();
+        WaitUntil(() => Volatile.Read(ref runs) == 2);
+    }
+
+    [Fact]
+    public void A_Step_Dropped_By_A_Full_Queue_Is_Not_Marked_Waiting()
+    {
+        var h = Track(new Harness(capacity: 1, startFirstWorker: false));
+        h.Worker.Enqueue(SendQueueKind.System, () => { }, "filler").Should().BeTrue();
+
+        h.Worker.EnqueueSystemOnce("FeedbackRegistered", () => { }).Should().BeFalse("the queue is full");
+        // Still not waiting, so the next request tries again rather than counting on a copy that isn't there.
+        h.Worker.EnqueueSystemOnce("FeedbackRegistered", () => { }).Should().BeFalse();
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(1);
+    }
+
+    [Fact]
+    public void A_Step_Asked_For_After_A_Reset_Is_Queued_After_It()
+    {
+        // A copy waiting from before the reset runs before it, against the old session; the step must
+        // also run after the reset for the new session.
+        var h = Track(new Harness(startFirstWorker: false));
+        var ran = new ConcurrentQueue<string>();
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => ran.Enqueue("step"));
+        h.Worker.EnqueueReset(() => ran.Enqueue("reset"), "CodecDisconnected");
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => ran.Enqueue("step"));
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => ran.Count == 3);
+        ran.Should().Equal("step", "reset", "step");
+    }
+
+    [Fact]
     public void Enqueue_Reports_Its_Result_Under_The_Lock()
     {
         var h = Track(new Harness(capacity: 1, startFirstWorker: false));

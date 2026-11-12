@@ -98,8 +98,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(query))
                 return;
 
-            Enqueue(SendQueueKind.Command, _commandQueueFullDrops, () => _parent.SendTextWithoutQueue(query),
-                DropEpisodeTracker.Describe(query));
+            var what = DropEpisodeTracker.Describe(query);
+            Enqueue(SendQueueKind.Command, _commandQueueFullDrops, what,
+                onResult => _worker.Enqueue(SendQueueKind.Command, () => _parent.SendTextWithoutQueue(query), what, onResult));
 
             Schedule();
         }
@@ -111,9 +112,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private readonly DropEpisodeTracker _systemQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
         private readonly DropEpisodeTracker _commandQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
 
+        /// <summary>
+        /// Queues a sync step, once: while it waits, more messages asking for the same step (each JSON
+        /// document, status reply or text line while the worker is busy or stalled) are served by the
+        /// queued copy, which reads the current state when it runs (#194). Before, a stalled worker let
+        /// these fill the system queue within seconds. The step is named by its caller.
+        /// </summary>
         private void EnqueueSystemAction(Action action, [CallerMemberName] string caller = "")
         {
-            Enqueue(SendQueueKind.System, _systemQueueFullDrops, action, caller);
+            Enqueue(SendQueueKind.System, _systemQueueFullDrops, caller,
+                onResult => _worker.EnqueueSystemOnce(caller, action, onResult));
         }
 
         /// <summary>What the send path is doing, for codecperf and the send watchdog (#194).</summary>
@@ -121,7 +129,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private void ClearCommands() => _worker.ClearCommands();
 
-        private void Enqueue(SendQueueKind kind, DropEpisodeTracker drops, Action action, string what)
+        /// <summary>
+        /// Runs <paramref name="enqueue"/> (a SendWorker enqueue taking a result callback) and logs a
+        /// full-queue drop episode around it.
+        /// </summary>
+        private void Enqueue(SendQueueKind kind, DropEpisodeTracker drops, string what, Action<Action<bool>> enqueue)
         {
             var name = kind == SendQueueKind.Command ? "command" : "system";
 
@@ -129,7 +141,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             // results, so a success can't end an episode another caller has just started; logged after.
             int recovered = 0, droppedSinceLog = 0, droppedInEpisode = 0;
             var logDrop = false;
-            _worker.Enqueue(kind, action, what, accepted =>
+            enqueue(accepted =>
             {
                 if (accepted)
                     recovered = drops.OnSucceeded();
