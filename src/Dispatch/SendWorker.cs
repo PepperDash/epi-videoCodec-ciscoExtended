@@ -91,6 +91,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         // resets and restarts never touch it, so a recovery can always be confirmed. One at a time.
         private QueuedAction? _probe;
 
+        // Keys of the system steps waiting in the queue (EnqueueSystemOnce): a step is queued once
+        // however many messages ask for it while it waits.
+        private readonly HashSet<string> _waitingSteps = new HashSet<string>(StringComparer.Ordinal);
+
         /// <param name="system">System actions; always taken first.</param>
         /// <param name="command">Commands for the codec.</param>
         /// <param name="signal">Wakes the worker when something is queued.</param>
@@ -142,6 +146,46 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
+        /// Queues a system step unless the same step (<paramref name="key"/>) is already waiting. Use it
+        /// for steps that read the current state when they run rather than carry the message that asked
+        /// for them: one queued copy then serves every request made while it waits, so a stalled worker
+        /// can't fill the queue with copies of the same step. The key is released as the step starts,
+        /// so a request made while it runs queues it again. False when the queue is full (the step was
+        /// dropped and isn't marked waiting, so the next request tries again). <paramref name="onResult"/>
+        /// runs under the lock with the result (true when an existing copy serves the request).
+        /// </summary>
+        public bool EnqueueSystemOnce(string key, Action action, Action<bool>? onResult = null)
+        {
+            if (key == null)
+                throw new ArgumentNullException(nameof(key));
+
+            lock (_gate)
+            {
+                if (_waitingSteps.Contains(key))
+                {
+                    onResult?.Invoke(true);
+                    return true;
+                }
+
+                Health.OnEnqueued(SendQueueKind.System, _utcNow());
+                var queued = new QueuedAction(() =>
+                {
+                    lock (_gate)
+                        _waitingSteps.Remove(key);
+                    action();
+                }, key);
+                var accepted = _system.TryEnqueue(queued);
+                if (accepted)
+                    _waitingSteps.Add(key);
+                else
+                    Health.OnEnqueueRejected(SendQueueKind.System);
+
+                onResult?.Invoke(accepted);
+                return accepted;
+            }
+        }
+
+        /// <summary>
         /// Queues a system action that must not be lost, such as a session reset. If the system queue
         /// is full, the actions waiting in it are dropped first (they belong to the session being
         /// reset, and must not run after the reset either) and their count returned; otherwise 0.
@@ -151,6 +195,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             lock (_gate)
             {
+                // Steps asked for after the reset must be queued after it, not served by a copy
+                // waiting from before it (which runs before the reset, against the old session).
+                _waitingSteps.Clear();
+
                 var discarded = 0;
                 var queued = new QueuedAction(action, what);
                 if (!_system.TryEnqueue(queued))
