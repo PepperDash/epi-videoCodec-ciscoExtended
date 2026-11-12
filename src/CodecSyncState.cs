@@ -584,7 +584,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         internal void EnqueueWatchdogProbe()
         {
-            EnqueueSystemAction(() =>
+            // Its own slot, not the system queue: a full queue or a session reset can't lose it.
+            _worker.RequestProbe(() =>
             {
                 _parent.WaitForSendPath();
                 SendHealth.OnProbeCompleted();

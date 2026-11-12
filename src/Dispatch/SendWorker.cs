@@ -87,6 +87,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         // replaced worker can't take another action. Actions themselves run outside it.
         private readonly object _gate = new object();
 
+        // The send watchdog's probe (#194), kept apart from the queues: queue capacity, clears, drains,
+        // resets and restarts never touch it, so a recovery can always be confirmed. One at a time.
+        private QueuedAction? _probe;
+
         /// <param name="system">System actions; always taken first.</param>
         /// <param name="command">Commands for the codec.</param>
         /// <param name="signal">Wakes the worker when something is queued.</param>
@@ -154,11 +158,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     while (_system.TryDequeue(out _))
                         discarded++;
                     Health.OnCleared(SendQueueKind.System);
+                    if (_probe != null)
+                        Health.OnEnqueued(SendQueueKind.System, _utcNow()); // the probe's slot wasn't cleared
                     _system.TryEnqueue(queued); // the queue is empty now
                 }
 
                 Health.OnEnqueued(SendQueueKind.System, _utcNow());
                 return discarded;
+            }
+        }
+
+        /// <summary>
+        /// Arms the send watchdog's probe, unless one is already waiting. The worker takes it before
+        /// anything queued (but, like everything else, not while it holds off for a JSON response).
+        /// It can't be rejected or discarded: a recovery can always be confirmed. Call <see cref="Schedule"/> after.
+        /// </summary>
+        public void RequestProbe(Action probe, string what)
+        {
+            lock (_gate)
+            {
+                if (_probe != null)
+                    return;
+                _probe = new QueuedAction(probe, what);
+                Health.OnEnqueued(SendQueueKind.System, _utcNow());
             }
         }
 
@@ -263,7 +285,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (_state != Processing || generation != _generation)
                     return Next.Superseded;
 
-                if (_system.TryDequeue(out action) && action != null)
+                if (_probe != null)
+                {
+                    action = _probe;
+                    _probe = null;
+                    kind = SendQueueKind.System;
+                }
+                else if (_system.TryDequeue(out action) && action != null)
                     kind = SendQueueKind.System;
                 else if (_command.TryDequeue(out action) && action != null)
                     kind = SendQueueKind.Command;
