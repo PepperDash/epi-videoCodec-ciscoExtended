@@ -118,11 +118,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// queued copy, which reads the current state when it runs (#194). Before, a stalled worker let
         /// these fill the system queue within seconds. The step is named by its caller.
         /// </summary>
-        private void EnqueueSystemAction(Action action, [CallerMemberName] string caller = "")
+        /// <param name="action">The step.</param>
+        /// <param name="sessionMode">
+        /// The session mode a step detects (<see cref="JsonMode"/> or <see cref="TextMode"/>): a copy of
+        /// any step waiting from before the mode changed won't serve a request made after it, so steps
+        /// keep their order across the change. Steps of the same mode (a login echo and text output)
+        /// don't separate each other.
+        /// </param>
+        /// <param name="caller">The step's name (its caller).</param>
+        private void EnqueueSystemAction(Action action, string sessionMode = null, [CallerMemberName] string caller = "")
         {
             Enqueue(SendQueueKind.System, _systemQueueFullDrops, caller,
-                onResult => _worker.EnqueueSystemOnce(caller, action, onResult));
+                onResult => _worker.EnqueueSystemOnce(caller, action, sessionMode, onResult));
         }
+
+        private const string JsonMode = "json";
+        private const string TextMode = "text";
 
         /// <summary>What the send path is doing, for codecperf and the send watchdog (#194).</summary>
         internal SendQueueHealth SendHealth => _worker.Health;
@@ -193,7 +204,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 StartSession("poll echoed");
                 CheckSyncStatus();
-            });
+            }, TextMode);
 
             Schedule();
         }
@@ -235,7 +246,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 MarkSyncPhase("jsonMode");
                 CheckSyncStatus();
-            });
+            }, JsonMode);
 
             Schedule();
         }
@@ -266,7 +277,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
 
                 CheckSyncStatus();
-            });
+            }, TextMode);
 
             Schedule();
         }

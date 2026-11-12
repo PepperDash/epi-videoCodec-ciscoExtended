@@ -91,9 +91,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         // resets and restarts never touch it, so a recovery can always be confirmed. One at a time.
         private QueuedAction? _probe;
 
-        // Keys of the system steps waiting in the queue (EnqueueSystemOnce): a step is queued once
-        // however many messages ask for it while it waits.
-        private readonly HashSet<string> _waitingSteps = new HashSet<string>(StringComparer.Ordinal);
+        // The system steps waiting in the queue (EnqueueSystemOnce), each with the token of the copy
+        // that holds its mark: a step is queued once however many messages ask for it while it waits.
+        // Tokens rise with every queued copy; only the copy that holds the mark may release it.
+        private readonly Dictionary<string, long> _waitingSteps = new Dictionary<string, long>(StringComparer.Ordinal);
+        private long _lastStepToken;
+
+        // Token and session mode of the last step that changed the mode (JSON to text or back). A
+        // waiting copy queued before that change can't serve a later request: running it early would
+        // put the step on the wrong side of the change. Steps of the same mode don't separate.
+        private long _lastBoundaryToken;
+        private string? _lastMode;
 
         /// <param name="system">System actions; always taken first.</param>
         /// <param name="command">Commands for the codec.</param>
@@ -146,37 +154,59 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
-        /// Queues a system step unless the same step (<paramref name="key"/>) is already waiting. Use it
-        /// for steps that read the current state when they run rather than carry the message that asked
-        /// for them: one queued copy then serves every request made while it waits, so a stalled worker
-        /// can't fill the queue with copies of the same step. The key is released as the step starts,
-        /// so a request made while it runs queues it again. False when the queue is full (the step was
-        /// dropped and isn't marked waiting, so the next request tries again). <paramref name="onResult"/>
-        /// runs under the lock with the result (true when an existing copy serves the request).
+        /// Queues a system step unless a copy of the same step (<paramref name="key"/>) is already
+        /// waiting and can serve this request. Use it for steps that read the current state when they
+        /// run rather than carry the message that asked for them: one queued copy then serves every
+        /// request made while it waits, so a stalled worker can't fill the queue with copies of the same
+        /// step.
+        /// <list type="bullet">
+        /// <item>A waiting copy serves a request only if the session mode hasn't changed since it was
+        /// queued, so steps keep their order across a mode change (JSON, text, JSON stays three steps).
+        /// Give a step the <paramref name="sessionMode"/> it detects (for example "json" or "text"); a
+        /// step of the same mode as the last one doesn't separate anything.</item>
+        /// <item>The mark is released as the copy that holds it starts, so a request made while it runs
+        /// queues it again; an older copy never releases a newer copy's mark.</item>
+        /// <item>False when the queue is full: the step was dropped and isn't marked waiting, so the next
+        /// request tries again.</item>
+        /// </list>
+        /// <paramref name="onResult"/> runs under the lock with the result (true when an existing copy
+        /// serves the request).
         /// </summary>
-        public bool EnqueueSystemOnce(string key, Action action, Action<bool>? onResult = null)
+        public bool EnqueueSystemOnce(string key, Action action, string? sessionMode = null, Action<bool>? onResult = null)
         {
             if (key == null)
                 throw new ArgumentNullException(nameof(key));
 
             lock (_gate)
             {
-                if (_waitingSteps.Contains(key))
+                if (_waitingSteps.TryGetValue(key, out var waiting) && waiting >= _lastBoundaryToken)
                 {
                     onResult?.Invoke(true);
                     return true;
                 }
 
+                var token = ++_lastStepToken;
                 Health.OnEnqueued(SendQueueKind.System, _utcNow());
                 var queued = new QueuedAction(() =>
                 {
                     lock (_gate)
-                        _waitingSteps.Remove(key);
+                    {
+                        // Only the copy that holds the mark releases it; a newer copy keeps its own.
+                        if (_waitingSteps.TryGetValue(key, out var holder) && holder == token)
+                            _waitingSteps.Remove(key);
+                    }
                     action();
                 }, key);
                 var accepted = _system.TryEnqueue(queued);
                 if (accepted)
-                    _waitingSteps.Add(key);
+                {
+                    _waitingSteps[key] = token; // the newest copy holds the mark
+                    if (sessionMode != null && !string.Equals(sessionMode, _lastMode, StringComparison.Ordinal))
+                    {
+                        _lastBoundaryToken = token;
+                        _lastMode = sessionMode;
+                    }
+                }
                 else
                     Health.OnEnqueueRejected(SendQueueKind.System);
 
