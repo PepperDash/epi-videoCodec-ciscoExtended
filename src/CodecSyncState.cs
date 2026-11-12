@@ -594,19 +594,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
-        /// Empties the command queue without sending, so commands that waited out a stall aren't sent
-        /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
-        /// </summary>
-        /// <summary>
-        /// Queues an action that does nothing, so the send watchdog can see the worker finish something
-        /// after a recovery (#194): an empty queue left by the recovery's drain proves nothing.
+        /// Queues a probe so the send watchdog can see the worker finish something after a recovery
+        /// (#194): an empty queue left by the recovery's drain proves nothing. The probe waits for the
+        /// send lock, as a real command would, so a write still blocked under it (a replaced worker's,
+        /// over RS-232) keeps the probe from finishing and the stall from ending.
         /// </summary>
         internal void EnqueueWatchdogProbe()
         {
-            EnqueueSystemAction(() => { }, "SendWatchdogProbe");
+            EnqueueSystemAction(() => _parent.WaitForSendPath(), "SendWatchdogProbe");
             Schedule();
         }
 
+        /// <summary>
+        /// Empties the command queue without sending, so commands that waited out a stall aren't sent
+        /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
+        /// </summary>
         internal int DrainCommands(int describe, out List<string> described)
         {
             described = new List<string>();

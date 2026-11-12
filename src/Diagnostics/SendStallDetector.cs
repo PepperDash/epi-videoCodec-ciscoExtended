@@ -103,8 +103,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                 // After a recovery attempt, an empty queue proves nothing: the attempt drained it. The
                 // stall is over only once the worker has finished an action since then (the
-                // watchdog's probe, or real traffic). A write that is still blocked, or a JSON hold
-                // that is still there, keeps that from happening.
+                // watchdog's probe, which waits for the send lock like a real command, or real
+                // traffic). A write still blocked under the send lock, or a JSON hold that is still
+                // there, keeps that from happening.
                 if (_firstRecoveryUtc != null && !(snapshot.SinceCompleted < now - _firstRecoveryUtc.Value))
                     return SendStallTransition.None;
 

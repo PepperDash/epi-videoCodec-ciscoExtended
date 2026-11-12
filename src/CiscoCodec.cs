@@ -2833,6 +2833,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private readonly object _sendLock = new object();
 
+		/// <summary>
+		/// Returns once nothing holds the send lock, sending nothing: the send watchdog's probe (#194).
+		/// A write blocked under the lock keeps it waiting, as it would keep a real command waiting.
+		/// Runs on the send worker, never on the watchdog's timer.
+		/// </summary>
+		internal void WaitForSendPath()
+		{
+			lock (_sendLock)
+			{
+			}
+		}
+
 		// Commands dropped by SendTextWithoutQueue because the connection reported not connected (#194).
 		private readonly DropEpisodeTracker _notConnectedDrops = new DropEpisodeTracker(DropReminderInterval);
 
