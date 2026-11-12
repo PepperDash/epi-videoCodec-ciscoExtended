@@ -33,6 +33,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private DateTime? _busySinceUtc;
         private string? _busyWith;
         private DateTime? _jsonHoldSinceUtc;
+        private DateTime? _lastJsonHoldUtc;
         private DateTime? _lastSentUtc;
 
         /// <summary>
@@ -124,6 +125,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             {
                 if (_jsonHoldSinceUtc == null)
                     _jsonHoldSinceUtc = nowUtc;
+                _lastJsonHoldUtc = nowUtc;
             }
         }
 
@@ -152,7 +154,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _command.Pending, Since(_command.WaitingSinceUtc, nowUtc), Since(_command.LastDequeuedUtc, nowUtc),
                     Since(_busySinceUtc, nowUtc), _busyWith,
                     Since(_jsonHoldSinceUtc, nowUtc),
-                    Since(_lastSentUtc, nowUtc));
+                    Since(_lastSentUtc, nowUtc),
+                    Since(_lastJsonHoldUtc, nowUtc));
             }
         }
 
@@ -175,8 +178,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         public SendQueueSnapshot(DateTime takenUtc,
             int systemPending, TimeSpan? systemWaiting, TimeSpan? systemSinceDequeue,
             int commandPending, TimeSpan? commandWaiting, TimeSpan? commandSinceDequeue,
-            TimeSpan? busyFor, string? busyWith, TimeSpan? jsonHoldFor, TimeSpan? sinceSent)
+            TimeSpan? busyFor, string? busyWith, TimeSpan? jsonHoldFor, TimeSpan? sinceSent,
+            TimeSpan? sinceJsonHold = null)
         {
+            SinceJsonHold = sinceJsonHold;
             TakenUtc = takenUtc;
             SystemPending = systemPending;
             SystemWaiting = systemWaiting;
@@ -219,6 +224,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         /// <summary>Time since text was last written to the connection (null when never).</summary>
         public TimeSpan? SinceSent { get; }
+
+        /// <summary>
+        /// Time since the worker last held off for a JSON response (null when never). A hold that keeps
+        /// switching on and off can read as "not holding" at any one moment; this shows it was recent.
+        /// </summary>
+        public TimeSpan? SinceJsonHold { get; }
 
         /// <summary>The longest any queue has waited with no progress (null when both are empty).</summary>
         public TimeSpan? LongestWaiting =>

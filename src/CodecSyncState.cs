@@ -570,14 +570,52 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 Processing,
                 Idle) ==
                 Idle)
-                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
+                _worker = new Thread(RunSyncState, CurrentGeneration, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
 
             _waitHandle.Set();
         }
 
+        // Each worker runs only while the generation it started with is current (#194): after
+        // RestartWorker an old worker that wakes up again exits, so two never take actions together.
+        private int _workerGeneration;
+
+        private int CurrentGeneration => Interlocked.CompareExchange(ref _workerGeneration, 0, 0);
+
+        /// <summary>
+        /// Starts a new worker when the current one has stopped taking actions off the queues (#194).
+        /// Called by the send watchdog, from its own timer.
+        /// </summary>
+        internal void RestartWorker()
+        {
+            Interlocked.Increment(ref _workerGeneration);
+            Interlocked.Exchange(ref _isProcessing, Idle);
+            SendHealth.OnFinished();
+            Schedule();
+        }
+
+        /// <summary>
+        /// Empties the command queue without sending, so commands that waited out a stall aren't sent
+        /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
+        /// </summary>
+        internal int DrainCommands(int describe, out List<string> described)
+        {
+            described = new List<string>();
+            var dropped = 0;
+            while (_commandActions.TryToDequeue(out var action))
+            {
+                dropped++;
+                if (described.Count < describe)
+                    described.Add(action.What);
+            }
+
+            SendHealth.OnCleared(SendQueueKind.Command);
+            return dropped;
+        }
+
         private object RunSyncState(object o)
         {
-            while (_isProcessing == Processing)
+            var generation = (int)o;
+            while (_isProcessing == Processing && generation == CurrentGeneration)
             {
                 // Hold off sending anything to the codec while a JSON response is currently being
                 // accumulated - the codec can echo in-flight commands back into the response stream,

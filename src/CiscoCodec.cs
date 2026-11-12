@@ -887,6 +887,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_timeFormatSpecifier = this.config.TimeFormatSpecifier ?? "t";
 			_dateFormatSpecifier = this.config.DateFormatSpecifier ?? "d";
 			_joinableCooldownSeconds = this.config.JoinableCooldownSeconds;
+			if (this.config.CommandStallTimeoutSeconds > 0)
+				_sendStall = new SendStallDetector(TimeSpan.FromSeconds(this.config.CommandStallTimeoutSeconds), SendStallRecoveryInterval);
 			EndAllCallsOnMeetingJoin = this.config.EndAllCallsOnMeetingJoin;
 
 			if (this.config.Sharing != null)
@@ -1255,6 +1257,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			StopRefreshTimers();
 			_serialWakeProbeTimer?.Dispose();
+			if (_sendWatchdogTimer != null)
+			{
+				_sendWatchdogTimer.Stop();
+				_sendWatchdogTimer.Dispose();
+			}
 
 			if (_loginMessageReceivedTimer != null)
 			{
@@ -1948,6 +1955,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				Communication.Connect();
 
 				CommunicationMonitor.Start();
+
+				StartSendWatchdog();
 			}
 			catch (Exception ex)
 			{
@@ -2829,6 +2838,86 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		/// <summary>How often a long run of dropped commands is logged again (#194).</summary>
 		internal static readonly TimeSpan DropReminderInterval = TimeSpan.FromMinutes(5);
+
+		// ---- Send watchdog (#194) -------------------------------------------------------------------
+		// The send path could stop for good while the codec still looked healthy: the comm monitor's
+		// poll bypasses the command queue, and status arrives on the receive thread. This checks the
+		// queue from its own timer (not the worker it watches), logs a stall once, and recovers it.
+
+		private const long SendWatchdogIntervalMs = 5000;
+		private static readonly TimeSpan SendStallRecoveryInterval = TimeSpan.FromMinutes(5);
+		private const int DescribeDroppedCommands = 5;
+
+		private SendStallDetector _sendStall;
+		private CTimer _sendWatchdogTimer;
+
+		private void StartSendWatchdog()
+		{
+			if (_sendStall == null || _sendWatchdogTimer != null)
+				return;
+
+			_sendWatchdogTimer = new CTimer(_ => CheckSendPath(), null, SendWatchdogIntervalMs, SendWatchdogIntervalMs);
+		}
+
+		private void CheckSendPath()
+		{
+			try
+			{
+				var now = DateTime.UtcNow;
+				var snapshot = SyncState.SendHealth.Snapshot(now);
+				var connected = Communication?.IsConnected ?? false;
+
+				switch (_sendStall.Evaluate(snapshot, out var cause, out var stalledFor))
+				{
+					case SendStallTransition.Stalled:
+						this.LogWarning(
+							"CODEC_SEND_STALL_START cause={cause} connected={connected} {state} — commands to the codec have not gone out for {seconds} s",
+							cause, connected, snapshot.Format(), _sendStall.StallAfter.TotalSeconds);
+						break;
+					case SendStallTransition.Recovered:
+						this.LogInformation(
+							"CODEC_SEND_STALL_END durationS={duration:0} — commands to the codec are going out again",
+							stalledFor.TotalSeconds);
+						return;
+					case SendStallTransition.None:
+						if (!_sendStall.IsStalled)
+							return;
+						break;
+				}
+
+				if (_sendStall.TryAcquireRecovery(now))
+					RecoverSendPath(cause);
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Send watchdog check failed: {message}", ex.Message);
+				this.LogVerbose(ex, "Exception");
+			}
+		}
+
+		private void RecoverSendPath(SendStallCause cause)
+		{
+			// Commands that waited out the stall are dropped, not sent late: a camera reset, standby or
+			// mute from minutes ago would surprise whoever is in the room now.
+			var dropped = SyncState.DrainCommands(DescribeDroppedCommands, out var described);
+			if (dropped > 0)
+				this.LogWarning(
+					"CODEC_SEND_STALL_DROPPED count={count} — commands that waited out the stall were not sent: {commands}{more}",
+					dropped, string.Join(", ", described), dropped > described.Count ? ", ..." : "");
+
+			if (cause == SendStallCause.WorkerNotRunning || !(Communication is ISocketStatus))
+			{
+				// Over RS-232 there is no session to reconnect: a new worker is all that can be done.
+				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
+				SyncState.RestartWorker();
+				return;
+			}
+
+			// A blocked write or a JSON response that never ends is cleared by a new session: the
+			// disconnect ends the write and resets the receive state, and the codec is re-synced.
+			this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
+			DisconnectClientAndReconnect();
+		}
 
 		// ---- RS-232 login prompt (#115) ------------------------------------------------------------
 		// With xConfiguration SerialPort LoginRequired: On the serial session drops to a login prompt.
