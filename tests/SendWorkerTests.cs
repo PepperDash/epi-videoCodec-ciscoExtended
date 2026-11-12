@@ -377,6 +377,43 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
+    public void The_Probe_Survives_A_Full_System_Queue_And_A_Session_Reset()
+    {
+        // A stall before the sync completes can fill the system queue: the probe must still get in,
+        // and the reset a reconnect brings must not throw it away with the stale actions.
+        var h = Track(new Harness(capacity: 3, startFirstWorker: false));
+        for (var i = 0; i < 3; i++)
+            h.Worker.Enqueue(SendQueueKind.System, () => { }, "sync step").Should().BeTrue();
+        h.Worker.Enqueue(SendQueueKind.System, () => { }, "one too many").Should().BeFalse("the queue is full");
+
+        var probed = 0;
+        h.Worker.RequestProbe(() => Interlocked.Increment(ref probed), "SendWatchdogProbe");
+        h.Worker.EnqueueReset(() => { }, "CodecDisconnected").Should().Be(3, "the reset clears the stale sync steps");
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2, "the probe and the reset both wait");
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => Volatile.Read(ref probed) == 1);
+        WaitUntil(() => h.Worker.Health.Snapshot(DateTime.UtcNow).LongestWaiting == null);
+    }
+
+    [Fact]
+    public void Probe_Requests_Wait_As_One_And_Run_Before_Queued_Actions()
+    {
+        var h = Track(new Harness(startFirstWorker: false));
+        var ran = new ConcurrentQueue<string>();
+        h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("sync"), "sync");
+        h.Worker.RequestProbe(() => ran.Enqueue("probe"), "SendWatchdogProbe");
+        h.Worker.RequestProbe(() => ran.Enqueue("probe again"), "SendWatchdogProbe");
+        h.Worker.Health.Snapshot(DateTime.UtcNow).SystemPending.Should().Be(2, "one sync action and one probe");
+
+        h.Worker.Schedule(); // the first worker "dies" without running
+        h.Worker.RestartWorker();
+        WaitUntil(() => ran.Count == 2);
+        ran.Should().Equal("probe", "sync");
+    }
+
+    [Fact]
     public void Enqueue_Reports_Its_Result_Under_The_Lock()
     {
         var h = Track(new Harness(capacity: 1, startFirstWorker: false));
@@ -489,7 +526,7 @@ public class SendWorkerTests : IDisposable
 
             // As CiscoCodec does: a probe whose completion confirms the recovery. It waits for the
             // send lock, like a real command (CiscoCodec.WaitForSendPath), then counts itself.
-            Worker.Enqueue(SendQueueKind.System, () =>
+            Worker.RequestProbe(() =>
             {
                 lock (SendLock) { }
                 Worker.Health.OnProbeCompleted();
