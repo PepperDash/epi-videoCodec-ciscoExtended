@@ -16,13 +16,14 @@ public class SendStallDetectorTests
     private static SendStallDetector Create() => new SendStallDetector(StallAfter, RecoveryInterval);
 
     private static SendQueueSnapshot Snapshot(DateTime at, int commands = 0, double? waiting = null,
-        double? busy = null, double? jsonHold = null, double? sinceJsonHold = null, double? sinceCompleted = null) =>
+        double? busy = null, double? jsonHold = null, double? sinceJsonHold = null, double? sinceCompleted = null,
+        long probes = 0) =>
         new SendQueueSnapshot(at,
             systemPending: 0, systemWaiting: null, systemSinceDequeue: null,
             commandPending: commands, commandWaiting: Seconds(waiting), commandSinceDequeue: Seconds(waiting),
             busyFor: Seconds(busy), busyWith: busy == null ? null : "xCommand Camera FactoryReset ...",
             jsonHoldFor: Seconds(jsonHold), sinceSent: null, sinceJsonHold: Seconds(sinceJsonHold),
-            sinceCompleted: Seconds(sinceCompleted));
+            sinceCompleted: Seconds(sinceCompleted), probeCompletions: probes);
 
     private static TimeSpan? Seconds(double? s) => s == null ? null : TimeSpan.FromSeconds(s.Value);
 
@@ -146,7 +147,7 @@ public class SendStallDetectorTests
         detector.TryAcquireRecovery(T0);
         detector.RecoveryFailed(T0.AddSeconds(40)).Should().BeTrue();
 
-        detector.Evaluate(Snapshot(T0.AddSeconds(45), sinceCompleted: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.Evaluate(Snapshot(T0.AddSeconds(45), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
         detector.RecoveryFailed(T0.AddSeconds(50)).Should().BeFalse();
     }
 
@@ -156,7 +157,7 @@ public class SendStallDetectorTests
         var detector = Create();
         detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
         detector.TryAcquireRecovery(T0);
-        detector.Evaluate(Snapshot(T0.AddSeconds(10), sinceCompleted: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.Evaluate(Snapshot(T0.AddSeconds(10), probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
 
         detector.Evaluate(Snapshot(T0.AddMinutes(1), commands: 1, waiting: 31), out _, out _)
             .Should().Be(SendStallTransition.Stalled);
@@ -178,28 +179,50 @@ public class SendStallDetectorTests
     }
 
     [Fact]
-    public void A_Completion_Before_The_Recovery_Does_Not_Count()
+    public void A_Probe_Completed_Before_The_Recovery_Does_Not_Count()
     {
+        // One probe got through during an earlier stall; the count is taken at this recovery.
         var detector = Create();
-        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31, probes: 1), out _, out _);
         detector.TryAcquireRecovery(T0);
 
-        // Last completion 20 s ago at T0+10 = T0-10: before the recovery.
-        detector.Evaluate(Snapshot(T0.AddSeconds(10), sinceCompleted: 20), out _, out _).Should().Be(SendStallTransition.None);
+        detector.Evaluate(Snapshot(T0.AddSeconds(10), probes: 1), out _, out _).Should().Be(SendStallTransition.None);
         detector.IsStalled.Should().BeTrue();
     }
 
     [Fact]
-    public void A_Completion_After_The_Recovery_Ends_The_Stall()
+    public void An_Unrelated_Action_Finishing_Does_Not_End_The_Stall()
+    {
+        // e.g. a sync retry that sends nothing finishes before the probe gets the send lock.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+
+        detector.Evaluate(Snapshot(T0.AddSeconds(3), sinceCompleted: 1), out _, out _).Should().Be(SendStallTransition.None);
+        detector.IsStalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void The_Probe_Completing_After_The_Recovery_Ends_The_Stall()
     {
         var detector = Create();
         detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
         detector.TryAcquireRecovery(T0);
 
-        // The watchdog's probe finished at T0+2.
-        detector.Evaluate(Snapshot(T0.AddSeconds(3), sinceCompleted: 1), out _, out var stalledFor)
+        detector.Evaluate(Snapshot(T0.AddSeconds(3), probes: 1), out _, out var stalledFor)
             .Should().Be(SendStallTransition.Recovered);
         stalledFor.Should().Be(TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public void A_Probe_Finishing_In_The_Same_Clock_Tick_As_The_Recovery_Counts()
+    {
+        // Timestamps would tie here; the count doesn't.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+
+        detector.Evaluate(Snapshot(T0, probes: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
     }
 
     [Fact]

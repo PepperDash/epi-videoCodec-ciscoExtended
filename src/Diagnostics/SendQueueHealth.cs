@@ -36,6 +36,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private DateTime? _lastJsonHoldUtc;
         private DateTime? _lastSentUtc;
         private DateTime? _lastCompletedUtc;
+        private long _probeCompletions;
 
         /// <summary>
         /// An action is about to be queued. Call it <em>before</em> putting the action on the queue (and
@@ -113,6 +114,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>
+        /// The send watchdog's probe got through the send path (#194). Counted, not timed, so a probe
+        /// that finishes in the same clock tick as the recovery that queued it still counts.
+        /// </summary>
+        public void OnProbeCompleted()
+        {
+            lock (_sync)
+                _probeCompletions++;
+        }
+
+        /// <summary>
         /// The worker was replaced while it may still be running an action. Clears the busy state
         /// without counting it as completed: the action may never return.
         /// </summary>
@@ -174,7 +185,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     Since(_jsonHoldSinceUtc, nowUtc),
                     Since(_lastSentUtc, nowUtc),
                     Since(_lastJsonHoldUtc, nowUtc),
-                    Since(_lastCompletedUtc, nowUtc));
+                    Since(_lastCompletedUtc, nowUtc),
+                    _probeCompletions);
             }
         }
 
@@ -198,8 +210,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             int systemPending, TimeSpan? systemWaiting, TimeSpan? systemSinceDequeue,
             int commandPending, TimeSpan? commandWaiting, TimeSpan? commandSinceDequeue,
             TimeSpan? busyFor, string? busyWith, TimeSpan? jsonHoldFor, TimeSpan? sinceSent,
-            TimeSpan? sinceJsonHold = null, TimeSpan? sinceCompleted = null)
+            TimeSpan? sinceJsonHold = null, TimeSpan? sinceCompleted = null, long probeCompletions = 0)
         {
+            ProbeCompletions = probeCompletions;
             SinceJsonHold = sinceJsonHold;
             SinceCompleted = sinceCompleted;
             TakenUtc = takenUtc;
@@ -253,6 +266,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         /// <summary>Time since the worker last finished an action (null when never).</summary>
         public TimeSpan? SinceCompleted { get; }
+
+        /// <summary>How many times the send watchdog's probe has got through the send path.</summary>
+        public long ProbeCompletions { get; }
 
         /// <summary>The longest any queue has waited with no progress (null when both are empty).</summary>
         public TimeSpan? LongestWaiting =>

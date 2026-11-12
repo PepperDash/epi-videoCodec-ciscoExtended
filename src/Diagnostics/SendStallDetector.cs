@@ -52,6 +52,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private DateTime _nextRecoveryUtc = DateTime.MinValue;
         private DateTime? _firstRecoveryUtc;
 
+        // Probe completions seen by the last Evaluate, and the count when this stall's first recovery
+        // was tried: the stall ends only once a probe completes after that.
+        private long _lastSeenProbes;
+        private long? _probesAtFirstRecovery;
+
         /// <param name="stallAfter">How long without progress counts as a stall.</param>
         /// <param name="recoveryInterval">Least time between two recovery attempts.</param>
         public SendStallDetector(TimeSpan stallAfter, TimeSpan recoveryInterval)
@@ -88,6 +93,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             lock (_sync)
             {
                 stalledFor = _stalledSinceUtc == null ? TimeSpan.Zero : now - _stalledSinceUtc.Value;
+                _lastSeenProbes = snapshot.ProbeCompletions;
 
                 if (cause != SendStallCause.None)
                 {
@@ -101,16 +107,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (_stalledSinceUtc == null)
                     return SendStallTransition.None;
 
-                // After a recovery attempt, an empty queue proves nothing: the attempt drained it. The
-                // stall is over only once the worker has finished an action since then (the
-                // watchdog's probe, which waits for the send lock like a real command, or real
-                // traffic). A write still blocked under the send lock, or a JSON hold that is still
-                // there, keeps that from happening.
-                if (_firstRecoveryUtc != null && !(snapshot.SinceCompleted < now - _firstRecoveryUtc.Value))
+                // After a recovery attempt, an empty queue proves nothing: the attempt drained it, and an
+                // unrelated action finishing proves nothing either. The stall is over only once the
+                // watchdog's probe, which waits for the send lock like a real command, has got through
+                // since the first attempt: counted, so a probe finishing in the same clock tick counts.
+                if (_probesAtFirstRecovery != null && snapshot.ProbeCompletions <= _probesAtFirstRecovery.Value)
                     return SendStallTransition.None;
 
                 _stalledSinceUtc = null;
                 _firstRecoveryUtc = null; // the next stall starts without a recovery attempt
+                _probesAtFirstRecovery = null;
                 return SendStallTransition.Recovered;
             }
         }
@@ -129,7 +135,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 _nextRecoveryUtc = nowUtc + _recoveryInterval;
                 // The first attempt of the stall: later retries must not restart the failure window.
                 if (_firstRecoveryUtc == null)
+                {
                     _firstRecoveryUtc = nowUtc;
+                    // Taken from this tick's Evaluate, before the recovery queues its probe.
+                    _probesAtFirstRecovery = _lastSeenProbes;
+                }
                 return true;
             }
         }

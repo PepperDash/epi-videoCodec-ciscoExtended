@@ -601,7 +601,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         internal void EnqueueWatchdogProbe()
         {
-            EnqueueSystemAction(() => _parent.WaitForSendPath(), "SendWatchdogProbe");
+            EnqueueSystemAction(() =>
+            {
+                _parent.WaitForSendPath();
+                SendHealth.OnProbeCompleted();
+            }, "SendWatchdogProbe");
             Schedule();
         }
 
