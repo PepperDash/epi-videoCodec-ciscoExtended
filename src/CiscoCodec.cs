@@ -2876,7 +2876,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 						break;
 					case SendStallTransition.Recovered:
 						this.LogInformation(
-							"CODEC_SEND_STALL_END durationS={duration:0} — commands to the codec are going out again",
+							"CODEC_SEND_STALL_END durationS={duration:0} — the send worker is finishing its actions again",
 							stalledFor.TotalSeconds);
 						(CommunicationMonitor as CiscoCommunicationMonitor)?.ReleaseHold(CommunicationHoldReason.SendStalled);
 						return;
@@ -2932,6 +2932,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			{
 				this.LogWarning("CODEC_SEND_STALL_RECOVERY action=restartWorker cause={cause}", cause);
 				SyncState.RestartWorker();
+				SyncState.EnqueueWatchdogProbe();
 				return;
 			}
 
@@ -2950,6 +2951,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// disconnect ends the write and resets the receive state, and the codec is re-synced.
 			this.LogWarning("CODEC_SEND_STALL_RECOVERY action=reconnect cause={cause}", cause);
 			DisconnectClientAndReconnect();
+			SyncState.EnqueueWatchdogProbe();
 		}
 
 		// ---- RS-232 login prompt (#115) ------------------------------------------------------------

@@ -35,6 +35,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private DateTime? _jsonHoldSinceUtc;
         private DateTime? _lastJsonHoldUtc;
         private DateTime? _lastSentUtc;
+        private DateTime? _lastCompletedUtc;
 
         /// <summary>
         /// An action is about to be queued. Call it <em>before</em> putting the action on the queue (and
@@ -98,7 +99,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>The worker finished the action it was running.</summary>
-        public void OnFinished()
+        public void OnFinished() => OnFinished(DateTime.UtcNow);
+
+        /// <summary>The worker finished the action it was running, at <paramref name="nowUtc"/>.</summary>
+        public void OnFinished(DateTime nowUtc)
+        {
+            lock (_sync)
+            {
+                _busySinceUtc = null;
+                _busyWith = null;
+                _lastCompletedUtc = nowUtc;
+            }
+        }
+
+        /// <summary>
+        /// The worker was replaced while it may still be running an action. Clears the busy state
+        /// without counting it as completed: the action may never return.
+        /// </summary>
+        public void OnWorkerReplaced()
         {
             lock (_sync)
             {
@@ -155,7 +173,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     Since(_busySinceUtc, nowUtc), _busyWith,
                     Since(_jsonHoldSinceUtc, nowUtc),
                     Since(_lastSentUtc, nowUtc),
-                    Since(_lastJsonHoldUtc, nowUtc));
+                    Since(_lastJsonHoldUtc, nowUtc),
+                    Since(_lastCompletedUtc, nowUtc));
             }
         }
 
@@ -179,9 +198,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             int systemPending, TimeSpan? systemWaiting, TimeSpan? systemSinceDequeue,
             int commandPending, TimeSpan? commandWaiting, TimeSpan? commandSinceDequeue,
             TimeSpan? busyFor, string? busyWith, TimeSpan? jsonHoldFor, TimeSpan? sinceSent,
-            TimeSpan? sinceJsonHold = null)
+            TimeSpan? sinceJsonHold = null, TimeSpan? sinceCompleted = null)
         {
             SinceJsonHold = sinceJsonHold;
+            SinceCompleted = sinceCompleted;
             TakenUtc = takenUtc;
             SystemPending = systemPending;
             SystemWaiting = systemWaiting;
@@ -230,6 +250,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// switching on and off can read as "not holding" at any one moment; this shows it was recent.
         /// </summary>
         public TimeSpan? SinceJsonHold { get; }
+
+        /// <summary>Time since the worker last finished an action (null when never).</summary>
+        public TimeSpan? SinceCompleted { get; }
 
         /// <summary>The longest any queue has waited with no progress (null when both are empty).</summary>
         public TimeSpan? LongestWaiting =>

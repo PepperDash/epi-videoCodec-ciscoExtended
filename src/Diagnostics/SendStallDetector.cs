@@ -50,7 +50,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private DateTime? _stalledSinceUtc;
         private DateTime _nextRecoveryUtc = DateTime.MinValue;
-        private DateTime? _lastRecoveryUtc;
+        private DateTime? _firstRecoveryUtc;
 
         /// <param name="stallAfter">How long without progress counts as a stall.</param>
         /// <param name="recoveryInterval">Least time between two recovery attempts.</param>
@@ -101,8 +101,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (_stalledSinceUtc == null)
                     return SendStallTransition.None;
 
+                // After a recovery attempt, an empty queue proves nothing: the attempt drained it. The
+                // stall is over only once the worker has finished an action since then (the
+                // watchdog's probe, or real traffic). A write that is still blocked, or a JSON hold
+                // that is still there, keeps that from happening.
+                if (_firstRecoveryUtc != null && !(snapshot.SinceCompleted < now - _firstRecoveryUtc.Value))
+                    return SendStallTransition.None;
+
                 _stalledSinceUtc = null;
-                _lastRecoveryUtc = null; // the next stall starts without a recovery attempt
+                _firstRecoveryUtc = null; // the next stall starts without a recovery attempt
                 return SendStallTransition.Recovered;
             }
         }
@@ -119,20 +126,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     return false;
 
                 _nextRecoveryUtc = nowUtc + _recoveryInterval;
-                _lastRecoveryUtc = nowUtc;
+                // The first attempt of the stall: later retries must not restart the failure window.
+                if (_firstRecoveryUtc == null)
+                    _firstRecoveryUtc = nowUtc;
                 return true;
             }
         }
 
         /// <summary>
-        /// True when a recovery was tried during this stall and the path is still stalled
-        /// <c>stallAfter</c> later: recovering didn't help, so the device should show a fault. False
-        /// when not stalled, or before a recovery has had time to work.
+        /// True when a recovery was first tried during this stall at least <c>stallAfter</c> ago and the
+        /// path is still stalled: recovering didn't help, so the device should show a fault. Measured
+        /// from the first attempt, so retries can't postpone it. False when not stalled, or before a
+        /// recovery has had time to work.
         /// </summary>
         public bool RecoveryFailed(DateTime nowUtc)
         {
             lock (_sync)
-                return _stalledSinceUtc != null && _lastRecoveryUtc != null && nowUtc - _lastRecoveryUtc.Value >= _stallAfter;
+                return _stalledSinceUtc != null && _firstRecoveryUtc != null && nowUtc - _firstRecoveryUtc.Value >= _stallAfter;
         }
 
         /// <summary>Why <paramref name="snapshot"/> counts as stalled, or <see cref="SendStallCause.None"/>.</summary>

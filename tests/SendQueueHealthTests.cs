@@ -84,6 +84,22 @@ public class SendQueueHealthTests
     }
 
     [Fact]
+    public void Finishing_Records_A_Completion_But_Replacing_The_Worker_Does_Not()
+    {
+        var health = new SendQueueHealth();
+        health.OnStarted(SendQueueKind.Command, "x", T0);
+        health.OnFinished(T0.AddSeconds(1));
+        health.Snapshot(T0.AddSeconds(3)).SinceCompleted.Should().Be(TimeSpan.FromSeconds(2));
+
+        health.OnStarted(SendQueueKind.Command, "stuck write", T0.AddSeconds(4));
+        health.OnWorkerReplaced();
+
+        var snap = health.Snapshot(T0.AddSeconds(10));
+        snap.BusyFor.Should().BeNull("the replaced worker's action no longer counts as running");
+        snap.SinceCompleted.Should().Be(TimeSpan.FromSeconds(9), "it didn't finish either");
+    }
+
+    [Fact]
     public void Json_Hold_Is_Measured_From_Its_Start()
     {
         var health = new SendQueueHealth();

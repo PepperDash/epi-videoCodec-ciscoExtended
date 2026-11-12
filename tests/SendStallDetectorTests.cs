@@ -16,12 +16,13 @@ public class SendStallDetectorTests
     private static SendStallDetector Create() => new SendStallDetector(StallAfter, RecoveryInterval);
 
     private static SendQueueSnapshot Snapshot(DateTime at, int commands = 0, double? waiting = null,
-        double? busy = null, double? jsonHold = null, double? sinceJsonHold = null) =>
+        double? busy = null, double? jsonHold = null, double? sinceJsonHold = null, double? sinceCompleted = null) =>
         new SendQueueSnapshot(at,
             systemPending: 0, systemWaiting: null, systemSinceDequeue: null,
             commandPending: commands, commandWaiting: Seconds(waiting), commandSinceDequeue: Seconds(waiting),
             busyFor: Seconds(busy), busyWith: busy == null ? null : "xCommand Camera FactoryReset ...",
-            jsonHoldFor: Seconds(jsonHold), sinceSent: null, sinceJsonHold: Seconds(sinceJsonHold));
+            jsonHoldFor: Seconds(jsonHold), sinceSent: null, sinceJsonHold: Seconds(sinceJsonHold),
+            sinceCompleted: Seconds(sinceCompleted));
 
     private static TimeSpan? Seconds(double? s) => s == null ? null : TimeSpan.FromSeconds(s.Value);
 
@@ -145,7 +146,7 @@ public class SendStallDetectorTests
         detector.TryAcquireRecovery(T0);
         detector.RecoveryFailed(T0.AddSeconds(40)).Should().BeTrue();
 
-        detector.Evaluate(Snapshot(T0.AddSeconds(45)), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.Evaluate(Snapshot(T0.AddSeconds(45), sinceCompleted: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
         detector.RecoveryFailed(T0.AddSeconds(50)).Should().BeFalse();
     }
 
@@ -155,11 +156,71 @@ public class SendStallDetectorTests
         var detector = Create();
         detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
         detector.TryAcquireRecovery(T0);
-        detector.Evaluate(Snapshot(T0.AddSeconds(10)), out _, out _); // recovered
+        detector.Evaluate(Snapshot(T0.AddSeconds(10), sinceCompleted: 1), out _, out _).Should().Be(SendStallTransition.Recovered);
 
         detector.Evaluate(Snapshot(T0.AddMinutes(1), commands: 1, waiting: 31), out _, out _)
             .Should().Be(SendStallTransition.Stalled);
         detector.RecoveryFailed(T0.AddMinutes(2)).Should().BeFalse("this stall hasn't had a recovery attempt yet");
+    }
+
+    [Fact]
+    public void After_A_Recovery_An_Empty_Queue_Is_Not_Proof_Of_Recovery()
+    {
+        // The recovery drained the queue; nothing has finished since. The write may still be blocked.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0).Should().BeTrue();
+
+        detector.Evaluate(Snapshot(T0.AddSeconds(5)), out var cause, out _).Should().Be(SendStallTransition.None);
+        cause.Should().Be(SendStallCause.None);
+        detector.IsStalled.Should().BeTrue("nothing has completed since the recovery");
+        detector.RecoveryFailed(T0.AddSeconds(30)).Should().BeTrue("so the fault is shown");
+    }
+
+    [Fact]
+    public void A_Completion_Before_The_Recovery_Does_Not_Count()
+    {
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+
+        // Last completion 20 s ago at T0+10 = T0-10: before the recovery.
+        detector.Evaluate(Snapshot(T0.AddSeconds(10), sinceCompleted: 20), out _, out _).Should().Be(SendStallTransition.None);
+        detector.IsStalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_Completion_After_The_Recovery_Ends_The_Stall()
+    {
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 2, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+
+        // The watchdog's probe finished at T0+2.
+        detector.Evaluate(Snapshot(T0.AddSeconds(3), sinceCompleted: 1), out _, out var stalledFor)
+            .Should().Be(SendStallTransition.Recovered);
+        stalledFor.Should().Be(TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public void Retries_Do_Not_Postpone_The_Fault()
+    {
+        // A stall threshold longer than the recovery interval: each retry used to restart the window.
+        var detector = new SendStallDetector(TimeSpan.FromMinutes(6), TimeSpan.FromMinutes(5));
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 400), out _, out _);
+        detector.TryAcquireRecovery(T0).Should().BeTrue();
+        detector.TryAcquireRecovery(T0.AddMinutes(5)).Should().BeTrue("a retry");
+
+        detector.RecoveryFailed(T0.AddMinutes(6)).Should().BeTrue("measured from the first attempt");
+    }
+
+    [Fact]
+    public void A_Stall_That_Clears_Without_A_Recovery_Needs_No_Completion()
+    {
+        // e.g. a slow action finished on its own before the watchdog acted.
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, busy: 31), out _, out _).Should().Be(SendStallTransition.Stalled);
+        detector.Evaluate(Snapshot(T0.AddSeconds(5)), out _, out _).Should().Be(SendStallTransition.Recovered);
     }
 
     [Fact]

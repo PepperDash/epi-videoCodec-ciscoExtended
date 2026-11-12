@@ -589,7 +589,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             Interlocked.Increment(ref _workerGeneration);
             Interlocked.Exchange(ref _isProcessing, Idle);
-            SendHealth.OnFinished();
+            SendHealth.OnWorkerReplaced();
             Schedule();
         }
 
@@ -597,6 +597,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// Empties the command queue without sending, so commands that waited out a stall aren't sent
         /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
         /// </summary>
+        /// <summary>
+        /// Queues an action that does nothing, so the send watchdog can see the worker finish something
+        /// after a recovery (#194): an empty queue left by the recovery's drain proves nothing.
+        /// </summary>
+        internal void EnqueueWatchdogProbe()
+        {
+            EnqueueSystemAction(() => { }, "SendWatchdogProbe");
+            Schedule();
+        }
+
         internal int DrainCommands(int describe, out List<string> described)
         {
             described = new List<string>();
