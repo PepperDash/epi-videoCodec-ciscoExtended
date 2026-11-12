@@ -2518,12 +2518,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
 		/// the full-status step done (#142).
 		/// </summary>
-		internal void RequestFullStatus()
+		/// <summary>A full xStatus request that went out still waits for its reply.</summary>
+		internal bool IsFullStatusPending => _requests.PendingCount(SyncStatusRequest) > 0;
+
+		/// <returns>True when the request was sent; false when it was dropped (then it isn't left pending).</returns>
+		internal bool RequestFullStatus()
 		{
 			var id = _requests.Begin(SyncStatusRequest, SyncStatusTimeout);
 			Timings.Start(SyncStatusRequest, id);
 			StartRequestExpiryTimer();
-			SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id));
+			if (SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id)))
+				return true;
+
+			// Never sent, so no reply will come: don't leave it pending until it expires. Counted under
+			// its own name in codecperf.
+			_requests.TryComplete(id, out _);
+			Timings.Stop(SyncStatusRequest, id, SyncStatusRequest + ".notSent");
+			return false;
 		}
 
 		private void StartRequestExpiryTimer()
@@ -2764,19 +2775,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SyncState.AddCommandToQueue(cmd);
 		}
 
-		internal void SendTextWithoutQueue(string command)
+		/// <returns>True when the command was written to the connection; false when it was dropped.</returns>
+		internal bool SendTextWithoutQueue(string command)
 		{
 			if (Communication == null)
-				return;
+				return false;
 
 			if (string.IsNullOrEmpty(command))
-				return;
+				return false;
 
 			// At a serial login prompt anything sent is taken as a username or password (#115).
 			if (_atSerialLoginPrompt)
 			{
 				this.LogVerbose("Not sent, the RS-232 session is at a login prompt: {command}", command);
-				return;
+				return false;
 			}
 
 			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
@@ -2788,7 +2800,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.TrimEnd('\r', '\n');
 
 			if (UsesSerialPort && !FitsSerialLineLimit(normalized))
-				return;
+				return false;
 
 			// Writes come from the receive thread, the sync worker and the communication monitor's
 			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
@@ -2829,6 +2841,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				this.LogWarning(
 					"Not sent, the connection to the codec reports not connected: {command} ({count} not sent since the last warning, {total} in this episode).",
 					DropEpisodeTracker.Describe(command), droppedSinceLog, droppedInEpisode);
+
+			return sent;
 		}
 
 		private readonly object _sendLock = new object();

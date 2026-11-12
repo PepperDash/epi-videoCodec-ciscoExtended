@@ -41,7 +41,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
-        public bool LoginMessageWasReceived { get; private set; }
+        /// <summary>The sync has claimed the codec's session: its login was seen and its setup sent.</summary>
+        public bool LoginMessageWasReceived
+        {
+            get { return _session.Claimed; }
+            private set { _session.Claimed = value; }
+        }
+
+        private readonly SessionStarter _session;
 
         public bool JsonResponseModeSet { get; private set; }
 
@@ -65,6 +72,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             Key = key;
             _parent = parent;
+            _session = new SessionStarter(_parent.SendTextWithoutQueue, _parent.RequestFullStatus, () => _parent.IsFullStatusPending);
 
             _worker = new SendWorker(
                 new CrestronActionQueue(QueueCapacity),
@@ -232,17 +240,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (!LoginMessageWasReceived)
                 {
                     // Adopting a session this program did not set up (e.g. after a program restart).
-                    LoginMessageWasReceived = true;
+                    // Echo off (it may still have echo on) and always the full status: the JSON that got
+                    // us here may be a poll reply (SystemUnit, cameras, SIP, volume), which already
+                    // counts as the initial status but leaves call, standby and presentation state
+                    // unloaded. A session this program set up already requested it in StartSession.
                     MarkSessionDetected();
-
-                    // It may still have echo on.
-                    _parent.SendTextWithoutQueue("echo off");
-
-                    // Always request the full status here: the JSON that got us here may be a poll
-                    // reply (SystemUnit, cameras, SIP, volume), which already counts as the initial
-                    // status but leaves call, standby and presentation state unloaded. A session
-                    // this program set up already requested it in StartSession.
-                    _parent.RequestFullStatus();
+                    if (_session.Adopt(FullStatusWasReceived).SetupDropped)
+                        OnSessionSetupDropped("JSON received");
                 }
 
                 MarkSyncPhase("jsonMode");
@@ -290,21 +294,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         private void StartSession(string reason)
         {
-            var isNewSession = !LoginMessageWasReceived;
-            LoginMessageWasReceived = true;
-            MarkSessionDetected();
-
-            if (JsonResponseModeSet)
-                return;
-
-            if (isNewSession)
+            if (!LoginMessageWasReceived && !JsonResponseModeSet)
                 this.LogDebug("Codec session detected ({reason}): turning echo off and requesting JSON mode.", reason);
 
-            _parent.SendTextWithoutQueue("echo off");
-            _parent.SendTextWithoutQueue("xPreferences outputmode json");
+            MarkSessionDetected();
+            if (_session.Start(JsonResponseModeSet, FullStatusWasReceived).SetupDropped)
+                OnSessionSetupDropped(reason);
+        }
 
-            if (isNewSession && !FullStatusWasReceived)
-                _parent.RequestFullStatus();
+        /// <summary>
+        /// A new session's setup was dropped because the connection reported not connected (an SSH
+        /// client can deliver the codec's first output just before it reports connected). The session
+        /// stays unclaimed, so the next output the codec sends starts it again, full status included;
+        /// the sync is timed from that start.
+        /// </summary>
+        private void OnSessionSetupDropped(string reason)
+        {
+            _sessionDetectedAt = 0;
+            this.LogInformation(
+                "Codec session detected ({reason}) before the connection reported connected: its setup wasn't sent. Starting it again on the codec's next output.",
+                reason);
         }
 
         /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
