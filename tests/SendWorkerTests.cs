@@ -15,18 +15,31 @@ public class SendWorkerTests : IDisposable
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private readonly List<ManualResetEventSlim> _gates = new();
+    private readonly List<Harness> _harnesses = new();
 
     public void Dispose()
     {
-        // Release anything a test left blocked, so its threads end.
+        // Release anything a test left blocked, stop every worker, and wait for their threads to end.
         foreach (var gate in _gates)
             gate.Set();
+        foreach (var harness in _harnesses)
+            harness.Worker.Stop();
+        foreach (var harness in _harnesses)
+            harness.JoinThreads(TimeSpan.FromSeconds(5));
+        foreach (var gate in _gates)
+            gate.Dispose();
+    }
+
+    private Harness Track(Harness harness)
+    {
+        _harnesses.Add(harness);
+        return harness;
     }
 
     [Fact]
     public void Runs_System_Actions_Before_Commands_In_Order()
     {
-        var h = new Harness();
+        var h = Track(new Harness());
         var ran = new ConcurrentQueue<string>();
         h.Worker.Enqueue(SendQueueKind.Command, () => ran.Enqueue("c1"), "c1");
         h.Worker.Enqueue(SendQueueKind.Command, () => ran.Enqueue("c2"), "c2");
@@ -42,7 +55,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void An_Action_That_Throws_Is_Reported_And_The_Worker_Carries_On()
     {
-        var h = new Harness();
+        var h = Track(new Harness());
         var ran = false;
         h.Worker.Enqueue(SendQueueKind.Command, () => throw new InvalidOperationException("boom"), "bad");
         h.Worker.Enqueue(SendQueueKind.Command, () => ran = true, "good");
@@ -55,7 +68,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Full_Queue_Drops_Instead_Of_Blocking_The_Caller()
     {
-        var h = new Harness(capacity: 5);
+        var h = Track(new Harness(capacity: 5));
         var gate = Gate();
         h.Worker.Enqueue(SendQueueKind.Command, () => gate.Wait(), "blocking write");
         h.Worker.Schedule();
@@ -72,7 +85,7 @@ public class SendWorkerTests : IDisposable
     public void Worker_That_Is_Not_Running_Is_Detected_And_Restarted()
     {
         // The first worker thread never runs (as if it died): commands pile up.
-        var h = new Harness(startFirstWorker: false);
+        var h = Track(new Harness(startFirstWorker: false));
         var ran = new ConcurrentQueue<string>();
         for (var i = 0; i < 3; i++)
         {
@@ -97,7 +110,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Blocked_Write_Is_Detected_And_A_Reconnect_Ends_It()
     {
-        var h = new Harness();
+        var h = Track(new Harness());
         var write = Gate();
         var ran = new ConcurrentQueue<string>();
         h.Worker.Enqueue(SendQueueKind.Command, () => { write.Wait(); ran.Enqueue("blocked"); }, "xCommand Camera FactoryReset ...");
@@ -117,46 +130,46 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
-    public void Blocked_Write_Over_Serial_Gets_A_New_Worker_And_The_Old_One_Bows_Out()
+    public void Blocked_Write_Over_Serial_Keeps_The_Worker_And_Piles_Up_No_Threads()
     {
-        var h = new Harness(canReconnect: false);
+        // Over RS-232 there is no session to reconnect, and a new worker would block on the same send
+        // lock: the watchdog keeps the worker, however many times it retries.
+        var h = Track(new Harness(canReconnect: false));
         var write = Gate();
         var ran = new ConcurrentQueue<string>();
-        h.Worker.Enqueue(SendQueueKind.Command, () => write.Wait(), "stuck");
+        h.Worker.Enqueue(SendQueueKind.Command, () => { write.Wait(); ran.Enqueue("stuck"); }, "stuck");
         h.Worker.Schedule();
 
-        var check = h.WatchUntil(c => c.Cause != SendStallCause.None);
-        check.Action.Should().Be(SendStallAction.RestartWorker, "there is no session to reconnect over RS-232");
+        var check = h.WatchUntil(c => c.Action != null);
+        check.Cause.Should().Be(SendStallCause.WorkerBlocked);
+        check.Action.Should().Be(SendStallAction.KeepWorker);
+        for (var i = 0; i < 5; i++)
+        {
+            h.Check(); // retries (no recovery interval in the harness)
+            Thread.Sleep(20);
+        }
+        h.Starts.Should().Be(1, "no replacement workers pile up behind the blocked write");
 
-        h.Worker.Enqueue(SendQueueKind.Command, () => ran.Enqueue("after restart"), "after restart");
-        h.Worker.Schedule();
-        WaitUntil(() => ran.Contains("after restart"));
-
-        // The old worker's write returns: it must not run anything else, nor clear the new one's state.
-        var busyBlocker = Gate();
-        h.Worker.Enqueue(SendQueueKind.Command, () => busyBlocker.Wait(), "new worker busy");
-        h.Worker.Schedule();
-        WaitUntil(() => h.Worker.Health.Snapshot(DateTime.UtcNow).BusyWith == "new worker busy");
+        // The write finishes: the same worker carries on, the probe gets through, the stall ends.
         write.Set();
-        Thread.Sleep(100);
-        h.Worker.Health.Snapshot(DateTime.UtcNow).BusyWith.Should().Be("new worker busy");
-        h.Starts.Should().Be(2);
+        WaitUntil(() => ran.Contains("stuck"));
+        h.WatchUntil(c => c.Transition == SendStallTransition.Recovered);
+        h.Starts.Should().Be(1);
     }
 
     [Fact]
     public void Write_Blocked_Under_The_Send_Lock_Over_Serial_Is_Reported_As_Unrecovered()
     {
-        // The write holds the send lock and never returns. Over RS-232 the watchdog can only start a
-        // new worker, which shares that lock: the probe must not finish, so the stall can't end and
-        // the failure gets reported instead of a recovery every 5 minutes.
-        var h = new Harness(canReconnect: false);
+        // The write holds the send lock and never returns. Over RS-232 nothing can end it: the stall
+        // must stay on and be reported as unrecovered, not "recovered" every 5 minutes.
+        var h = Track(new Harness(canReconnect: false));
         var write = Gate();
         h.Worker.Enqueue(SendQueueKind.Command, () => { lock (h.SendLock) write.Wait(); }, "xCommand Standby Activate");
         h.Worker.Schedule();
 
         var check = h.WatchUntil(c => c.Action != null);
         check.Cause.Should().Be(SendStallCause.WorkerBlocked);
-        check.Action.Should().Be(SendStallAction.RestartWorker);
+        check.Action.Should().Be(SendStallAction.KeepWorker);
 
         // Past the failure window the stall is still on and the recovery counts as failed.
         Thread.Sleep(StallAfter + TimeSpan.FromMilliseconds(300));
@@ -164,9 +177,10 @@ public class SendWorkerTests : IDisposable
         after.Transition.Should().NotBe(SendStallTransition.Recovered);
         h.Detector.IsStalled.Should().BeTrue();
         h.Detector.RecoveryFailed(DateTime.UtcNow).Should().BeTrue();
-        after.Busy.Should().Be("SendWatchdogProbe", "the new worker waits on the probe behind the blocked write");
+        after.Busy.Should().Be("xCommand Standby Activate", "the worker is still in the blocked write");
+        h.Starts.Should().Be(1);
 
-        // The write returns at last: the probe finishes and the stall ends.
+        // The write returns at last: the probe gets through and the stall ends.
         write.Set();
         h.WatchUntil(c => c.Transition == SendStallTransition.Recovered);
     }
@@ -174,7 +188,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Json_Response_That_Never_Ends_Is_Detected_And_A_Reconnect_Clears_It()
     {
-        var h = new Harness { ReceivingJson = true };
+        var h = Track(new Harness { ReceivingJson = true });
         var ran = new ConcurrentQueue<string>();
         h.Worker.Enqueue(SendQueueKind.Command, () => ran.Enqueue("held"), "held");
         h.Worker.Schedule();
@@ -197,7 +211,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Healthy_Busy_Worker_Never_Reads_As_A_Stall()
     {
-        var h = new Harness();
+        var h = Track(new Harness());
         var done = 0;
         for (var i = 0; i < 20; i++)
             h.Worker.Enqueue(SendQueueKind.Command, () => { Thread.Sleep(10); Interlocked.Increment(ref done); }, "c");
@@ -215,7 +229,7 @@ public class SendWorkerTests : IDisposable
     {
         // Many threads queue at once while the worker runs, the watchdog drains and the JSON hold
         // flickers. Once everything has settled, nothing may read as waiting, so no false stall.
-        var h = new Harness(capacity: 1000);
+        var h = Track(new Harness(capacity: 1000));
         var producers = Enumerable.Range(0, 8).Select(p => new Thread(() =>
         {
             for (var i = 0; i < 2000; i++)
@@ -235,13 +249,20 @@ public class SendWorkerTests : IDisposable
                 Thread.Sleep(1);
             }
             h.ReceivingJson = false;
-        });
+        }) { IsBackground = true };
+        producers.ForEach(t => t.IsBackground = true);
 
         chaos.Start();
-        producers.ForEach(t => t.Start());
-        producers.ForEach(t => t.Join(Timeout).Should().BeTrue());
-        Volatile.Write(ref stop, true);
-        chaos.Join(Timeout).Should().BeTrue();
+        try
+        {
+            producers.ForEach(t => t.Start());
+            producers.ForEach(t => t.Join(Timeout).Should().BeTrue());
+        }
+        finally
+        {
+            Volatile.Write(ref stop, true);
+            chaos.Join(Timeout).Should().BeTrue();
+        }
 
         h.Worker.Schedule();
         WaitUntil(() =>
@@ -257,7 +278,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Reset_Arriving_At_A_Full_System_Queue_Replaces_The_Stale_Actions()
     {
-        var h = new Harness(capacity: 3, startFirstWorker: false);
+        var h = Track(new Harness(capacity: 3, startFirstWorker: false));
         var ran = new ConcurrentQueue<string>();
         for (var i = 0; i < 3; i++)
         {
@@ -279,7 +300,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void Reset_With_Room_In_The_Queue_Keeps_Its_Place()
     {
-        var h = new Harness(startFirstWorker: false);
+        var h = Track(new Harness(startFirstWorker: false));
         var ran = new ConcurrentQueue<string>();
         h.Worker.Enqueue(SendQueueKind.System, () => ran.Enqueue("before"), "before");
         h.Worker.EnqueueReset(() => ran.Enqueue("reset"), "SessionLost").Should().Be(0);
@@ -294,7 +315,7 @@ public class SendWorkerTests : IDisposable
     [Fact]
     public void A_Replaced_Worker_Never_Takes_Another_Action()
     {
-        var h = new Harness(canReconnect: false);
+        var h = Track(new Harness(canReconnect: false));
         var oldWrite = Gate();
         var oldThread = 0;
         h.Worker.Enqueue(SendQueueKind.Command, () => { oldThread = Environment.CurrentManagedThreadId; oldWrite.Wait(); }, "stuck");
@@ -322,9 +343,43 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
+    public void A_Replaced_Worker_Passes_On_A_Wake_Up_It_Took()
+    {
+        // The old worker found the queues empty and is about to wait when it is replaced; then both
+        // workers wait on the same auto-reset signal. Whichever gets the next wake-up, the queued
+        // action must run promptly, well before the idle recheck.
+        var signal = new PausingSignal();
+        var h = Track(new Harness(signal: signal));
+        h.Worker.Schedule();
+        WaitUntil(() => signal.PausedCount == 1);   // the old worker, between its empty check and its wait
+
+        h.Worker.RestartWorker();
+        WaitUntil(() => signal.PausedCount == 2);   // the replacement, at the same point
+
+        // Both Schedule calls left a wake-up pending; drop it so each worker really waits. The old
+        // worker waits first, then the replacement: waits are woken roughly in order, so the next
+        // wake-up goes to the old worker, which is no longer current.
+        signal.Reset();
+        signal.Resume(0);
+        WaitUntil(() => signal.Waiting == 1);
+        Thread.Sleep(50);
+        signal.Resume(1);
+        WaitUntil(() => signal.Waiting == 2);
+
+        var ran = false;
+        h.Worker.Enqueue(SendQueueKind.Command, () => Volatile.Write(ref ran, true), "c");
+        h.Worker.Schedule();
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(SendWorker.IdleRecheckMs / 2);
+        while (!Volatile.Read(ref ran) && DateTime.UtcNow < deadline)
+            Thread.Sleep(5);
+        Volatile.Read(ref ran).Should().BeTrue("the wake-up reached a current worker");
+    }
+
+    [Fact]
     public void Enqueue_Reports_Its_Result_Under_The_Lock()
     {
-        var h = new Harness(capacity: 1, startFirstWorker: false);
+        var h = Track(new Harness(capacity: 1, startFirstWorker: false));
         var results = new List<bool>();
 
         h.Worker.Enqueue(SendQueueKind.Command, () => { }, "a", results.Add);
@@ -365,12 +420,20 @@ public class SendWorkerTests : IDisposable
         private int _starts;
         private volatile bool _receivingJson;
 
-        public Harness(int capacity = 100, bool canReconnect = true, bool startFirstWorker = true)
+        private readonly ConcurrentBag<Thread> _threads = new();
+
+        public Harness(int capacity = 100, bool canReconnect = true, bool startFirstWorker = true, IWorkerSignal? signal = null)
         {
             _canReconnect = canReconnect;
             _startFirstWorker = startFirstWorker;
-            Worker = new SendWorker(new BoundedQueue(capacity), new BoundedQueue(capacity), new AutoSignal(), StartThread,
+            Worker = new SendWorker(new BoundedQueue(capacity), new BoundedQueue(capacity), signal ?? new AutoSignal(), StartThread,
                 () => _receivingJson, new SendQueueHealth(), (label, ex) => Errors.Add(label + ": " + ex.Message));
+        }
+
+        public void JoinThreads(TimeSpan timeout)
+        {
+            foreach (var thread in _threads)
+                thread.Join(timeout);
         }
 
         public SendWorker Worker { get; }
@@ -397,7 +460,9 @@ public class SendWorkerTests : IDisposable
             if (Interlocked.Increment(ref _starts) == 1 && !_startFirstWorker)
                 return; // this worker "died" before taking anything
 
-            new Thread(() => loop()) { IsBackground = true }.Start();
+            var thread = new Thread(() => loop()) { IsBackground = true };
+            _threads.Add(thread);
+            thread.Start();
         }
 
         /// <summary>The watchdog's steps: evaluate, and recover once per interval while stalled.</summary>
@@ -410,14 +475,25 @@ public class SendWorkerTests : IDisposable
 
             var dropped = Worker.DrainCommands(5, out _);
             var action = SendStallRecovery.Choose(cause, _canReconnect);
-            if (action == SendStallAction.RestartWorker)
-                Worker.RestartWorker();
-            else
-                OnReconnect();
+            switch (action)
+            {
+                case SendStallAction.RestartWorker:
+                    Worker.RestartWorker();
+                    break;
+                case SendStallAction.Reconnect:
+                    OnReconnect();
+                    break;
+                case SendStallAction.KeepWorker:
+                    break; // RS-232: nothing to reconnect, and a new worker would block the same way
+            }
 
             // As CiscoCodec does: a probe whose completion confirms the recovery. It waits for the
-            // send lock, like a real command (CiscoCodec.WaitForSendPath).
-            Worker.Enqueue(SendQueueKind.System, () => { lock (SendLock) { } }, "SendWatchdogProbe");
+            // send lock, like a real command (CiscoCodec.WaitForSendPath), then counts itself.
+            Worker.Enqueue(SendQueueKind.System, () =>
+            {
+                lock (SendLock) { }
+                Worker.Health.OnProbeCompleted();
+            }, "SendWatchdogProbe");
             Worker.Schedule();
 
             return new Check(transition, cause, action, dropped, snapshot.BusyWith);
@@ -474,14 +550,50 @@ public class SendWorkerTests : IDisposable
     }
 
     /// <summary>An auto-reset signal like CEvent.</summary>
-    private sealed class AutoSignal : IWorkerSignal
+    private class AutoSignal : IWorkerSignal
     {
         private readonly AutoResetEvent _event = new(false);
+        private int _waiting;
+
+        /// <summary>How many threads are waiting on the event right now.</summary>
+        public int Waiting => Volatile.Read(ref _waiting);
 
         public void Set() => _event.Set();
 
-        public void Wait() => _event.WaitOne();
+        /// <summary>Drops a pending wake-up (test setup only).</summary>
+        public void Reset() => _event.Reset();
 
-        public void Wait(int timeoutMs) => _event.WaitOne(timeoutMs);
+        public void Wait() => Wait(System.Threading.Timeout.Infinite);
+
+        public void Wait(int timeoutMs)
+        {
+            BeforeWait();
+            Interlocked.Increment(ref _waiting);
+            try { _event.WaitOne(timeoutMs); }
+            finally { Interlocked.Decrement(ref _waiting); }
+        }
+
+        protected virtual void BeforeWait() { }
+    }
+
+    /// <summary>
+    /// Pauses the first two threads that wait, each before it waits: workers caught between their empty
+    /// check and their wait. Each is resumed on its own, so the test decides who waits first.
+    /// </summary>
+    private sealed class PausingSignal : AutoSignal
+    {
+        private readonly ManualResetEventSlim[] _resume = { new(false), new(false) };
+        private int _paused;
+
+        public int PausedCount => Math.Min(Volatile.Read(ref _paused), _resume.Length);
+
+        public void Resume(int index) => _resume[index].Set();
+
+        protected override void BeforeWait()
+        {
+            var index = Interlocked.Increment(ref _paused) - 1;
+            if (index < _resume.Length)
+                _resume[index].Wait();
+        }
     }
 }
