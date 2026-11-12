@@ -169,8 +169,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <item>False when the queue is full: the step was dropped and isn't marked waiting, so the next
         /// request tries again.</item>
         /// </list>
-        /// <paramref name="onResult"/> runs under the lock with the result (true when an existing copy
-        /// serves the request).
+        /// <paramref name="onResult"/> runs under the lock with the result of an actual enqueue attempt
+        /// (accepted or rejected); it doesn't run when a waiting copy serves the request, since nothing
+        /// was queued and a full queue is no fuller or emptier for it.
         /// </summary>
         public bool EnqueueSystemOnce(string key, Action action, string? sessionMode = null, Action<bool>? onResult = null)
         {
@@ -180,10 +181,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             lock (_gate)
             {
                 if (_waitingSteps.TryGetValue(key, out var waiting) && waiting >= _lastBoundaryToken)
-                {
-                    onResult?.Invoke(true);
-                    return true;
-                }
+                    return true; // served by the waiting copy: nothing was queued, so no result to report
 
                 var token = ++_lastStepToken;
                 Health.OnEnqueued(SendQueueKind.System, _utcNow());

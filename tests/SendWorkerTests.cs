@@ -605,6 +605,20 @@ public class SendWorkerTests : IDisposable
     }
 
     [Fact]
+    public void A_Coalesced_Request_Reports_No_Result()
+    {
+        // A full queue's drop tracking must only hear about real enqueue attempts: a request served by
+        // a waiting copy queued nothing, so it must not end a drop episode.
+        var h = Track(new Harness(capacity: 1, startFirstWorker: false));
+        var results = new List<bool>();
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => { }, onResult: results.Add).Should().BeTrue();
+        h.Worker.EnqueueSystemOnce("FeedbackRegistered", () => { }, onResult: results.Add).Should().BeFalse("the queue is full");
+        h.Worker.EnqueueSystemOnce("JsonMessageReceived", () => { }, onResult: results.Add).Should().BeTrue("the waiting copy serves it");
+
+        results.Should().Equal(new[] { true, false }, "the coalesced request reported nothing");
+    }
+
+    [Fact]
     public void Enqueue_Reports_Its_Result_Under_The_Lock()
     {
         var h = Track(new Harness(capacity: 1, startFirstWorker: false));
