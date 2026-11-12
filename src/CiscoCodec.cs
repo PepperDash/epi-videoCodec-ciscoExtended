@@ -2780,31 +2780,38 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
 			// codec gets garbled commands and loses some of them (#123).
 			bool sent;
+			int recovered = 0, droppedSinceLog = 0, droppedInEpisode = 0;
+			var logDrop = false;
 			lock (_sendLock)
 			{
 				// Skip writes while the connection is down or being torn down (always true on RS-232).
 				sent = Communication.IsConnected;
 				if (sent)
 					Communication.SendText(normalized + Delimiter);
+
+				// The episode is updated under the lock, in the same order as the send decisions, so a
+				// success on one thread can't end a drop episode another thread has just started.
+				if (sent)
+					recovered = _notConnectedDrops.OnSucceeded();
+				else
+				{
+					logDrop = _notConnectedDrops.OnDropped(DateTime.UtcNow, out droppedSinceLog);
+					droppedInEpisode = _notConnectedDrops.DroppedInEpisode;
+				}
 			}
 
 			// Logged outside the lock, so a slow log write never holds up sending.
-			if (sent)
-			{
-				var dropped = _notConnectedDrops.OnSucceeded();
-				if (dropped > 0)
-					this.LogInformation(
-						"Sending to the codec again: {count} command(s) were not sent while the connection reported not connected.",
-						dropped);
-				return;
-			}
+			if (recovered > 0)
+				this.LogInformation(
+					"Sending to the codec again: {count} command(s) were not sent while the connection reported not connected.",
+					recovered);
 
 			// A drop used to be silent, so a connection stuck reporting "not connected" while its status
 			// kept arriving looked healthy (#194). Logged once per episode, then every few minutes.
-			if (_notConnectedDrops.OnDropped(DateTime.UtcNow, out var droppedSinceLog))
+			if (logDrop)
 				this.LogWarning(
 					"Not sent, the connection to the codec reports not connected: {command} ({count} not sent since the last warning, {total} in this episode).",
-					DropEpisodeTracker.Describe(command), droppedSinceLog, _notConnectedDrops.DroppedInEpisode);
+					DropEpisodeTracker.Describe(command), droppedSinceLog, droppedInEpisode);
 		}
 
 		private readonly object _sendLock = new object();

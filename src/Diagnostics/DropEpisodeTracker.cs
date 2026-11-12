@@ -93,12 +93,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             const int maxWords = 3;
             const int maxLength = 60;
 
-            var words = command!.Split(new[] { ' ', '\t', '\r', '\n' }, maxWords + 1, StringSplitOptions.RemoveEmptyEntries);
+            var trimmed = command!.Trim();
+
+            // Arguments start at the first parameter colon ("Number:"), quote, '=' or option pipe
+            // ("| resultId=..."), with or without a space before the value: nothing from there on.
+            var argumentsAt = trimmed.IndexOfAny(ArgumentStart);
+            var commandPart = argumentsAt < 0 ? trimmed : trimmed.Substring(0, argumentsAt);
+
+            var words = commandPart.Split(new[] { ' ', '\t', '\r', '\n' }, maxWords + 1, StringSplitOptions.RemoveEmptyEntries);
             var head = string.Join(" ", words, 0, Math.Min(words.Length, maxWords));
             if (head.Length > maxLength)
                 head = head.Substring(0, maxLength);
 
-            return words.Length > maxWords || head.Length < command.Trim().Length ? head + " ..." : head;
+            if (head.Length == 0)
+                return "(arguments only) ...";
+
+            return head.Length < trimmed.Length ? head + " ..." : head;
         }
+
+        private static readonly char[] ArgumentStart = { ':', '"', '=', '|' };
     }
 }
