@@ -126,6 +126,43 @@ public class SendStallDetectorTests
     }
 
     [Fact]
+    public void Recovery_Has_Failed_Only_After_It_Had_Time_To_Work()
+    {
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
+        detector.RecoveryFailed(T0.AddMinutes(1)).Should().BeFalse("no recovery has been tried");
+
+        detector.TryAcquireRecovery(T0).Should().BeTrue();
+        detector.RecoveryFailed(T0.AddSeconds(29)).Should().BeFalse("the recovery is still within its window");
+        detector.RecoveryFailed(T0.AddSeconds(30)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Recovery_Failure_Clears_When_The_Stall_Ends()
+    {
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+        detector.RecoveryFailed(T0.AddSeconds(40)).Should().BeTrue();
+
+        detector.Evaluate(Snapshot(T0.AddSeconds(45)), out _, out _).Should().Be(SendStallTransition.Recovered);
+        detector.RecoveryFailed(T0.AddSeconds(50)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_New_Stall_Starts_Without_The_Old_Recovery_Attempt()
+    {
+        var detector = Create();
+        detector.Evaluate(Snapshot(T0, commands: 1, waiting: 31), out _, out _);
+        detector.TryAcquireRecovery(T0);
+        detector.Evaluate(Snapshot(T0.AddSeconds(10)), out _, out _); // recovered
+
+        detector.Evaluate(Snapshot(T0.AddMinutes(1), commands: 1, waiting: 31), out _, out _)
+            .Should().Be(SendStallTransition.Stalled);
+        detector.RecoveryFailed(T0.AddMinutes(2)).Should().BeFalse("this stall hasn't had a recovery attempt yet");
+    }
+
+    [Fact]
     public void Threshold_Must_Be_Positive()
     {
         var act = () => new SendStallDetector(TimeSpan.Zero, RecoveryInterval);
