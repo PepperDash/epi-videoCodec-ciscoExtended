@@ -5241,7 +5241,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (camera != null)
 			{
-				SelectedCamera = camera;
+				// Only records what the codec reports; it sends nothing. Unmuting here would turn a camera
+				// the room turned off back on whenever the codec changes its source (a call-start camera
+				// selection, the codec's own source change).
+				SetSelectedCamera(camera, unmuteIfOff: false);
 
 				this.LogDebug("Current Main Video Source Camera set to: {cameraId}", camera.CameraId);
 			}
