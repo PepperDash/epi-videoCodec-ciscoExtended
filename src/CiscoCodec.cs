@@ -2486,6 +2486,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					// poll replies and status feedback carry no resultId, or another request's. Completed
 					// even when the parse throws (the dispatcher still logs it): otherwise the request
 					// stays pending until it expires and every re-request fails the same way.
+					// Marked as arriving before the request leaves the tracker, so a session setup on the sync
+					// worker always sees one or the other and doesn't ask again.
+					if (_requests.TryGetKind(message.ResultId, out var pendingKind) && pendingKind == SyncStatusRequest)
+						SyncState.MarkFullStatusReplyArriving();
 					if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
 					{
 						Timings.Stop(SyncStatusRequest, message.ResultId);
@@ -2520,6 +2524,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		/// </summary>
 		/// <summary>A full xStatus request that went out still waits for its reply.</summary>
 		internal bool IsFullStatusPending => _requests.PendingCount(SyncStatusRequest) > 0;
+
+		/// <summary>
+		/// Drops the sync's pending full xStatus requests: a reset sync starts a new session, whose own
+		/// request must not be held back by one from the session before (its reply may never come).
+		/// </summary>
+		internal void CancelFullStatusRequests() => _requests.Cancel(SyncStatusRequest);
 
 		/// <returns>True when the request was sent; false when it was dropped (then it isn't left pending).</returns>
 		internal bool RequestFullStatus()
