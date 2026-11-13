@@ -1091,6 +1091,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_phonebookMode = props.PhonebookMode;
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
 
+			FullStatusReply = new FullStatusReplyGate(_requests, SyncStatusRequest);
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 			WireFramer();
 			WireDispatcher();
@@ -2486,11 +2487,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					// poll replies and status feedback carry no resultId, or another request's. Completed
 					// even when the parse throws (the dispatcher still logs it): otherwise the request
 					// stays pending until it expires and every re-request fails the same way.
-					// Marked as arriving before the request leaves the tracker, so a session setup on the sync
-					// worker always sees one or the other and doesn't ask again.
-					if (_requests.TryGetKind(message.ResultId, out var pendingKind) && pendingKind == SyncStatusRequest)
-						SyncState.MarkFullStatusReplyArriving();
-					if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+					// The gate marks it arriving before the request leaves the tracker (so a session setup on
+					// the sync worker always sees one or the other and doesn't ask again), under the lock a
+					// sync reset takes.
+					if (FullStatusReply.TryComplete(message.ResultId))
 					{
 						Timings.Stop(SyncStatusRequest, message.ResultId);
 						SyncState.FullStatusReceived();
@@ -2518,19 +2518,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			};
 		}
 
-		/// <summary>
-		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
-		/// the full-status step done (#142).
-		/// </summary>
 		/// <summary>A full xStatus request that went out still waits for its reply.</summary>
 		internal bool IsFullStatusPending => _requests.PendingCount(SyncStatusRequest) > 0;
 
 		/// <summary>
-		/// Drops the sync's pending full xStatus requests: a reset sync starts a new session, whose own
-		/// request must not be held back by one from the session before (its reply may never come).
+		/// Matches the full xStatus reply and resets it with the sync, so a reply from one session doesn't
+		/// count in the next.
 		/// </summary>
-		internal void CancelFullStatusRequests() => _requests.Cancel(SyncStatusRequest);
+		internal FullStatusReplyGate FullStatusReply { get; }
 
+		/// <summary>
+		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
+		/// the full-status step done (#142).
+		/// </summary>
 		/// <returns>True when the request was sent; false when it was dropped (then it isn't left pending).</returns>
 		internal bool RequestFullStatus()
 		{

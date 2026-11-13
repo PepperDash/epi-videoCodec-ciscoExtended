@@ -28,6 +28,7 @@
     <Compile Include="..\src\Diagnostics\SendStallDetector.cs" Link="Linked\SendStallDetector.cs" />
     <Compile Include="..\src\Dispatch\SendWorker.cs" Link="Linked\SendWorker.cs" />
     <Compile Include="..\src\Dispatch\SessionStarter.cs" Link="Linked\SessionStarter.cs" />
+    <Compile Include="..\src\Dispatch\FullStatusReplyGate.cs" Link="Linked\FullStatusReplyGate.cs" />
     <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
     <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />
     <Compile Include="..\src\Framing\SerialLoginDetector.cs" Link="Linked\SerialLoginDetector.cs" />
