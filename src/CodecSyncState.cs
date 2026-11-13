@@ -50,11 +50,6 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private readonly SessionStarter _session;
 
-        // Set on the receive thread as soon as this sync's full status reply is matched (before its request
-        // leaves the tracker), until the worker applies FullStatusReceived: a session setup that runs in
-        // between must not ask again. The session starter reads it when it would send the request.
-        private volatile bool _fullStatusReplyArrived;
-
         public bool JsonResponseModeSet { get; private set; }
 
         public bool InitialStatusMessageWasReceived { get; private set; }
@@ -77,8 +72,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             Key = key;
             _parent = parent;
+            // The gate's Arriving is set on the receive thread as soon as this session's full status reply
+            // is matched, until a reset: a session setup that runs before the worker applies
+            // FullStatusReceived must not ask again.
             _session = new SessionStarter(_parent.SendTextWithoutQueue, _parent.RequestFullStatus, () => _parent.IsFullStatusPending,
-                () => _fullStatusReplyArrived);
+                () => _parent.FullStatusReply.Arriving);
 
             _worker = new SendWorker(
                 new CrestronActionQueue(QueueCapacity),
@@ -323,15 +321,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
-        /// <summary>A reply to this sync's tagged full xStatus request is being parsed (receive thread).</summary>
-        public void MarkFullStatusReplyArriving() => _fullStatusReplyArrived = true;
-
         public void FullStatusReceived()
         {
-            _fullStatusReplyArrived = true;
-
             EnqueueSystemAction(() =>
             {
+                // Read when the step runs, not captured: a reply matched before a reset that has run since
+                // (which clears Arriving) can't stand in for the new session's own full status, and a
+                // waiting copy of this step that serves a later call applies that call's reply.
+                if (!_parent.FullStatusReply.Arriving)
+                {
+                    this.LogDebug("Full Codec Status from a session that has since been reset: ignored.");
+                    return;
+                }
+
                 if (!FullStatusWasReceived)
                     this.LogDebug("Full Codec Status received.");
 
@@ -439,9 +441,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private void ResetSync()
         {
             // The previous session's full status requests: their replies may never come, and while
-            // pending they would hold back the new session's own request.
-            _parent.CancelFullStatusRequests();
-            _fullStatusReplyArrived = false;
+            // pending they would hold back the new session's own request. Also clears the arriving mark
+            // and starts a new generation, under the lock the reply match takes.
+            _parent.FullStatusReply.Reset();
             LoginMessageWasReceived = false;
             JsonResponseModeSet = false;
             InitialConfigurationMessageWasReceived = false;
