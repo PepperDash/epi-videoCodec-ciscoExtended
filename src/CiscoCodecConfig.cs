@@ -120,6 +120,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("joinableCooldownSeconds")]
         public int JoinableCooldownSeconds { get; set; }
 
+        /// <summary>
+        /// How long commands may wait with none sent before the send path counts as stalled and the
+        /// plugin recovers it: drops the commands that waited, then restarts its send worker or
+        /// reconnects to the codec (#194). 0 or less turns the watchdog off. Default 30.
+        /// </summary>
+        [JsonProperty("commandStallTimeoutSeconds")]
+        public int CommandStallTimeoutSeconds { get; set; } = 30;
+
         [JsonProperty("endAllCallsOnMeetingJoin")]
         public bool EndAllCallsOnMeetingJoin { get; set; }
 
