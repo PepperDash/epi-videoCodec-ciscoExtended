@@ -16,23 +16,40 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     public sealed class CallStartDetector
     {
         private readonly object _lock = new object();
-        private readonly Dictionary<string, bool> _inCall = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Reading> _last = new Dictionary<string, Reading>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Records <paramref name="inCall"/> for <paramref name="codecKey"/>. True only when the previous
-        /// reading for that codec was "not in a call" and this one is "in a call".
+        /// reading for that codec, in the same codec session, was "not in a call" and this one is "in a call".
         /// </summary>
-        public bool Observe(string codecKey, bool inCall)
+        /// <param name="codecKey">The codec.</param>
+        /// <param name="inCall">Whether the codec has an active call.</param>
+        /// <param name="session">The codec's session (its sync generation). A reading from another session
+        /// only records the state, like a first reading: the codec may have disconnected and re-synced
+        /// between two readings, and a call that was up all along would look like a new one.</param>
+        public bool Observe(string codecKey, bool inCall, int session = 0)
         {
             if (string.IsNullOrEmpty(codecKey))
                 return false;
 
             lock (_lock)
             {
-                var known = _inCall.TryGetValue(codecKey, out var wasInCall);
-                _inCall[codecKey] = inCall;
-                return known && !wasInCall && inCall;
+                var known = _last.TryGetValue(codecKey, out var last) && last.Session == session;
+                _last[codecKey] = new Reading(inCall, session);
+                return known && !last.InCall && inCall;
             }
+        }
+
+        private readonly struct Reading
+        {
+            public Reading(bool inCall, int session)
+            {
+                InCall = inCall;
+                Session = session;
+            }
+
+            public bool InCall { get; }
+            public int Session { get; }
         }
 
         /// <summary>
@@ -45,7 +62,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 return;
 
             lock (_lock)
-                _inCall.Remove(codecKey);
+                _last.Remove(codecKey);
         }
     }
 }

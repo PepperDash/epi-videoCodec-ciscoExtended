@@ -37,7 +37,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // but whose primary camera couldn't be selected yet (offline or moving): retried while the call lasts.
         // Both are only used on the attach-verification timer tick.
         private readonly CallStartDetector callStarts = new CallStartDetector();
-        private readonly HashSet<string> pendingCallStartSelect = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Codecs whose call-start selection waits for the primary camera, with the codec session it waits in.
+        private readonly Dictionary<string, int> pendingCallStartSelect = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         // In-flight dynamic camera ID reservations. Between the moment we issue an
         // AssignedSerialNumber to a codec and the moment the codec reports it back in its Cameras
@@ -2248,7 +2249,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     continue;
                 }
 
-                if (codec.SyncState == null || !codec.SyncState.InitialSyncComplete)
+                if (codec.SyncState == null)
+                {
+                    callStarts.Forget(codecKey);
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                // The codec's session, read around the call state: a disconnect and re-sync between two
+                // ticks (never seen incomplete here) still starts the readings over, so a call that was up
+                // through the reconnect doesn't count as a new one, and a waiting selection from the
+                // session before is dropped. Read first, then the sync checked: a call state read under
+                // this session number is then the session's own, not one left from the session before
+                // (the codec's status isn't cleared on a reset).
+                var session = codec.SyncState.SessionGeneration;
+                if (!codec.SyncState.InitialSyncComplete)
                 {
                     callStarts.Forget(codecKey);
                     pendingCallStartSelect.Remove(codecKey);
@@ -2256,14 +2271,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 }
 
                 var inCall = codec.IsAnyCallActive;
-                var started = callStarts.Observe(codecKey, inCall);
+                if (session != codec.SyncState.SessionGeneration || !codec.SyncState.InitialSyncComplete)
+                {
+                    continue; // reset while reading: the next tick reads the new session
+                }
+
+                if (pendingCallStartSelect.TryGetValue(codecKey, out var pendingSession) && pendingSession != session)
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                }
+
+                var started = callStarts.Observe(codecKey, inCall, session);
                 if (!inCall)
                 {
                     pendingCallStartSelect.Remove(codecKey);
                     continue;
                 }
 
-                if (!started && !pendingCallStartSelect.Contains(codecKey))
+                if (!started && !pendingCallStartSelect.ContainsKey(codecKey))
                 {
                     continue;
                 }
@@ -2279,7 +2304,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 {
                     if (started)
                         this.LogInformation($"CAMERA_CALL_START_PRIMARY_WAITING codec='{codecKey}' scenario='{scenarioKey}' primaryCamera='{primaryCameraKey}' — a call started, but the primary camera isn't online on the codec or is moving; selecting it once it is, while the call lasts");
-                    pendingCallStartSelect.Add(codecKey);
+                    pendingCallStartSelect[codecKey] = session;
                     continue;
                 }
 

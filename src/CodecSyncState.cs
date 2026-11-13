@@ -50,6 +50,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private readonly SessionStarter _session;
 
+        private int _sessionGeneration;
+
+        /// <summary>
+        /// Counts the sync's resets (disconnect, lost session, restarted session). State read before and
+        /// after a change of this number belongs to different codec sessions, even when no reader saw the
+        /// sync incomplete in between.
+        /// </summary>
+        public int SessionGeneration => System.Threading.Volatile.Read(ref _sessionGeneration);
+
         public bool JsonResponseModeSet { get; private set; }
 
         public bool InitialStatusMessageWasReceived { get; private set; }
@@ -441,8 +450,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private void ResetSync()
         {
             // The previous session's full status requests: their replies may never come, and while
-            // pending they would hold back the new session's own request. Also clears the arriving mark
-            // and starts a new generation, under the lock the reply match takes.
+            // pending they would hold back the new session's own request. Also clears the arriving mark,
+            // under the lock the reply match takes.
             _parent.FullStatusReply.Reset();
             LoginMessageWasReceived = false;
             JsonResponseModeSet = false;
@@ -457,6 +466,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             // A reset sync must not leave the previous sync's periodic timers running while it
             // re-syncs (on RS-232 there is no socket disconnect to stop them).
             _parent.StopRefreshTimers();
+
+            // Bumped last (a full fence): a reader that sees the new number also sees the flags cleared above.
+            System.Threading.Interlocked.Increment(ref _sessionGeneration);
         }
 
         // Sync watchdog (#113): each initial request (JSON mode, xStatus, xConfiguration, xFeedback List)

@@ -40,6 +40,20 @@ public class CallStartDetectorTests
     }
 
     [Fact]
+    public void A_Reading_From_A_New_Session_Starts_Over()
+    {
+        // The codec disconnected and re-synced between two readings, so nothing saw it offline: the
+        // idle reading from before is from another session, and the call that was up through the
+        // reconnect isn't a new one.
+        var d = new CallStartDetector();
+        d.Observe("codecB", false, session: 1);
+        d.Observe("codecB", true, session: 2).Should().BeFalse();
+        d.Observe("codecB", true, session: 2).Should().BeFalse("still the same call");
+        d.Observe("codecB", false, session: 2);
+        d.Observe("codecB", true, session: 2).Should().BeTrue("a new call in the new session");
+    }
+
+    [Fact]
     public void Codecs_Are_Tracked_Separately()
     {
         var d = new CallStartDetector();
