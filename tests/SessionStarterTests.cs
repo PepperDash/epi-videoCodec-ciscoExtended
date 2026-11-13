@@ -123,11 +123,68 @@ public class SessionStarterTests
     {
         var conn = new Connection { Connected = true };
         var session = conn.Starter();
+        session.Start(jsonModeSet: false, fullStatusReceived: false);
+        conn.Written.Clear();
 
         var result = session.Start(jsonModeSet: true, fullStatusReceived: false);
+        result.IsNewSession.Should().BeFalse();
         result.SetupDropped.Should().BeFalse();
         session.Claimed.Should().BeTrue();
         conn.Written.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_Reply_Matched_During_The_Setup_Is_Not_Asked_For_Again()
+    {
+        // The setup runs on the sync worker while the receive thread matches the full status reply: the
+        // request leaves the tracker during the echo off send, already marked as arriving.
+        var pending = true;
+        var arriving = false;
+        var requests = 0;
+        var session = new SessionStarter(
+            c => { if (c == "echo off") { arriving = true; pending = false; } return true; },
+            () => { requests++; return true; },
+            () => pending,
+            () => arriving);
+
+        session.Adopt(fullStatusReceived: false).SetupDropped.Should().BeFalse();
+        requests.Should().Be(0, "the reply is already being applied");
+    }
+
+    [Fact]
+    public void A_Dropped_Adoption_Restarted_By_A_Poll_Echo_Is_Set_Up_As_An_Adoption()
+    {
+        // JSON arrived before connect (adoption dropped, JSON mode stays confirmed); after connect the
+        // poll's echo comes first. Claiming it without setup would leave the full status to the 60 s retry.
+        var conn = new Connection();
+        var session = conn.Starter();
+        session.Adopt(fullStatusReceived: false).SetupDropped.Should().BeTrue();
+
+        conn.Connected = true;
+        var result = session.Start(jsonModeSet: true, fullStatusReceived: false);
+        result.IsNewSession.Should().BeTrue();
+        result.SetupDropped.Should().BeFalse();
+        session.Claimed.Should().BeTrue();
+        conn.Written.Should().Equal("echo off", FullStatus);
+    }
+
+    [Fact]
+    public void The_Full_Status_Is_Not_Asked_For_In_Text_Mode()
+    {
+        // Echo off and JSON mode dropped, then the connection comes up: an xStatus sent now would be
+        // answered in text, never complete its request, and hold back the next setup's request.
+        var conn = new Connection();
+        var sends = 0;
+        var session = new SessionStarter(
+            c => { var ok = conn.Send(c); if (++sends == 2) conn.Connected = true; return ok; },
+            conn.RequestFullStatus, () => conn.FullStatusPending);
+
+        session.Start(false, false).SetupDropped.Should().BeTrue();
+        conn.Written.Should().BeEmpty("JSON mode didn't go out, so no full status either");
+        conn.FullStatusPending.Should().BeFalse();
+
+        session.Start(false, false).SetupDropped.Should().BeFalse();
+        conn.Written.Should().Equal("echo off", "xPreferences outputmode json", FullStatus);
     }
 
     [Fact]

@@ -50,6 +50,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         private readonly SessionStarter _session;
 
+        // Set on the receive thread as soon as this sync's full status reply is matched (before its request
+        // leaves the tracker), until the worker applies FullStatusReceived: a session setup that runs in
+        // between must not ask again. The session starter reads it when it would send the request.
+        private volatile bool _fullStatusReplyArrived;
+
         public bool JsonResponseModeSet { get; private set; }
 
         public bool InitialStatusMessageWasReceived { get; private set; }
@@ -72,7 +77,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             Key = key;
             _parent = parent;
-            _session = new SessionStarter(_parent.SendTextWithoutQueue, _parent.RequestFullStatus, () => _parent.IsFullStatusPending);
+            _session = new SessionStarter(_parent.SendTextWithoutQueue, _parent.RequestFullStatus, () => _parent.IsFullStatusPending,
+                () => _fullStatusReplyArrived);
 
             _worker = new SendWorker(
                 new CrestronActionQueue(QueueCapacity),
@@ -317,8 +323,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         }
 
         /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
+        /// <summary>A reply to this sync's tagged full xStatus request is being parsed (receive thread).</summary>
+        public void MarkFullStatusReplyArriving() => _fullStatusReplyArrived = true;
+
         public void FullStatusReceived()
         {
+            _fullStatusReplyArrived = true;
+
             EnqueueSystemAction(() =>
             {
                 if (!FullStatusWasReceived)
@@ -427,6 +438,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         private void ResetSync()
         {
+            // The previous session's full status requests: their replies may never come, and while
+            // pending they would hold back the new session's own request.
+            _parent.CancelFullStatusRequests();
+            _fullStatusReplyArrived = false;
             LoginMessageWasReceived = false;
             JsonResponseModeSet = false;
             InitialConfigurationMessageWasReceived = false;

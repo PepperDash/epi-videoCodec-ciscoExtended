@@ -22,15 +22,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private readonly Func<string, bool> _send;
         private readonly Func<bool> _requestFullStatus;
         private readonly Func<bool> _fullStatusPending;
+        private readonly Func<bool>? _fullStatusArriving;
 
         /// <param name="send">Sends a command now; returns false when it didn't go out.</param>
         /// <param name="requestFullStatus">Sends the tagged full xStatus request; returns false when it didn't go out.</param>
         /// <param name="fullStatusPending">True while a full xStatus request that went out still waits for its reply.</param>
-        public SessionStarter(Func<string, bool> send, Func<bool> requestFullStatus, Func<bool> fullStatusPending)
+        /// <param name="fullStatusArriving">True once a full xStatus reply has been matched, before the sync has
+        /// recorded it. The receive side sets it before the request stops being pending, so checking pending
+        /// first and then this leaves no moment where a reply in flight looks like no request at all.</param>
+        public SessionStarter(Func<string, bool> send, Func<bool> requestFullStatus, Func<bool> fullStatusPending,
+            Func<bool>? fullStatusArriving = null)
         {
             _send = send ?? throw new ArgumentNullException(nameof(send));
             _requestFullStatus = requestFullStatus ?? throw new ArgumentNullException(nameof(requestFullStatus));
             _fullStatusPending = fullStatusPending ?? throw new ArgumentNullException(nameof(fullStatusPending));
+            _fullStatusArriving = fullStatusArriving;
         }
 
         /// <summary>The sync has claimed the codec's session (the login was seen and its setup sent).</summary>
@@ -40,22 +46,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// Claims the session if it isn't yet and, unless JSON mode is already confirmed, sends echo off
         /// and JSON mode, plus the tagged full status for a new session that hasn't had one and isn't
         /// waiting for one (a setup started again after only part of it was dropped asks only once).
+        /// A new session already in JSON mode (an adoption whose setup was dropped) is set up as an
+        /// adoption.
         /// </summary>
         /// <returns>What happened: whether the session was new, and whether its setup was dropped (then
         /// it stays unclaimed).</returns>
         public SessionStartResult Start(bool jsonModeSet, bool fullStatusReceived)
         {
             var isNew = !Claimed;
-            Claimed = true;
 
             if (jsonModeSet)
-                return new SessionStartResult(isNew, setupDropped: false);
+                return isNew ? Adopt(fullStatusReceived) : new SessionStartResult(false, setupDropped: false);
+
+            Claimed = true;
 
             // Every send is tried: a partial setup would leave the session in an unknown state.
             var sent = _send("echo off");
-            sent &= _send("xPreferences outputmode json");
+            var jsonModeSent = _send("xPreferences outputmode json");
+            sent &= jsonModeSent;
+
+            // The full status only once JSON mode went out: asked in text mode, its reply would never
+            // complete the request, and the request would stay pending and suppress the next one.
             if (isNew)
-                sent &= RequestFullStatusIfNeeded(fullStatusReceived);
+                sent &= jsonModeSent && RequestFullStatusIfNeeded(fullStatusReceived);
 
             return Settle(isNew, sent);
         }
@@ -74,10 +87,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             return Settle(isNew: true, sent);
         }
 
-        // A request that went out and still waits counts as sent: asking again would only make the codec
-        // send its large status twice.
+        // A request that went out and still waits, or whose reply is being applied, counts as sent: asking
+        // again would only make the codec send its large status twice. Checked when the request would go
+        // out, after the sends before it: pending first, then arriving (the order the receive side sets them).
         private bool RequestFullStatusIfNeeded(bool fullStatusReceived) =>
-            fullStatusReceived || _fullStatusPending() || _requestFullStatus();
+            fullStatusReceived || _fullStatusPending() || (_fullStatusArriving?.Invoke() ?? false) || _requestFullStatus();
 
         private SessionStartResult Settle(bool isNew, bool sent)
         {
