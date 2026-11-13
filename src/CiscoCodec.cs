@@ -887,6 +887,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_timeFormatSpecifier = this.config.TimeFormatSpecifier ?? "t";
 			_dateFormatSpecifier = this.config.DateFormatSpecifier ?? "d";
 			_joinableCooldownSeconds = this.config.JoinableCooldownSeconds;
+			if (this.config.CommandStallTimeoutSeconds > 0)
+				_sendStall = new SendStallDetector(TimeSpan.FromSeconds(this.config.CommandStallTimeoutSeconds), SendStallRecoveryInterval);
 			EndAllCallsOnMeetingJoin = this.config.EndAllCallsOnMeetingJoin;
 
 			if (this.config.Sharing != null)
@@ -1089,6 +1091,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			_phonebookMode = props.PhonebookMode;
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
 
+			FullStatusReply = new FullStatusReplyGate(_requests, SyncStatusRequest);
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 			WireFramer();
 			WireDispatcher();
@@ -1255,6 +1258,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 			StopRefreshTimers();
 			_serialWakeProbeTimer?.Dispose();
+			if (_sendWatchdogTimer != null)
+			{
+				_sendWatchdogTimer.Stop();
+				_sendWatchdogTimer.Dispose();
+			}
 
 			if (_loginMessageReceivedTimer != null)
 			{
@@ -1948,6 +1956,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				Communication.Connect();
 
 				CommunicationMonitor.Start();
+
+				StartSendWatchdog();
 			}
 			catch (Exception ex)
 			{
@@ -2407,6 +2417,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					+ "Model values (all codecs): notified={10} unchanged={11} warmup={13:0} ms\r\n"
 					+ "Cameras: listed={14} connected={15} devices={16}\r\n"
 					+ "Calls: listed={17} active={18}\r\n"
+					+ "Send: connected={19} notSent={20} {21}\r\n"
 					+ "{9}",
 				Key, Timings.SinceUtc,
 				sync.LoginMessageWasReceived, sync.JsonResponseModeSet, sync.InitialStatusMessageWasReceived,
@@ -2419,7 +2430,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				cameraList.Count(c => string.Equals(c.Connected?.Value, "True", StringComparison.OrdinalIgnoreCase)),
 				Cameras?.Count ?? 0,
 				CodecStatus.Status.Calls?.Count ?? 0,
-				ActiveCalls?.Count ?? 0
+				ActiveCalls?.Count ?? 0,
+				// Send path (#194): not sent = dropped in the current not-connected episode.
+				Communication?.IsConnected ?? false,
+				_notConnectedDrops.DroppedInEpisode,
+				sync.SendHealth.Snapshot(DateTime.UtcNow).Format()
 			);
 		}
 
@@ -2472,7 +2487,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					// poll replies and status feedback carry no resultId, or another request's. Completed
 					// even when the parse throws (the dispatcher still logs it): otherwise the request
 					// stays pending until it expires and every re-request fails the same way.
-					if (_requests.TryComplete(message.ResultId, out var kind) && kind == SyncStatusRequest)
+					// The gate marks it arriving before the request leaves the tracker (so a session setup on
+					// the sync worker always sees one or the other and doesn't ask again), under the lock a
+					// sync reset takes.
+					if (FullStatusReply.TryComplete(message.ResultId))
 					{
 						Timings.Stop(SyncStatusRequest, message.ResultId);
 						SyncState.FullStatusReceived();
@@ -2500,16 +2518,33 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			};
 		}
 
+		/// <summary>A full xStatus request that went out still waits for its reply.</summary>
+		internal bool IsFullStatusPending => _requests.PendingCount(SyncStatusRequest) > 0;
+
+		/// <summary>
+		/// Matches the full xStatus reply and resets it with the sync, so a reply from one session doesn't
+		/// count in the next.
+		/// </summary>
+		internal FullStatusReplyGate FullStatusReply { get; }
+
 		/// <summary>
 		/// Requests the full status for the sync, tagged so that its reply (and only its reply) marks
 		/// the full-status step done (#142).
 		/// </summary>
-		internal void RequestFullStatus()
+		/// <returns>True when the request was sent; false when it was dropped (then it isn't left pending).</returns>
+		internal bool RequestFullStatus()
 		{
 			var id = _requests.Begin(SyncStatusRequest, SyncStatusTimeout);
 			Timings.Start(SyncStatusRequest, id);
 			StartRequestExpiryTimer();
-			SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id));
+			if (SendTextWithoutQueue(string.Format("xStatus | resultId=\"{0}\"", id)))
+				return true;
+
+			// Never sent, so no reply will come: don't leave it pending until it expires. Counted under
+			// its own name in codecperf.
+			_requests.TryComplete(id, out _);
+			Timings.Stop(SyncStatusRequest, id, SyncStatusRequest + ".notSent");
+			return false;
 		}
 
 		private void StartRequestExpiryTimer()
@@ -2750,19 +2785,20 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			SyncState.AddCommandToQueue(cmd);
 		}
 
-		internal void SendTextWithoutQueue(string command)
+		/// <returns>True when the command was written to the connection; false when it was dropped.</returns>
+		internal bool SendTextWithoutQueue(string command)
 		{
 			if (Communication == null)
-				return;
+				return false;
 
 			if (string.IsNullOrEmpty(command))
-				return;
+				return false;
 
 			// At a serial login prompt anything sent is taken as a username or password (#115).
 			if (_atSerialLoginPrompt)
 			{
 				this.LogVerbose("Not sent, the RS-232 session is at a login prompt: {command}", command);
-				return;
+				return false;
 			}
 
 			// Normalize mixed CR/LF command separators to the codec delimiter to avoid
@@ -2774,22 +2810,190 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				.TrimEnd('\r', '\n');
 
 			if (UsesSerialPort && !FitsSerialLineLimit(normalized))
-				return;
+				return false;
 
 			// Writes come from the receive thread, the sync worker and the communication monitor's
 			// timer. Without the lock two writes can overlap and their bytes mix on the wire, so the
 			// codec gets garbled commands and loses some of them (#123).
+			bool sent;
+			int recovered = 0, droppedSinceLog = 0, droppedInEpisode = 0;
+			var logDrop = false;
 			lock (_sendLock)
 			{
 				// Skip writes while the connection is down or being torn down (always true on RS-232).
-				if (!Communication.IsConnected)
-					return;
+				sent = Communication.IsConnected;
+				if (sent)
+					Communication.SendText(normalized + Delimiter);
 
-				Communication.SendText(normalized + Delimiter);
+				// The episode is updated under the lock, in the same order as the send decisions, so a
+				// success on one thread can't end a drop episode another thread has just started.
+				if (sent)
+					recovered = _notConnectedDrops.OnSucceeded();
+				else
+				{
+					logDrop = _notConnectedDrops.OnDropped(DateTime.UtcNow, out droppedSinceLog);
+					droppedInEpisode = _notConnectedDrops.DroppedInEpisode;
+				}
 			}
+
+			if (sent)
+				SyncState.SendHealth.OnSent(DateTime.UtcNow);
+
+			// Logged outside the lock, so a slow log write never holds up sending.
+			if (recovered > 0)
+				this.LogInformation(
+					"Sending to the codec again: {count} command(s) were not sent while the connection reported not connected.",
+					recovered);
+
+			// A drop used to be silent, so a connection stuck reporting "not connected" while its status
+			// kept arriving looked healthy (#194). Logged once per episode, then every few minutes.
+			if (logDrop)
+				this.LogWarning(
+					"Not sent, the connection to the codec reports not connected: {command} ({count} not sent since the last warning, {total} in this episode).",
+					DropEpisodeTracker.Describe(command), droppedSinceLog, droppedInEpisode);
+
+			return sent;
 		}
 
 		private readonly object _sendLock = new object();
+
+		/// <summary>
+		/// Returns once nothing holds the send lock, sending nothing: the send watchdog's probe (#194).
+		/// A write blocked under the lock keeps it waiting, as it would keep a real command waiting.
+		/// Runs on the send worker, never on the watchdog's timer.
+		/// </summary>
+		internal void WaitForSendPath()
+		{
+			lock (_sendLock)
+			{
+			}
+		}
+
+		// Commands dropped by SendTextWithoutQueue because the connection reported not connected (#194).
+		private readonly DropEpisodeTracker _notConnectedDrops = new DropEpisodeTracker(DropReminderInterval);
+
+		/// <summary>How often a long run of dropped commands is logged again (#194).</summary>
+		internal static readonly TimeSpan DropReminderInterval = TimeSpan.FromMinutes(5);
+
+		// ---- Send watchdog (#194) -------------------------------------------------------------------
+		// The send path could stop for good while the codec still looked healthy: the comm monitor's
+		// poll bypasses the command queue, and status arrives on the receive thread. This checks the
+		// queue from its own timer (not the worker it watches), logs a stall once, and recovers it.
+
+		private const long SendWatchdogIntervalMs = 5000;
+		private static readonly TimeSpan SendStallRecoveryInterval = TimeSpan.FromMinutes(5);
+		private const int DescribeDroppedCommands = 5;
+
+		private SendStallDetector _sendStall;
+		private CTimer _sendWatchdogTimer;
+
+		private void StartSendWatchdog()
+		{
+			if (_sendStall == null || _sendWatchdogTimer != null)
+				return;
+
+			_sendWatchdogTimer = new CTimer(_ => CheckSendPath(), null, SendWatchdogIntervalMs, SendWatchdogIntervalMs);
+		}
+
+		private void CheckSendPath()
+		{
+			try
+			{
+				var now = DateTime.UtcNow;
+				var snapshot = SyncState.SendHealth.Snapshot(now);
+				var connected = Communication?.IsConnected ?? false;
+
+				switch (_sendStall.Evaluate(snapshot, out var cause, out var stalledFor))
+				{
+					case SendStallTransition.Stalled:
+						this.LogWarning(
+							"CODEC_SEND_STALL_START cause={cause} connected={connected} {state} — commands to the codec have not gone out for {seconds} s",
+							cause, connected, snapshot.Format(), _sendStall.StallAfter.TotalSeconds);
+						break;
+					case SendStallTransition.Recovered:
+						this.LogInformation(
+							"CODEC_SEND_STALL_END durationS={duration:0} — the send worker is finishing its actions again",
+							stalledFor.TotalSeconds);
+						(CommunicationMonitor as CiscoCommunicationMonitor)?.ReleaseHold(CommunicationHoldReason.SendStalled);
+						return;
+					case SendStallTransition.None:
+						if (!_sendStall.IsStalled)
+							return;
+						break;
+				}
+
+				if (cause == SendStallCause.None)
+				{
+					// Still counted as stalled, but nothing is stuck now: the worker is taking actions, and
+					// only the probe's confirmation is missing (the probe may have been lost to a full
+					// queue or a session reset). Ask again on every check, and neither drain, restart or
+					// reconnect a path that is moving, nor report it as unrecovered.
+					SyncState.EnqueueWatchdogProbe();
+					return;
+				}
+
+				if (_sendStall.TryAcquireRecovery(now))
+					RecoverSendPath(cause);
+
+				// Recovering didn't help: show the fault on the device (devcommstatus, System Status)
+				// rather than leave it IsOk while nothing reaches the codec. Released at the stall's end.
+				if (_sendStall.RecoveryFailed(now)
+					&& CommunicationMonitor is CiscoCommunicationMonitor monitor
+					&& !monitor.IsHeldFor(CommunicationHoldReason.SendStalled))
+				{
+					this.LogError(
+						"CODEC_SEND_STALL_UNRECOVERED cause={cause} {state} — recovering didn't get commands to the codec moving; the communication monitor reports an error until they do",
+						cause, snapshot.Format());
+					monitor.HoldInError(CommunicationHoldReason.SendStalled);
+				}
+			}
+			catch (Exception ex)
+			{
+				this.LogError("Send watchdog check failed: {message}", ex.Message);
+				this.LogVerbose(ex, "Exception");
+			}
+		}
+
+		private void RecoverSendPath(SendStallCause cause)
+		{
+			// Commands that waited out the stall are dropped, not sent late: a camera reset, standby or
+			// mute from minutes ago would surprise whoever is in the room now.
+			var dropped = SyncState.DrainCommands(DescribeDroppedCommands, out var described);
+			if (dropped > 0)
+				this.LogWarning(
+					"CODEC_SEND_STALL_DROPPED count={count} — commands that waited out the stall were not sent: {commands}{more}",
+					dropped, string.Join(", ", described), dropped > described.Count ? ", ..." : "");
+
+			// A JSON response that never ends holds every worker, a new one included: abandon it first.
+			// A reconnect would reset it too, but over RS-232 there is no session to reconnect.
+			if (cause == SendStallCause.JsonHold)
+			{
+				const string reason = "the send watchdog found commands held behind it";
+				ResetJsonReceiveState(reason);
+				ResetFramerFromAnotherThread(reason);
+			}
+
+			var action = SendStallRecovery.Choose(cause, Communication is ISocketStatus);
+			this.LogWarning("CODEC_SEND_STALL_RECOVERY action={action} cause={cause}", action, cause);
+
+			switch (action)
+			{
+				case SendStallAction.RestartWorker:
+					SyncState.RestartWorker();
+					break;
+				case SendStallAction.Reconnect:
+					DisconnectClientAndReconnect(); // re-syncs the codec on the new session
+					break;
+				case SendStallAction.KeepWorker:
+					// Over RS-232: the JSON hold was reset above, so the current worker carries on; a
+					// blocked write is left to finish, and is reported as unrecovered if it doesn't.
+					break;
+			}
+
+			// Whatever was done, an empty queue after the drain proves nothing: the stall ends only
+			// once this probe gets through the send path.
+			SyncState.EnqueueWatchdogProbe();
+		}
 
 		// ---- RS-232 login prompt (#115) ------------------------------------------------------------
 		// With xConfiguration SerialPort LoginRequired: On the serial session drops to a login prompt.
@@ -5037,7 +5241,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			if (camera != null)
 			{
-				SelectedCamera = camera;
+				// Only records what the codec reports; it sends nothing. Unmuting here would turn a camera
+				// the room turned off back on whenever the codec changes its source (a call-start camera
+				// selection, the codec's own source change).
+				SetSelectedCamera(camera, unmuteIfOff: false);
 
 				this.LogDebug("Current Main Video Source Camera set to: {cameraId}", camera.CameraId);
 			}
@@ -7601,20 +7808,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public IHasCameraControls SelectedCamera
 		{
 			get { return _selectedCamera; }
-			private set
-			{
-				_selectedCamera = value;
-				// The status parse can add a camera and select it from MainVideoSource before
-				// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
-				SelectedCameraFeedback?.FireUpdate();
-				ControllingFarEndCameraFeedback?.FireUpdate();
-				if (CameraIsOffFeedback.BoolValue)
-					CameraMuteOff();
-				CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
-			}
+			private set { SetSelectedCamera(value, unmuteIfOff: true); }
+		}
+
+		private void SetSelectedCamera(IHasCameraControls camera, bool unmuteIfOff)
+		{
+			_selectedCamera = camera;
+			// The status parse can add a camera and select it from MainVideoSource before
+			// SetUpCameras creates these feedbacks; SetUpCameras fires them once it does.
+			SelectedCameraFeedback?.FireUpdate();
+			ControllingFarEndCameraFeedback?.FireUpdate();
+			if (unmuteIfOff && CameraIsOffFeedback.BoolValue)
+				CameraMuteOff();
+			CameraSelected?.Invoke(this, new CameraSelectedEventArgs<IHasCameraControls>(SelectedCamera));
 		}
 
 		public void SelectCamera(string key)
+		{
+			SelectCamera(key, unmuteIfOff: true);
+		}
+
+		/// <summary>
+		/// Selects a camera as the main video source. With <paramref name="unmuteIfOff"/> false, a camera
+		/// the room turned off (main video muted) stays off: for automatic selections, such as the camera
+		/// manager's at call start, which must never show the room against the user's choice.
+		/// </summary>
+		internal void SelectCamera(string key, bool unmuteIfOff)
 		{
 			if (Cameras == null || Cameras.Count == 0)
 			{
@@ -7633,7 +7852,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			}
 
 			this.LogDebug("Selected Camera with key: '{key}'", camera.Key);
-			SelectedCamera = camera;
+			SetSelectedCamera(camera, unmuteIfOff);
 
 			if (!CameraSourceId.IsValid(camera.SourceId))
 			{

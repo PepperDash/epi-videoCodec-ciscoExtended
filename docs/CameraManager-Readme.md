@@ -62,6 +62,7 @@ Important properties:
 - `cameraBootWindowMs`: optional, default 180000. Boot window after the manager PoE-cycles or re-VLANs a camera's port; floating recovery does not count the camera as lost or probe it during this window. Set it longer than the slowest camera's boot.
 - `disablePoeCycling`: optional, default false
 - `useCameraFactoryResetDisconnectFeedback`: optional, default false
+- `selectPrimaryCameraOnCallStart`: optional, default false. When a codec goes from no active call to an active call, select its `primary: true` camera for the current scenario as the main video source again, so calls start on it even after someone picked another camera outside a call. It uses the codec's active-call count (`SystemUnit State NumberOfActiveCalls`), so Teams and other platform calls count. A camera the room turned off (main video muted) stays off. A call already up when the program starts, or when the codec finishes syncing again, isn't treated as a call start. If the primary camera isn't online on the codec or is moving when the call starts, it logs `CAMERA_CALL_START_PRIMARY_WAITING` and selects the camera once it's ready, while the call lasts. A selection logs `CAMERA_CALL_START_PRIMARY_SELECT`.
 
 Per-scenario camera assignment supports mixed syntax in `cameraKeys`:
 - String form: `"cameraA"`

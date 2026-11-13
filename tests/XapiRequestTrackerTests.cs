@@ -9,6 +9,35 @@ public class XapiRequestTrackerTests
     private static XapiRequestTracker New(Func<DateTime>? clock = null) => new(TimeSpan.FromSeconds(20), clock);
 
     [Fact]
+    public void TryGetKind_Reads_Without_Completing()
+    {
+        var t = New();
+        var id = t.Begin("sync.xstatus");
+        t.TryGetKind(id, out var kind).Should().BeTrue();
+        kind.Should().Be("sync.xstatus");
+        t.PendingCount("sync.xstatus").Should().Be(1, "still pending");
+        t.TryGetKind("nope", out _).Should().BeFalse();
+        t.TryGetKind(null, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Cancel_Drops_Only_The_Given_Kind()
+    {
+        // A reset sync drops its old full status requests, not a pending phonebook search.
+        var t = New();
+        var status1 = t.Begin("sync.xstatus");
+        var status2 = t.Begin("sync.xstatus");
+        var search = t.Begin("phonebook.search");
+
+        t.Cancel("sync.xstatus").Should().Be(2);
+        t.PendingCount("sync.xstatus").Should().Be(0);
+        t.TryComplete(status1, out _).Should().BeFalse();
+        t.TryComplete(status2, out _).Should().BeFalse();
+        t.TryComplete(search, out var kind).Should().BeTrue();
+        kind.Should().Be("phonebook.search");
+    }
+
+    [Fact]
     public void A_Reply_Completes_Its_Own_Request_Once()
     {
         var t = New();

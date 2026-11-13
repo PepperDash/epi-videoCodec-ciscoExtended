@@ -23,6 +23,12 @@
   <ItemGroup>
     <!-- Plugin classes with no Crestron dependencies, compiled in and tested directly. -->
     <Compile Include="..\src\Diagnostics\CodecTimings.cs" Link="Linked\CodecTimings.cs" />
+    <Compile Include="..\src\Diagnostics\DropEpisodeTracker.cs" Link="Linked\DropEpisodeTracker.cs" />
+    <Compile Include="..\src\Diagnostics\SendQueueHealth.cs" Link="Linked\SendQueueHealth.cs" />
+    <Compile Include="..\src\Diagnostics\SendStallDetector.cs" Link="Linked\SendStallDetector.cs" />
+    <Compile Include="..\src\Dispatch\SendWorker.cs" Link="Linked\SendWorker.cs" />
+    <Compile Include="..\src\Dispatch\SessionStarter.cs" Link="Linked\SessionStarter.cs" />
+    <Compile Include="..\src\Dispatch\FullStatusReplyGate.cs" Link="Linked\FullStatusReplyGate.cs" />
     <Compile Include="..\src\CodecJson.cs" Link="Linked\CodecJson.cs" />
     <Compile Include="..\src\Framing\XapiStreamFramer.cs" Link="Linked\XapiStreamFramer.cs" />
     <Compile Include="..\src\Framing\SerialLoginDetector.cs" Link="Linked\SerialLoginDetector.cs" />
@@ -45,6 +51,7 @@
     <Compile Include="..\src\CameraManager\SwitchCommandHealth.cs" Link="Linked\SwitchCommandHealth.cs" />
     <Compile Include="..\src\CameraManager\FloatingProbePolicy.cs" Link="Linked\FloatingProbePolicy.cs" />
     <Compile Include="..\src\CameraManager\CameraBootWindow.cs" Link="Linked\CameraBootWindow.cs" />
+    <Compile Include="..\src\CameraManager\CallStartDetector.cs" Link="Linked\CallStartDetector.cs" />
     <Compile Include="..\src\CameraManager\CameraPresence.cs" Link="Linked\CameraPresence.cs" />
   </ItemGroup>
 
