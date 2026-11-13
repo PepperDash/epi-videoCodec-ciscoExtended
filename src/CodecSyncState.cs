@@ -441,8 +441,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         private void ResetSync()
         {
             // The previous session's full status requests: their replies may never come, and while
-            // pending they would hold back the new session's own request. Also clears the arriving mark
-            // and starts a new generation, under the lock the reply match takes.
+            // pending they would hold back the new session's own request. Also clears the arriving mark,
+            // under the lock the reply match takes.
             _parent.FullStatusReply.Reset();
             LoginMessageWasReceived = false;
             JsonResponseModeSet = false;
