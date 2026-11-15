@@ -633,6 +633,18 @@ catch (Exception ex)
             extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
             extensionsHandler.UiWebViewChangedEvent += LockoutWebViewChanged;
 
+            // Entering lockout (or switching lockout targets): push the lockout now instead of
+            // waiting for the status reply to report "no webview". After a Clear, RoomOS can keep
+            // listing the cleared webview as Visible (e.g. the in-progress overlay, which shares the
+            // /lockout path), so that reply never comes and the navigator stays on its home screen.
+            // The debounce is reset so a recent push for the previous target can't swallow this one;
+            // the status reply below then sees the lockout and does nothing.
+            if (!samePathAsBefore)
+            {
+                _lastLockoutPushUtc = DateTime.MinValue;
+                SendLockout(defaultRoomKey, primaryRoomKey);
+            }
+
             mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
 
             if (!mcTpController.EnableLockoutPoll)
