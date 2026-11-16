@@ -52,6 +52,7 @@
     <Compile Include="..\src\CameraManager\FloatingProbePolicy.cs" Link="Linked\FloatingProbePolicy.cs" />
     <Compile Include="..\src\CameraManager\CameraBootWindow.cs" Link="Linked\CameraBootWindow.cs" />
     <Compile Include="..\src\CameraManager\CallStartDetector.cs" Link="Linked\CallStartDetector.cs" />
+    <Compile Include="..\src\CameraManager\PresenterTrackModes.cs" Link="Linked\PresenterTrackModes.cs" />
     <Compile Include="..\src\CameraManager\CameraPresence.cs" Link="Linked\CameraPresence.cs" />
   </ItemGroup>
 

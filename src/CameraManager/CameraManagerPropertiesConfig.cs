@@ -305,6 +305,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
 
             return CameraAssignments.FirstOrDefault(a => a != null && a.PresenterTrack)?.CameraKey;
         }
+
+        /// <summary>
+        /// Returns the <c>presenterTrackMode</c> configured on this codec's <c>presenterTrack: true</c>
+        /// camera in this scenario, as written in config (not validated), or null when none is set or no
+        /// camera is flagged for PresenterTrack.
+        /// </summary>
+        public string GetPresenterTrackMode()
+        {
+            if (CameraAssignments == null || CameraAssignments.Count == 0)
+            {
+                return null;
+            }
+
+            return CameraAssignments.FirstOrDefault(a => a != null && a.PresenterTrack)?.PresenterTrackMode;
+        }
     }
 
     /// <summary>
@@ -353,6 +368,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         /// </summary>
         [JsonProperty("presenterTrack")]
         public bool PresenterTrack { get; set; }
+
+        /// <summary>
+        /// Optional PresenterTrack mode for this camera's codec: <c>follow</c>, <c>persistent</c>,
+        /// <c>background</c> or <c>off</c> (any case). Only used on the <see cref="PresenterTrack"/>
+        /// camera. The manager sends <c>xCommand Cameras PresenterTrack Set Mode</c> with it once the
+        /// scenario's camera roles are applied, and again each time a call starts on the codec, so calls
+        /// start tracking instead of in manual camera control. When null or empty, the mode is left to
+        /// the room. Only the object form of a <c>cameraKeys</c> element can set this.
+        /// </summary>
+        [JsonProperty("presenterTrackMode")]
+        public string PresenterTrackMode { get; set; }
     }
 
     /// <summary>
@@ -409,7 +435,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                             Primary = jo["primary"] != null && jo["primary"].Type != JTokenType.Null
                                 && jo["primary"].Value<bool>(),
                             PresenterTrack = jo["presenterTrack"] != null && jo["presenterTrack"].Type != JTokenType.Null
-                                && jo["presenterTrack"].Value<bool>()
+                                && jo["presenterTrack"].Value<bool>(),
+                            PresenterTrackMode = jo["presenterTrackMode"] != null && jo["presenterTrackMode"].Type != JTokenType.Null
+                                ? (string)jo["presenterTrackMode"]
+                                : null
                         });
                         break;
                     default:

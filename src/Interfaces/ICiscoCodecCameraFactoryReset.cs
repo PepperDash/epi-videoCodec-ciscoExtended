@@ -106,6 +106,14 @@ namespace PepperDash.Essentials.Core.DeviceTypeInterfaces
         void SetPresenterTrackEnabled(bool enabled);
 
         /// <summary>
+        /// Puts PresenterTrack in the given mode on this codec.
+        /// Equivalent to "xCommand Cameras PresenterTrack Set Mode: <paramref name="mode"/>".
+        /// Doesn't unmute a camera that is off.
+        /// </summary>
+        /// <param name="mode">"Follow", "Persistent", "Background" or "Off"</param>
+        void SetPresenterTrackMode(string mode);
+
+        /// <summary>
         /// Returns the serial number of the camera currently paired with the given camera slot,
         /// or null/empty when not available.
         /// </summary>
