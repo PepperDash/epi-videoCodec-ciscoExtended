@@ -562,11 +562,52 @@ catch (Exception ex)
                 || string.Equals(stateText, "4", StringComparison.OrdinalIgnoreCase);
         }
 
+        // Returns true if this panel's room is in the operation's affected-room set. When the combiner
+        // reports no affected rooms (older Essentials) or an empty set, falls back to show-all.
+        private bool IsDefaultRoomAffected()
+        {
+            var combiner = combinerHandler?.EssentialsRoomCombiner;
+            if (combiner == null)
+            {
+                return true;
+            }
+
+            var operationStatus = combiner.GetType().GetProperty("CombinationOperation", BindingFlags.Instance | BindingFlags.Public)?.GetValue(combiner, null);
+            if (operationStatus == null)
+            {
+                return true;
+            }
+
+            var affectedValue = operationStatus.GetType().GetProperty("AffectedRoomKeys", BindingFlags.Instance | BindingFlags.Public)?.GetValue(operationStatus, null);
+            if (!(affectedValue is System.Collections.IEnumerable affectedKeys))
+            {
+                return true;
+            }
+
+            foreach (var key in affectedKeys)
+            {
+                if (string.Equals(key?.ToString(), defaultRoomKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            // Reaching here means a non-null set: either empty (startup, nothing affected) or a
+            // populated set that does not contain this room. Both => this room is not affected.
+            return false;
+        }
+
         private void OpenInProgressWebView(bool reassert = false)
         {
             if (mcTpController.LockedOut)
             {
                 // A real lockout already owns the webview; nothing to do.
+                return;
+            }
+
+            if (!IsDefaultRoomAffected())
+            {
+                this.LogDebug("Combination operation does not affect {DefaultRoomKey}; skipping in-progress webview", defaultRoomKey);
                 return;
             }
 
@@ -643,6 +684,18 @@ catch (Exception ex)
             // duplicate handlers so each webview status reply fires SendLockout multiple times.
             extensionsHandler.UiWebViewChangedEvent -= LockoutWebViewChanged;
             extensionsHandler.UiWebViewChangedEvent += LockoutWebViewChanged;
+
+            // Entering lockout (or switching lockout targets): push the lockout now instead of
+            // waiting for the status reply to report "no webview". After a Clear, RoomOS can keep
+            // listing the cleared webview as Visible (e.g. the in-progress overlay, which shares the
+            // /lockout path), so that reply never comes and the navigator stays on its home screen.
+            // The debounce is reset so a recent push for the previous target can't swallow this one;
+            // the status reply below then sees the lockout and does nothing.
+            if (!samePathAsBefore)
+            {
+                _lastLockoutPushUtc = DateTime.MinValue;
+                SendLockout(defaultRoomKey, primaryRoomKey);
+            }
 
             mcTpController.Parent.EnqueueCommand(WebViewDisplay.xCommandStatus());
 
