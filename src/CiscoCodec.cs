@@ -5411,15 +5411,26 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			return string.IsNullOrEmpty(resultId) || resultId == Guid.Empty.ToString();
 		}
 
-		// True when resultId belongs to a pending search; that search is then no longer pending.
+		// True when resultId belongs to a pending search. That search, and every search sent before it,
+		// is then no longer pending: a newer result supersedes them, so a slower reply to an older
+		// search (e.g. the start-up empty search) is discarded instead of replacing newer results.
+		// Untagged or unknown replies leave the list unchanged.
 		private bool TryCompletePendingSearch(string resultId)
 		{
-			if (string.IsNullOrEmpty(resultId))
+			if (IsUntaggedReply(resultId))
 				return false;
 
 			lock (_pendingSearchesLock)
 			{
-				return _pendingSearches.Remove(resultId);
+				var index = _pendingSearches.IndexOf(resultId);
+				if (index < 0)
+					return false;
+
+				if (index > 0)
+					this.LogDebug("Phonebook search {resultId} superseded {count} older pending search(es)", resultId, index);
+
+				_pendingSearches.RemoveRange(0, index + 1);
+				return true;
 			}
 		}
 
