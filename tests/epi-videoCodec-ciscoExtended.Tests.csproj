@@ -54,6 +54,7 @@
     <Compile Include="..\src\CameraManager\CallStartDetector.cs" Link="Linked\CallStartDetector.cs" />
     <Compile Include="..\src\CameraManager\PresenterTrackModes.cs" Link="Linked\PresenterTrackModes.cs" />
     <Compile Include="..\src\CameraManager\CameraPresence.cs" Link="Linked\CameraPresence.cs" />
+    <Compile Include="..\src\Sharing\PresentationSourceChoice.cs" Link="Linked\PresentationSourceChoice.cs" />
   </ItemGroup>
 
   <ItemGroup>

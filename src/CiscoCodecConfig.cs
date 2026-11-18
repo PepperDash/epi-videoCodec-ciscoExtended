@@ -166,6 +166,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         [JsonProperty("defaultShareLocalOnly")]
         public bool DefaultShareLocalOnly { get; set; }
+
+        /// <summary>
+        /// Codec connector (PresentationSource) to present when sharingStart arrives with no source selected, which
+        /// is the case at boot and after every stop. 0 (default) keeps the old behaviour: sharingStart does nothing
+        /// until a route selects an input. A camera connector is never presented.
+        /// </summary>
+        [JsonProperty("defaultPresentationSource")]
+        public int DefaultPresentationSource { get; set; }
     }
 
     public class BrandingLogoProperties

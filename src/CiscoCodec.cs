@@ -83,7 +83,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			ISpeakerTrack,
 			IPresenterTrack,
 			IEmergencyOSD,
-			IHasWebViewWithPwaMode
+			IHasWebViewWithPwaMode,
+			IHasSelfviewPosition
 
 	{
 		private RoutingInputPort currentInputPort;
@@ -499,7 +500,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		protected Func<string> SelfviewPipPositionFeedbackFunc
 		{
-			get { return () => _currentSelfviewPipPosition.Label; }
+			// Empty until the codec has reported a position it recognises.
+			get { return () => _currentSelfviewPipPosition?.Label ?? string.Empty; }
 		}
 
 		protected Func<string> LocalLayoutFeedbackFunc
@@ -777,6 +779,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private int _desiredPresentationSource;
 
+		/// <summary>
+		/// sharing.defaultPresentationSource: presented by sharingStart when no source is selected (0 = none).
+		/// </summary>
+		private int _defaultPresentationSource;
+
 		private string _presentationSourceKey;
 
 		private bool _presentationLocalOnly;
@@ -896,6 +903,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				PresentationStates = this.config.Sharing.DefaultShareLocalOnly
 					? eCodecPresentationStates.LocalOnly
 					: eCodecPresentationStates.LocalRemote;
+				_defaultPresentationSource = this.config.Sharing.DefaultPresentationSource;
 			}
 			else
 			{
@@ -1886,6 +1894,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			var presenterTrackMessenger = new IPresenterTrackMessenger($"presenterTrack-{Key}", $"/device/{Key}", this);
 			mc.AddDeviceMessenger(presenterTrackMessenger);
+
+			var selfviewPositionMessenger = new IHasSelfviewPositionMessenger($"selfviewPosition-{Key}", $"/device/{Key}", this, SelfviewPipPositions);
+			mc.AddDeviceMessenger(selfviewPositionMessenger);
 
 			return base.CustomActivate();
 		}
@@ -6345,6 +6356,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			_desiredPresentationSource = source;
 
+			// 0 selects nothing (e.g. the SIMPL presentation source join cleared). It used to reach StartSharing
+			// and do nothing there; it must not start the configured default presentation source.
+			if (source <= 0)
+				return;
+
 			StartSharing();
 		}
 
@@ -6386,7 +6402,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void StartSharing()
 		{
-			if (_desiredPresentationSource <= 0)
+			// The selected source, else sharing.defaultPresentationSource (never a camera connector), so a
+			// sharingStart works at boot and after a stop without a route first. Nothing to present: no command.
+			var source = PresentationSourceChoice.Resolve(
+				_desiredPresentationSource, _defaultPresentationSource, IsCameraConnector);
+
+			if (source <= 0)
 				return;
 
 			// LocalRemote asks the codec to send the presentation to the far end. Out of a call
@@ -6399,7 +6420,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand(
 				string.Format(
 					"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
-					_desiredPresentationSource,
+					source,
 					sendingMode
 				)
 			);
@@ -7142,17 +7163,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public void SelfviewPipPositionToggle()
 		{
-			if (_currentSelfviewPipPosition != null)
-			{
-				var nextPipPositionIndex =
-					SelfviewPipPositions.IndexOf(_currentSelfviewPipPosition) + 1;
+			// The next position in the list, looping back to the first. With no known position yet (before the
+			// codec reports one), start at the first rather than doing nothing.
+			var nextPipPositionIndex = _currentSelfviewPipPosition != null
+				? SelfviewPipPositions.IndexOf(_currentSelfviewPipPosition) + 1
+				: 0;
 
-				if (nextPipPositionIndex >= SelfviewPipPositions.Count)
-					// Check if we need to loop back to the first item in the list
-					nextPipPositionIndex = 0;
+			if (nextPipPositionIndex >= SelfviewPipPositions.Count)
+				nextPipPositionIndex = 0;
 
-				SelfviewPipPositionSet(SelfviewPipPositions[nextPipPositionIndex]);
-			}
+			SelfviewPipPositionSet(SelfviewPipPositions[nextPipPositionIndex]);
 		}
 
 		public void LayoutSet(CodecCommandWithLabel layout)
@@ -7266,13 +7286,19 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private void ComputeSelfviewPipStatus()
 		{
-			_currentSelfviewPipPosition = SelfviewPipPositions.FirstOrDefault(p =>
-				p.Command.ToLower()
-					.Equals(CodecStatus.Status.Video.Selfview.PipPosition.Value.ToLower())
-			);
+			var reported = CodecStatus.Status.Video.Selfview.PipPosition.Value;
+
+			_currentSelfviewPipPosition = string.IsNullOrEmpty(reported)
+				? null
+				: SelfviewPipPositions.FirstOrDefault(p =>
+					string.Equals(p.Command, reported, StringComparison.OrdinalIgnoreCase));
 
 			if (_currentSelfviewPipPosition != null)
 				SelfviewIsOnFeedback.FireUpdate();
+
+			// The position feedback itself was never updated here, so anything listening (the SIMPL bridge's
+			// position join, the self-view position messenger) never saw a change.
+			SelfviewPipPositionFeedback.FireUpdate();
 		}
 
 		public void RemoveCallHistoryEntry(CodecCallHistory.CallHistoryEntry entry)
