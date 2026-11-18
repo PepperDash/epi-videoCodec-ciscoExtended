@@ -1840,6 +1840,17 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			this.LogVerbose("Phonebook Initial Sync Completed");
 			if (DirectoryRoot == null)
 				return;
+
+			// A search result shown before the sync finished (the start-up search, or a user search)
+			// is the current view, and the bridge selects rows from CurrentDirectoryResult. Publishing
+			// the root now would show one list while selections index into another. Keep the search
+			// view; SetCurrentDirectoryToRoot shows the root when asked.
+			if (DirectoryBrowseHistory.Count > 0)
+			{
+				this.LogDebug("Phonebook sync completed during a search view; root not published");
+				return;
+			}
+
 			OnDirectoryResultReturned(DirectoryRoot);
 		}
 
@@ -4896,6 +4907,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 				}
 
+				// A tagged reply that matches no pending search (e.g. one dropped by the pending-search
+				// cap) is not a start-up reply either; only untagged replies drive the steps below.
+				if (!IsUntaggedReply(resultId))
+				{
+					this.LogDebug("Phonebook result {resultId} answers no pending search; not shown", resultId);
+					return;
+				}
+
 				if (!PhonebookSyncState.InitialPhonebookFoldersWasReceived)
 				{
 					ParsePhonebookDirectoryFolders(phonebookSearchResultResponseObject);
@@ -5383,6 +5402,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 				_pendingSearches.Add(resultId);
 			}
+		}
+
+		// ParseResultId returns Guid.Empty for a reply sent without a resultId (start-up folder and
+		// contact queries, folder contents).
+		private static bool IsUntaggedReply(string resultId)
+		{
+			return string.IsNullOrEmpty(resultId) || resultId == Guid.Empty.ToString();
 		}
 
 		// True when resultId belongs to a pending search; that search is then no longer pending.
