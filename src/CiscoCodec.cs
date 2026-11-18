@@ -777,6 +777,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		private int _desiredPresentationSource;
 
+		/// <summary>
+		/// sharing.defaultPresentationSource: presented by sharingStart when no source is selected (0 = none).
+		/// </summary>
+		private int _defaultPresentationSource;
+
 		private string _presentationSourceKey;
 
 		private bool _presentationLocalOnly;
@@ -896,6 +901,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				PresentationStates = this.config.Sharing.DefaultShareLocalOnly
 					? eCodecPresentationStates.LocalOnly
 					: eCodecPresentationStates.LocalRemote;
+				_defaultPresentationSource = this.config.Sharing.DefaultPresentationSource;
 			}
 			else
 			{
@@ -6345,6 +6351,11 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		{
 			_desiredPresentationSource = source;
 
+			// 0 selects nothing (e.g. the SIMPL presentation source join cleared). It used to reach StartSharing
+			// and do nothing there; it must not start the configured default presentation source.
+			if (source <= 0)
+				return;
+
 			StartSharing();
 		}
 
@@ -6386,7 +6397,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 		public override void StartSharing()
 		{
-			if (_desiredPresentationSource <= 0)
+			// The selected source, else sharing.defaultPresentationSource (never a camera connector), so a
+			// sharingStart works at boot and after a stop without a route first. Nothing to present: no command.
+			var source = PresentationSourceChoice.Resolve(
+				_desiredPresentationSource, _defaultPresentationSource, IsCameraConnector);
+
+			if (source <= 0)
 				return;
 
 			// LocalRemote asks the codec to send the presentation to the far end. Out of a call
@@ -6399,7 +6415,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			EnqueueCommand(
 				string.Format(
 					"xCommand Presentation Start PresentationSource: {0} SendingMode: {1}",
-					_desiredPresentationSource,
+					source,
 					sendingMode
 				)
 			);

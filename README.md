@@ -252,7 +252,8 @@ Provided under MIT license
     "showSelfViewByDefault": true,
     "sharing": {
       "autoShareContentWhileInCall": false,
-      "defaultShareLocalOnly": true
+      "defaultShareLocalOnly": true,
+      "defaultPresentationSource": 2 // optional: connector sharingStart presents when no source is selected (at boot and after a stop). 0 or omitted: sharingStart does nothing until a route selects an input. Never a camera connector
     },
     "joinableCooldownSeconds": 0,
     "phonebookResultsLimit": 50,
