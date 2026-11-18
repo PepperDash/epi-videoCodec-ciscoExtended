@@ -5,7 +5,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Tests;
 
 /// <summary>
 /// The codec exposes its self-view (PIP) position through Essentials' IHasSelfviewPosition and a Mobile Control
-/// messenger on /device/{key}: /selfviewPipPositionToggle and the current position in selfviewPipPosition.
+/// messenger on /device/{key}, with the names mobile-control-react-app-core's useIHasSelfviewPosition hook uses:
+/// /toggleSelfviewPosition, /setSelfviewPosition, selfviewPipPosition and availablePositions.
 /// </summary>
 public class SelfviewPositionTests
 {
@@ -23,18 +24,22 @@ public class SelfviewPositionTests
     {
         var source = CiscoCodecSource();
 
-        source.Should().Contain("new IHasSelfviewPositionMessenger($\"selfviewPosition-{Key}\", $\"/device/{Key}\", this)");
+        source.Should().Contain("new IHasSelfviewPositionMessenger($\"selfviewPosition-{Key}\", $\"/device/{Key}\", this, SelfviewPipPositions)");
     }
 
     [Fact]
-    public void The_messenger_offers_the_toggle_and_reports_the_position()
+    public void The_messenger_uses_the_app_core_hook_names()
     {
         var source = AssemblyFixture.FindSourceForClass("IHasSelfviewPositionMessenger");
 
         source.Should().NotBeNull();
-        source!.Should().Contain("AddAction(\"/selfviewPipPositionToggle\"");
+        source!.Should().Contain("AddAction(\"/toggleSelfviewPosition\"");
+        source.Should().Contain("AddAction(\"/setSelfviewPosition\"");
         source.Should().Contain("AddAction(\"/fullStatus\"");
         source.Should().Contain("[JsonProperty(\"selfviewPipPosition\"");
+        source.Should().Contain("[JsonProperty(\"availablePositions\"");
+        source.Should().Contain("[JsonProperty(\"command\")]");
+        source.Should().Contain("[JsonProperty(\"label\")]");
     }
 
     [Fact]

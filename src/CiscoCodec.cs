@@ -1895,7 +1895,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 			var presenterTrackMessenger = new IPresenterTrackMessenger($"presenterTrack-{Key}", $"/device/{Key}", this);
 			mc.AddDeviceMessenger(presenterTrackMessenger);
 
-			var selfviewPositionMessenger = new IHasSelfviewPositionMessenger($"selfviewPosition-{Key}", $"/device/{Key}", this);
+			var selfviewPositionMessenger = new IHasSelfviewPositionMessenger($"selfviewPosition-{Key}", $"/device/{Key}", this, SelfviewPipPositions);
 			mc.AddDeviceMessenger(selfviewPositionMessenger);
 
 			return base.CustomActivate();
