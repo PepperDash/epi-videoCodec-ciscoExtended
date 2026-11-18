@@ -11,14 +11,25 @@ using Serilog.Events;
 
 namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
 {
-    public class NavigatorController : CiscoCodecUserInterface, IMobileControlTouchpanelController
+    public class NavigatorController : CiscoCodecUserInterface, IMobileControlTouchpanelController, IHasFeedback
     {
         private readonly NavigatorConfig props;
         private IMobileControlRoomMessenger bridge;
         private IMobileControl mobileControl;
         private string appUrl;
 
+        /// <summary>
+        /// The Navigator's Mobile Control app URL (http(s)://processor:port/mc/app?token=…), pushed in by Mobile
+        /// Control through <see cref="SetAppUrl"/>. Key "appUrl".
+        /// </summary>
         public StringFeedback AppUrlFeedback { get; private set; }
+
+        /// <summary>
+        /// Listed through Essentials' IHasFeedback so other plugins (e.g. a room opening Mobile Control pages on
+        /// this Navigator) can read the "appUrl" feedback without referencing this plugin. The URL carries the
+        /// Navigator's token, which console and processor Dev Tools users can already see.
+        /// </summary>
+        public FeedbackCollection<Feedback> Feedbacks { get; private set; }
 
         public string DefaultRoomKey => props.DefaultRoomKey;
 
@@ -37,6 +48,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.UserInterface.Navigator
             AddPostActivationAction(SubscribeForMobileControlUpdates);
 
             AppUrlFeedback = new StringFeedback("appUrl", () => appUrl);
+
+            Feedbacks = new FeedbackCollection<Feedback> { AppUrlFeedback };
         }
 
         private void HandleCodecReady(object sender, IsReadyEventArgs e)
