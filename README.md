@@ -249,6 +249,7 @@ Provided under MIT license
     },
     "phonebookDisableAutoPopulate": true,
     "phonebookMode": "Corporate",
+    "phonebookUseEmailForWebexContacts": true, // optional, default false (opt-in). Webex cloud directory contacts dial/display the contact Email instead of the Webex person ID. Enable only after confirming dial-by-email connects for that Webex org
     "showSelfViewByDefault": true,
     "sharing": {
       "autoShareContentWhileInCall": false,

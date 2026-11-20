@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using PepperDash.Essentials.Core;
@@ -95,8 +96,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         [JsonProperty("phonebookDisableAutoPopulate")]
         public bool PhonebookDisableAutoPopulate { get; set; }
 
+        /// <summary>
+        /// Not used by the plugin. Auto-dial of a selected directory contact is controlled by the
+        /// Essentials bridge join DirectoryDisableAutoDialSelectedLine (d107): low = selecting a contact
+        /// dials its first contact method; high = the contact method list is presented for selection.
+        /// Retained so existing configuration files continue to deserialize.
+        /// </summary>
+        [Obsolete("Not used. Auto-dial is controlled by bridge join DirectoryDisableAutoDialSelectedLine (d107).")]
         [JsonProperty("phonebookDisableAutoDial")]
         public bool PhonebookDisableAutoDial { get; set; }
+
+        /// <summary>
+        /// Opt-in (default false). When true, Webex cloud directory contacts whose contact method Number is the
+        /// opaque Webex person ID (Protocol "Spark", Number equal to ContactId) expose the contact's Email as the
+        /// contact method Number instead, so the UI shows and dials a readable address.
+        /// Enable per site after confirming that dialling by email connects on that Webex organisation.
+        /// </summary>
+        [JsonProperty("phonebookUseEmailForWebexContacts")]
+        public bool PhonebookUseEmailForWebexContacts { get; set; }
 
         [JsonProperty("UiBranding")]
         public BrandingLogoProperties UiBranding { get; set; }

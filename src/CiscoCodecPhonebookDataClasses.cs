@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using PepperDash.Core;
 using PepperDash.Essentials.Devices.Common.Codec;
 
@@ -99,6 +101,68 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public string Value { get; set; }
         }
 
+        public interface IValueNode
+        {
+            string Value { get; set; }
+        }
+
+        /// <summary>
+        /// Reads an xAPI leaf node without ever throwing. Accepts the usual { "Value": "x" } shape or a bare
+        /// value; anything else yields an empty node. Used on fields added for Webex directory support so an
+        /// unexpected shape from some firmware cannot fail the whole phonebook search result.
+        /// </summary>
+        public class LenientValueNodeConverter<T> : JsonConverter where T : class, IValueNode, new()
+        {
+            public override bool CanConvert(Type objectType)
+            {
+                return objectType == typeof(T);
+            }
+
+            public override bool CanWrite { get { return false; } }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                var node = new T();
+
+                try
+                {
+                    var token = JToken.Load(reader);
+
+                    if (token.Type == JTokenType.Object)
+                    {
+                        var value = token["Value"] as JValue;
+                        if (value != null && value.Value != null)
+                            node.Value = value.Value.ToString();
+                    }
+                    else if (token is JValue && ((JValue)token).Value != null)
+                    {
+                        node.Value = ((JValue)token).Value.ToString();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogDebug("Ignoring unreadable {type} field in phonebook response: {message}", typeof(T).Name, ex.Message);
+                }
+
+                return node;
+            }
+
+            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        public class Protocol : IValueNode
+        {
+            public string Value { get; set; }
+        }
+
+        public class Email : IValueNode
+        {
+            public string Value { get; set; }
+        }
+
         public class ContactMethod
         {
             public string id { get; set; }
@@ -107,12 +171,16 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public Device Device { get; set; }
             public CallType CallType { get; set; }
 
+            [JsonConverter(typeof(LenientValueNodeConverter<Protocol>))]
+            public Protocol Protocol { get; set; }
+
             public ContactMethod()
             {
                 ContactMethodId = new ContactMethodId();
                 Number = new Number();
                 Device = new Device();
                 CallType = new CallType();
+                Protocol = new Protocol();
             }
         }
 
@@ -123,6 +191,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             public ContactId ContactId { get; set; }
             public FolderId2 FolderId { get; set; }
             public Title Title { get; set; }
+
+            [JsonConverter(typeof(LenientValueNodeConverter<Email>))]
+            public Email Email { get; set; }
             public List<ContactMethod> ContactMethod { get; set; }
 
             public Contact()
@@ -131,8 +202,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 ContactId = new ContactId();
                 FolderId = new FolderId2();
                 Title = new Title();
+                Email = new Email();
                 ContactMethod = new List<ContactMethod>();
             }
+        }
+
+        /// <summary>
+        /// Returns the dial string to expose for a contact method.
+        /// The Webex cloud directory returns the person UUID as the method Number (same value as ContactId,
+        /// Protocol "Spark"), with the readable address in the contact's Email. When enabled, the Email is
+        /// used instead so the UI shows (and dials) the address the codec's own UI shows.
+        /// </summary>
+        public static string ResolveDialString(Contact c, ContactMethod m, bool preferEmailForWebex)
+        {
+            var number = m?.Number?.Value;
+
+            if (!preferEmailForWebex || c == null || m == null)
+                return number;
+
+            var isWebex = string.Equals(m.Protocol?.Value, "Spark", StringComparison.OrdinalIgnoreCase);
+            var isOpaqueId = !string.IsNullOrEmpty(number) && number == c.ContactId?.Value;
+            var email = c.Email?.Value;
+
+            return isWebex && isOpaqueId && !string.IsNullOrEmpty(email) ? email : number;
         }
 
         public class PhonebookSearchResult
@@ -212,7 +304,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public static List<DirectoryItem> GetRootContactsFromSearchResult(PhonebookSearchResult result)
+        public static List<DirectoryItem> GetRootContactsFromSearchResult(PhonebookSearchResult result, bool preferEmailForWebex = false)
         {
             try
             {
@@ -278,9 +370,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                                     tempContactMethod.Device = device;
                                 }
 
-                                Debug.LogDebug("Number: {value}", m.Number.Value);
+                                tempContactMethod.Number = ResolveDialString(c, m, preferEmailForWebex);
 
-                                tempContactMethod.Number = m.Number.Value;
+                                Debug.LogDebug("Number: {value}", tempContactMethod.Number);
                                 tempContactMethod.ContactMethodId = m.ContactMethodId.Value;
 
                                 contact.ContactMethods.Add(tempContactMethod);
@@ -309,7 +401,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// <param name="result"></param>
         /// <param name="resultFolder"></param>
         /// <returns></returns>
-        public static CodecDirectory ConvertCiscoPhonebookToGeneric(PhonebookSearchResult result)
+        public static CodecDirectory ConvertCiscoPhonebookToGeneric(PhonebookSearchResult result, bool preferEmailForWebex = false)
         {
             var directory = new CodecDirectory();
 
@@ -393,7 +485,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
                             contact.ContactMethods.Add(new PepperDash.Essentials.Devices.Common.Codec.ContactMethod()
                             {
-                                Number = m.Number.Value,
+                                Number = ResolveDialString(c, m, preferEmailForWebex),
                                 ContactMethodId = m.ContactMethodId.Value,
                                 CallType = callType,
                                 Device = device
