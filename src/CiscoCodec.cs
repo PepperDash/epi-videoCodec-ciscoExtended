@@ -173,6 +173,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 		public UiExtensions UiExtensions { get; set; }
 
 		private readonly bool _phonebookAutoPopulate;
+		private readonly bool _phonebookUseEmailForWebexContacts;
 		private bool _phonebookInitialSearch;
 
 		private string _lastSearched;
@@ -1088,6 +1089,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
 			_phonebookMode = props.PhonebookMode;
 			_phonebookAutoPopulate = !props.PhonebookDisableAutoPopulate;
+			_phonebookUseEmailForWebexContacts = props.PhonebookUseEmailForWebexContacts;
 
 			SyncState = new CodecSyncState(Key + "--Sync", this);
 			WireFramer();
@@ -5274,7 +5276,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 				if (int.TryParse(totalRowsValue, out var totalRows) && totalRows > 0)
 					directoryResults =
 						CiscoCodecExtendedPhonebook.ConvertCiscoPhonebookToGeneric(
-							phonebookSearchResultResponseObject
+							phonebookSearchResultResponseObject,
+							_phonebookUseEmailForWebexContacts
 						);
 
 				PrintDirectory(directoryResults);
@@ -5344,7 +5347,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 					return;
 				DirectoryRoot.AddContactsToDirectory(
 					CiscoCodecExtendedPhonebook.GetRootContactsFromSearchResult(
-						phonebookSearchResultResponseObject
+						phonebookSearchResultResponseObject,
+						_phonebookUseEmailForWebexContacts
 					)
 				);
 				PhonebookSyncState.PhonebookRootEntriesReceived();
