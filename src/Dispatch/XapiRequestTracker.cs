@@ -66,6 +66,22 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
+        /// <summary>The kind of a pending request, without completing it.</summary>
+        public bool TryGetKind(string? id, out string kind)
+        {
+            kind = string.Empty;
+            if (string.IsNullOrEmpty(id))
+                return false;
+
+            lock (_lock)
+            {
+                if (!_pending.TryGetValue(id!, out var pending))
+                    return false;
+                kind = pending.Kind;
+                return true;
+            }
+        }
+
         /// <summary>All requests still waiting for a reply.</summary>
         public int PendingCount()
         {
@@ -101,6 +117,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
 
             return expired;
+        }
+
+        /// <summary>Drops the pending requests of this kind; returns how many were dropped.</summary>
+        public int Cancel(string kind)
+        {
+            lock (_lock)
+            {
+                var ids = new List<string>();
+                foreach (var entry in _pending)
+                    if (entry.Value.Kind == kind)
+                        ids.Add(entry.Key);
+                foreach (var id in ids)
+                    _pending.Remove(id);
+                return ids.Count;
+            }
         }
 
         /// <summary>Drops every pending request, e.g. when the connection changes.</summary>

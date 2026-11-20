@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Crestron.SimplSharp;
 using Crestron.SimplSharpPro.CrestronThread;
 using PepperDash.Core;
@@ -15,19 +16,13 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
     {
         bool _initialSyncComplete;
 
-        private const int Idle = 0;
-        private const int Processing = 1;
-        private int _isProcessing;
-
         private readonly CiscoCodec _parent;
 
         public event EventHandler<EventArgs> InitialSyncCompleted;
 
-        private readonly CrestronQueue<Action> _systemActions = new CrestronQueue<Action>(100);
-        private readonly CrestronQueue<Action> _commandActions = new CrestronQueue<Action>(100);
-
-        private Thread _worker;
-        private readonly CEvent _waitHandle = new CEvent();
+        // The worker that sends to the codec (#194). Its loop has no Crestron dependencies, so it is
+        // unit tested; here it gets the processor's thread, queues and signal.
+        private readonly SendWorker _worker;
 
         public string Key { get; private set; }
 
@@ -46,7 +41,23 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             }
         }
 
-        public bool LoginMessageWasReceived { get; private set; }
+        /// <summary>The sync has claimed the codec's session: its login was seen and its setup sent.</summary>
+        public bool LoginMessageWasReceived
+        {
+            get { return _session.Claimed; }
+            private set { _session.Claimed = value; }
+        }
+
+        private readonly SessionStarter _session;
+
+        private int _sessionGeneration;
+
+        /// <summary>
+        /// Counts the sync's resets (disconnect, lost session, restarted session). State read before and
+        /// after a change of this number belongs to different codec sessions, even when no reader saw the
+        /// sync incomplete in between.
+        /// </summary>
+        public int SessionGeneration => System.Threading.Volatile.Read(ref _sessionGeneration);
 
         public bool JsonResponseModeSet { get; private set; }
 
@@ -70,6 +81,24 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         {
             Key = key;
             _parent = parent;
+            // The gate's Arriving is set on the receive thread as soon as this session's full status reply
+            // is matched, until a reset: a session setup that runs before the worker applies
+            // FullStatusReceived must not ask again.
+            _session = new SessionStarter(_parent.SendTextWithoutQueue, _parent.RequestFullStatus, () => _parent.IsFullStatusPending,
+                () => _parent.FullStatusReply.Arriving);
+
+            _worker = new SendWorker(
+                new CrestronActionQueue(QueueCapacity),
+                new CrestronActionQueue(QueueCapacity),
+                new CEventSignal(),
+                loop => new Thread(_ => { loop(); return null; }, null, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" },
+                () => _parent.IsReceivingJsonMessage,
+                new SendQueueHealth(),
+                (label, ex) =>
+                {
+                    this.LogError("Error processing {label}: {message}", label, ex.Message);
+                    this.LogVerbose(ex, "Exception");
+                });
 
             _syncWatchdogTimer = new CTimer(o => CheckSyncProgress(), null, SyncWatchdogIntervalMs, SyncWatchdogIntervalMs);
 
@@ -81,8 +110,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                     _syncWatchdogTimer.Stop();
                     _syncWatchdogTimer.Dispose();
 
-                    Interlocked.Exchange(ref _isProcessing, Idle);
-                    _waitHandle.Set();
+                    _worker.Stop();
                 };
         }
 
@@ -91,18 +119,93 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (string.IsNullOrEmpty(query))
                 return;
 
-            _commandActions.Enqueue(() =>
-             {
-                 _parent.SendTextWithoutQueue(query);
-             });
-
-            // if (!_commandActions.TryToEnqueue(() => _parent.SendText(query)))
-            // {
-            //     this.LogError("Unable to enqueue command:{query}", query);
-            //     this.LogError("commandActions queue is full. Consider increasing the queue size if this is a common occurrence. Count = {CommandQueueCount}", _commandActions.Count);
-            // }
+            var what = DropEpisodeTracker.Describe(query);
+            Enqueue(SendQueueKind.Command, _commandQueueFullDrops, what,
+                onResult => _worker.Enqueue(SendQueueKind.Command, () => _parent.SendTextWithoutQueue(query), what, onResult));
 
             Schedule();
+        }
+
+        // Each queue holds QueueCapacity actions. CrestronQueue.Enqueue blocks indefinitely when the
+        // queue is full, so with the worker stalled every caller (the receive thread, UI and timer
+        // threads) would hang one by one, silently (#194). Full queues drop the action and log instead.
+        private const int QueueCapacity = 100;
+        private readonly DropEpisodeTracker _systemQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
+        private readonly DropEpisodeTracker _commandQueueFullDrops = new DropEpisodeTracker(CiscoCodec.DropReminderInterval);
+
+        /// <summary>
+        /// Queues a sync step, once: while it waits, more messages asking for the same step (each JSON
+        /// document, status reply or text line while the worker is busy or stalled) are served by the
+        /// queued copy, which reads the current state when it runs (#194). Before, a stalled worker let
+        /// these fill the system queue within seconds. The step is named by its caller.
+        /// </summary>
+        /// <param name="action">The step.</param>
+        /// <param name="sessionMode">
+        /// The session mode a step detects (<see cref="JsonMode"/> or <see cref="TextMode"/>): a copy of
+        /// any step waiting from before the mode changed won't serve a request made after it, so steps
+        /// keep their order across the change. Steps of the same mode don't separate each other. A
+        /// poll echo (LoginMessageReceived) gives no mode: it only proves a session exists, and a session
+        /// in JSON mode with echo still on echoes polls too.
+        /// </param>
+        /// <param name="caller">The step's name (its caller).</param>
+        private void EnqueueSystemAction(Action action, string sessionMode = null, [CallerMemberName] string caller = "")
+        {
+            Enqueue(SendQueueKind.System, _systemQueueFullDrops, caller,
+                onResult => _worker.EnqueueSystemOnce(caller, action, sessionMode, onResult));
+        }
+
+        private const string JsonMode = "json";
+        private const string TextMode = "text";
+
+        /// <summary>What the send path is doing, for codecperf and the send watchdog (#194).</summary>
+        internal SendQueueHealth SendHealth => _worker.Health;
+
+        private void ClearCommands() => _worker.ClearCommands();
+
+        /// <summary>
+        /// Runs <paramref name="enqueue"/> (a SendWorker enqueue taking a result callback) and logs a
+        /// full-queue drop episode around it.
+        /// </summary>
+        private void Enqueue(SendQueueKind kind, DropEpisodeTracker drops, string what, Action<Action<bool>> enqueue)
+        {
+            var name = kind == SendQueueKind.Command ? "command" : "system";
+
+            // The drop episode is updated under the worker's lock, in the order the queue saw the
+            // results, so a success can't end an episode another caller has just started; logged after.
+            int recovered = 0, droppedSinceLog = 0, droppedInEpisode = 0;
+            var logDrop = false;
+            enqueue(accepted =>
+            {
+                if (accepted)
+                    recovered = drops.OnSucceeded();
+                else
+                {
+                    logDrop = drops.OnDropped(DateTime.UtcNow, out droppedSinceLog);
+                    droppedInEpisode = drops.DroppedInEpisode;
+                }
+            });
+
+            if (recovered > 0)
+                this.LogInformation("The codec {queue} queue accepts actions again: {count} were dropped while it was full.", name, recovered);
+
+            if (logDrop)
+                this.LogWarning(
+                    "The codec {queue} queue is full ({capacity} waiting), so {what} was dropped ({count} dropped since the last warning, {total} in this episode). Nothing is being taken off the queue: the worker that sends to the codec may be stuck.",
+                    name, QueueCapacity, what, droppedSinceLog, droppedInEpisode);
+        }
+
+        /// <summary>
+        /// Queues a session reset, which must never be dropped: with its flags left set, a reconnect in
+        /// JSON mode would never re-sync (#194). If the system queue is full, its stale actions are
+        /// dropped instead (they belong to the session being reset). Never blocks.
+        /// </summary>
+        private void EnqueueReset(Action action, [CallerMemberName] string caller = "")
+        {
+            var discarded = _worker.EnqueueReset(action, caller);
+            if (discarded > 0)
+                this.LogWarning(
+                    "The codec system queue was full when {what} arrived: dropped the {count} sync action(s) waiting in it so the reset is not lost.",
+                    caller, discarded);
         }
 
         // How a session is recognised (#113). Over RS-232 there are no socket events, and the codec's
@@ -119,7 +222,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         public void LoginMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 StartSession("poll echoed");
                 CheckSyncStatus();
@@ -138,7 +241,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && JsonResponseModeSet)
                 return; // the usual case: nothing to do, and no action queued per message
 
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (LoginMessageWasReceived && JsonResponseModeSet)
                     return;
@@ -150,22 +253,18 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 if (!LoginMessageWasReceived)
                 {
                     // Adopting a session this program did not set up (e.g. after a program restart).
-                    LoginMessageWasReceived = true;
+                    // Echo off (it may still have echo on) and always the full status: the JSON that got
+                    // us here may be a poll reply (SystemUnit, cameras, SIP, volume), which already
+                    // counts as the initial status but leaves call, standby and presentation state
+                    // unloaded. A session this program set up already requested it in StartSession.
                     MarkSessionDetected();
-
-                    // It may still have echo on.
-                    _parent.SendTextWithoutQueue("echo off");
-
-                    // Always request the full status here: the JSON that got us here may be a poll
-                    // reply (SystemUnit, cameras, SIP, volume), which already counts as the initial
-                    // status but leaves call, standby and presentation state unloaded. A session
-                    // this program set up already requested it in StartSession.
-                    _parent.RequestFullStatus();
+                    if (_session.Adopt(FullStatusWasReceived).SetupDropped)
+                        OnSessionSetupDropped("JSON received");
                 }
 
                 MarkSyncPhase("jsonMode");
                 CheckSyncStatus();
-            });
+            }, JsonMode);
 
             Schedule();
         }
@@ -179,7 +278,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (LoginMessageWasReceived && !JsonResponseModeSet)
                 return; // the session is already being set up; the watchdog retries if that stalls
 
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (JsonResponseModeSet)
                 {
@@ -196,7 +295,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 }
 
                 CheckSyncStatus();
-            });
+            }, TextMode);
 
             Schedule();
         }
@@ -208,28 +307,42 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         private void StartSession(string reason)
         {
-            var isNewSession = !LoginMessageWasReceived;
-            LoginMessageWasReceived = true;
-            MarkSessionDetected();
-
-            if (JsonResponseModeSet)
-                return;
-
-            if (isNewSession)
+            if (!LoginMessageWasReceived && !JsonResponseModeSet)
                 this.LogDebug("Codec session detected ({reason}): turning echo off and requesting JSON mode.", reason);
 
-            _parent.SendTextWithoutQueue("echo off");
-            _parent.SendTextWithoutQueue("xPreferences outputmode json");
+            MarkSessionDetected();
+            if (_session.Start(JsonResponseModeSet, FullStatusWasReceived).SetupDropped)
+                OnSessionSetupDropped(reason);
+        }
 
-            if (isNewSession && !FullStatusWasReceived)
-                _parent.RequestFullStatus();
+        /// <summary>
+        /// A new session's setup was dropped because the connection reported not connected (an SSH
+        /// client can deliver the codec's first output just before it reports connected). The session
+        /// stays unclaimed, so the next output the codec sends starts it again, full status included;
+        /// the sync is timed from that start.
+        /// </summary>
+        private void OnSessionSetupDropped(string reason)
+        {
+            _sessionDetectedAt = 0;
+            this.LogInformation(
+                "Codec session detected ({reason}) before the connection reported connected: its setup wasn't sent. Starting it again on the codec's next output.",
+                reason);
         }
 
         /// <summary>The reply to this sync's tagged full xStatus request has been parsed (#142).</summary>
         public void FullStatusReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
+                // Read when the step runs, not captured: a reply matched before a reset that has run since
+                // (which clears Arriving) can't stand in for the new session's own full status, and a
+                // waiting copy of this step that serves a later call applies that call's reply.
+                if (!_parent.FullStatusReply.Arriving)
+                {
+                    this.LogDebug("Full Codec Status from a session that has since been reset: ignored.");
+                    return;
+                }
+
                 if (!FullStatusWasReceived)
                     this.LogDebug("Full Codec Status received.");
 
@@ -243,7 +356,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialStatusMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialStatusMessageWasReceived)
                     this.LogDebug("Initial Codec Status Message Received.");
@@ -258,7 +371,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialConfigurationMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialConfigurationMessageWasReceived)
                     this.LogDebug("Initial Codec Configuration DiagnosticsMessage Received.");
@@ -273,7 +386,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void InitialSoftwareVersionMessageReceived()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!InitialSoftwareVersionMessageWasReceived)
                     this.LogDebug("Initial Codec Software Information received");
@@ -289,7 +402,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void FeedbackRegistered()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueSystemAction(() =>
             {
                 if (!FeedbackWasRegistered)
                     this.LogDebug("Initial Codec Feedback Registration Successful.");
@@ -308,12 +421,12 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         public void SessionLost()
         {
-            _commandActions.Clear();
+            ClearCommands();
 
-            _systemActions.Enqueue(() =>
+            EnqueueReset(() =>
             {
                 this.LogDebug("Session lost: dropping queued commands and resetting all SyncState flags");
-                _commandActions.Clear();
+                ClearCommands();
                 ResetSync();
             });
 
@@ -322,7 +435,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
 
         public void CodecDisconnected()
         {
-            _systemActions.Enqueue(() =>
+            EnqueueReset(() =>
             {
                 this.LogDebug("CodecDisconnected: resetting all SyncState flags to false");
                 ResetSync();
@@ -336,6 +449,10 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
         /// </summary>
         private void ResetSync()
         {
+            // The previous session's full status requests: their replies may never come, and while
+            // pending they would hold back the new session's own request. Also clears the arriving mark,
+            // under the lock the reply match takes.
+            _parent.FullStatusReply.Reset();
             LoginMessageWasReceived = false;
             JsonResponseModeSet = false;
             InitialConfigurationMessageWasReceived = false;
@@ -349,6 +466,9 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             // A reset sync must not leave the previous sync's periodic timers running while it
             // re-syncs (on RS-232 there is no socket disconnect to stop them).
             _parent.StopRefreshTimers();
+
+            // Bumped last (a full fence): a reader that sees the new number also sees the flags cleared above.
+            System.Threading.Interlocked.Increment(ref _sessionGeneration);
         }
 
         // Sync watchdog (#113): each initial request (JSON mode, xStatus, xConfiguration, xFeedback List)
@@ -366,7 +486,7 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             if (InitialSyncComplete)
                 return;
 
-            _systemActions.Enqueue(RetryMissingSyncSteps);
+            EnqueueSystemAction(RetryMissingSyncSteps);
             Schedule();
         }
 
@@ -510,63 +630,65 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
                 SyncPhaseMs("softwareVersion"), SyncPhaseMs("feedback"), SyncPhaseMs("fullStatus"));
         }
 
-        private void Schedule()
-        {
-            if (Interlocked.CompareExchange(
-                ref _isProcessing,
-                Processing,
-                Idle) ==
-                Idle)
-                _worker = new Thread(RunSyncState, this, Thread.eThreadStartOptions.Running) { Name = Key + ":Codec Sync State" };
+        private void Schedule() => _worker.Schedule();
 
-            _waitHandle.Set();
+        /// <summary>
+        /// Starts a new worker when the current one has stopped taking actions off the queues (#194).
+        /// Called by the send watchdog, from its own timer.
+        /// </summary>
+        internal void RestartWorker() => _worker.RestartWorker();
+
+        /// <summary>
+        /// Queues a probe so the send watchdog can see the worker finish something after a recovery
+        /// (#194): an empty queue left by the recovery's drain proves nothing. The probe waits for the
+        /// send lock, as a real command would, so a write still blocked under it (a replaced worker's,
+        /// over RS-232) keeps the probe from finishing and the stall from ending.
+        /// </summary>
+        internal void EnqueueWatchdogProbe()
+        {
+            // Its own slot, not the system queue: a full queue or a session reset can't lose it.
+            _worker.RequestProbe(() =>
+            {
+                _parent.WaitForSendPath();
+                SendHealth.OnProbeCompleted();
+            }, "SendWatchdogProbe");
+            Schedule();
         }
 
-        private object RunSyncState(object o)
+        /// <summary>
+        /// Empties the command queue without sending, so commands that waited out a stall aren't sent
+        /// late (#194). Returns how many were dropped and describes the first <paramref name="describe"/>.
+        /// </summary>
+        internal int DrainCommands(int describe, out List<string> described) =>
+            _worker.DrainCommands(describe, out described);
+
+        /// <summary>A CrestronQueue for the send worker. TryToEnqueue never blocks (Enqueue would, when full).</summary>
+        private sealed class CrestronActionQueue : IActionQueue
         {
-            while (_isProcessing == Processing)
+            private readonly CrestronQueue<QueuedAction> _queue;
+
+            public CrestronActionQueue(int capacity)
             {
-                // Hold off sending anything to the codec while a JSON response is currently being
-                // accumulated - the codec can echo in-flight commands back into the response stream,
-                // which corrupts the JSON buffer being parsed.
-                if (_parent.IsReceivingJsonMessage)
-                {
-                    _waitHandle.Wait(20);
-                    continue;
-                }
-
-                if (_systemActions.TryToDequeue(out Action sys))
-                {
-                    try
-                    {
-                        sys();
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogError("Error processing system action: {message}", ex.Message);
-                        this.LogVerbose(ex, "Exception");
-                    }
-                    continue;
-                }
-
-                if (_commandActions.TryToDequeue(out Action cmd))
-                {
-                    try
-                    {
-                        cmd();
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogError("Error processing user action: {message}", ex.Message);
-                        this.LogVerbose(ex, "Exception");
-                    }
-                    continue;
-                }
-
-                _waitHandle.Wait();
+                _queue = new CrestronQueue<QueuedAction>(capacity);
             }
 
-            return null;
+            public bool TryEnqueue(QueuedAction action) => _queue.TryToEnqueue(action);
+
+            public bool TryDequeue(out QueuedAction action) => _queue.TryToDequeue(out action);
+
+            public void Clear() => _queue.Clear();
+        }
+
+        /// <summary>A CEvent (auto-reset) as the send worker's wake-up signal.</summary>
+        private sealed class CEventSignal : IWorkerSignal
+        {
+            private readonly CEvent _event = new CEvent();
+
+            public void Set() => _event.Set();
+
+            public void Wait() => _event.Wait();
+
+            public void Wait(int timeoutMs) => _event.Wait(timeoutMs);
         }
     }
 }

@@ -132,6 +132,14 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec
             this.LogDebug("Setting PresenterTrack Enabled to {enabled}", enabledValue);
             EnqueueCommand($"xConfiguration Cameras PresenterTrack Enabled: {enabledValue}");
         }
+
+        public void SetPresenterTrackMode(string mode)
+        {
+            // Unlike PresenterTrackFollow() and the other UI actions, this neither checks availability
+            // (the camera manager waits for it) nor unmutes a camera the room turned off.
+            this.LogDebug("Setting PresenterTrack Mode to {mode}", mode);
+            EnqueueCommand($"xCommand Cameras PresenterTrack Set Mode: {mode}");
+        }
     }
 
 }

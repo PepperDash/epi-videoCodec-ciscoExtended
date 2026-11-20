@@ -33,6 +33,29 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // Keyed by codec key -> scenario key. Cleared on scenario change. Guarded by activeMigrationsLock.
         private readonly Dictionary<string, string> rolesAppliedScenarioByCodec = new Dictionary<string, string>();
 
+        // Call starts per codec, for selectPrimaryCameraOnCallStart and presenterTrackMode, and the codecs whose
+        // call started but whose primary camera couldn't be selected yet (offline or moving): retried while the
+        // call lasts. Both are only used on the attach-verification timer tick.
+        private readonly CallStartDetector callStarts = new CallStartDetector();
+        // Codecs whose call-start selection waits for the primary camera, with the codec session it waits in.
+        private readonly Dictionary<string, int> pendingCallStartSelect = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // Codecs to put in their scenario's presenterTrackMode, keyed by codec key. Queued when the scenario's
+        // camera roles are applied and when a call starts; sent once the codec reports PresenterTrack available
+        // and its PresenterTrack camera is online on it and not moving. Cleared on scenario change. Guarded
+        // by activeMigrationsLock.
+        private readonly Dictionary<string, PendingPresenterTrackMode> pendingPresenterTrackModes = new Dictionary<string, PendingPresenterTrackMode>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class PendingPresenterTrackMode
+        {
+            public string Mode;
+            public string Reason;
+            // Queued by a call start: dropped when that call ends or the codec's session changes.
+            public bool ForCall;
+            public int Session;
+            public bool WaitLogged;
+        }
+
         // In-flight dynamic camera ID reservations. Between the moment we issue an
         // AssignedSerialNumber to a codec and the moment the codec reports it back in its Cameras
         // collection, the confirmed state does not yet reflect the assignment. Without tracking
@@ -234,6 +257,15 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
         // Maximum time to wait for source-side assigned-serial clear feedback before forcing the
         // VLAN switch. This prevents a reseeded camera from staying parked on the source codec.
         private const int AssignmentClearTimeoutMs = 5000;
+
+        // Safety net: a migration that never reaches attach-wait within this long (comfortably above
+        // the worst-case sum of every earlier-stage fallback: ~25s disconnect + ~5s assignment-clear +
+        // room for retries) is force-removed and its port reseeded onto the source codec's VLAN, the
+        // same recovery action used on attach timeout. Without this, a cascade that stalls before any
+        // stage flag is set (e.g. an exception between registration and the first flag) is invisible to
+        // every other periodic scan below (they all filter on a specific flag being set) and remains in
+        // activeMigrations forever, permanently blocking that camera from ever migrating again.
+        private const int MigrationMaxLifetimeMs = 240000;
 
         /// <summary>
         /// Device key of the configured room combiner used by this CameraManager.
@@ -1106,7 +1138,8 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 Port = camera.NetworkSwitchPort,
                 SourceCodecKey = sourceCodec.Key,
                 SourceCameraId = sourceCameraId,
-                TargetCodecKey = targetCodecKey
+                TargetCodecKey = targetCodecKey,
+                CreatedUtc = DateTime.UtcNow
             };
 
             lock (activeMigrationsLock)
@@ -1431,16 +1464,31 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                 // applies once per codec per scenario.
                 TryApplyScenarioCameraRoles(roomCombiner?.CurrentScenario?.Key);
 
+                // A call just started on a codec: back to the scenario's primary camera (with
+                // selectPrimaryCameraOnCallStart) and its presenterTrackMode (when configured).
+                if (config != null)
+                    HandleCallStarts(roomCombiner?.CurrentScenario?.Key);
+
+                // Put codecs in their presenterTrackMode once PresenterTrack and its camera are ready.
+                // After the selections above, so a call starts on the primary camera, then tracks.
+                TrySendPendingPresenterTrackModes(roomCombiner?.CurrentScenario?.Key);
+
                 List<string> pendingAttachKeys;
                 List<string> pendingPoeSafeguardKeys;
                 List<string> pendingPoeReenableRetryKeys;
                 List<string> pendingDisconnectWaitKeys;
                 List<string> pendingAssignmentClearTimeoutKeys;
+                List<string> pendingStaleMigrationKeys;
                 var now = DateTime.UtcNow;
                 lock (activeMigrationsLock)
                 {
                     pendingAttachKeys = activeMigrations.Values
                         .Where(m => m.AttachWaitStarted && m.AttachWaitDeadlineUtc <= now)
+                        .Select(m => m.CameraKey)
+                        .ToList();
+
+                    pendingStaleMigrationKeys = activeMigrations.Values
+                        .Where(m => !m.AttachWaitStarted && (now - m.CreatedUtc).TotalMilliseconds >= MigrationMaxLifetimeMs)
                         .Select(m => m.CameraKey)
                         .ToList();
 
@@ -1649,6 +1697,51 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     else
                     {
                         this.LogError($"Camera Manager {Key} cannot run attach failure reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
+                    }
+                }
+
+                foreach (var migrationKey in pendingStaleMigrationKeys)
+                {
+                    string cameraKey;
+                    string sourceCodecKey;
+                    uint sourceCameraId;
+                    string targetCodecKey;
+                    string port;
+                    lock (activeMigrationsLock)
+                    {
+                        if (!activeMigrations.TryGetValue(migrationKey, out var migration)
+                            || migration.AttachWaitStarted
+                            || (now - migration.CreatedUtc).TotalMilliseconds < MigrationMaxLifetimeMs)
+                        {
+                            continue;
+                        }
+
+                        cameraKey = migration.CameraKey;
+                        sourceCodecKey = migration.SourceCodecKey;
+                        sourceCameraId = migration.SourceCameraId;
+                        targetCodecKey = migration.TargetCodecKey;
+                        port = migration.Port;
+
+                        activeMigrations.Remove(migration.CameraKey);
+                        if (string.Equals(activeBurstCameraKey, migration.CameraKey, StringComparison.Ordinal))
+                        {
+                            activeBurstCameraKey = null;
+                        }
+                        reconcileNextActionUtc[migration.CameraKey] = DateTime.UtcNow.AddMilliseconds(ReconcileBackoffMs);
+                    }
+
+                    this.LogWarning($"CAMERA_SWITCHOVER_STALE_MIGRATION_FORCE_REMOVED camera='{cameraKey}' sourceCodec='{sourceCodecKey}' sourceCameraId='{sourceCameraId}' targetCodec='{targetCodecKey}' port='{port}' maxLifetimeMs='{MigrationMaxLifetimeMs}' action='reseedSourceVlanAndPoe'");
+                    if (managedCodecs.TryGetValue(sourceCodecKey, out var staleSourceCodecDevice))
+                    {
+                        SendPortVlan(port, staleSourceCodecDevice.VLanId);
+                        if (!disablePoeCycling)
+                        {
+                            SendPortPoe(port, true);
+                        }
+                    }
+                    else
+                    {
+                        this.LogError($"Camera Manager {Key} cannot run stale-migration reseed for camera '{cameraKey}': source codec '{sourceCodecKey}' not found");
                     }
                 }
 
@@ -2201,12 +2294,256 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     this.LogDebug($"CAMERA_SCENARIO_PRESENTERTRACK_SET scenario='{scenarioKey}' codec='{codecKey}' presenterTrackCamera='{presenterTrackCameraKey}' connector='{connector}' enabled='True'");
                     codec.SetPresenterTrackEnabled(true);
                     codec.SetPresenterTrackConnector(connector);
+
+                    // The mode is a command, not a setting: it goes once the codec reports PresenterTrack
+                    // available (it may not be until the Enabled above takes effect).
+                    QueuePresenterTrackMode(codecConfig, codecKey, scenarioKey, "scenarioApplied", forCall: false, session: 0);
                 }
 
                 lock (activeMigrationsLock)
                 {
                     rolesAppliedScenarioByCodec[codecKey] = scenarioKey;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Queues the codec's configured <c>presenterTrackMode</c> for this scenario (replacing any waiting
+        /// one). Does nothing when none is configured; logs and ignores a value that isn't a mode.
+        /// </summary>
+        private void QueuePresenterTrackMode(CameraManagerCodecConfig codecConfig, string codecKey, string scenarioKey, string reason, bool forCall, int session)
+        {
+            var configured = codecConfig?.GetPresenterTrackMode();
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                return;
+            }
+
+            var mode = PresenterTrackModes.Normalize(configured);
+            if (mode == null)
+            {
+                this.LogWarning($"CAMERA_PRESENTERTRACK_MODE_INVALID codec='{codecKey}' scenario='{scenarioKey}' presenterTrackMode='{configured}' — not one of follow, persistent, background, off; the mode is left as it is");
+                return;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                pendingPresenterTrackModes[codecKey] = new PendingPresenterTrackMode
+                {
+                    Mode = mode,
+                    Reason = reason,
+                    ForCall = forCall,
+                    Session = session
+                };
+            }
+        }
+
+        /// <summary>
+        /// Sends each waiting <c>presenterTrackMode</c> for the current scenario once its codec has finished
+        /// syncing, reports PresenterTrack available, and has its PresenterTrack camera online and not
+        /// moving. A mode queued by a call start is dropped when the call ends or the codec's session
+        /// changes; one queued by the scenario waits for the codec. Logs the first wait for each.
+        /// </summary>
+        private void TrySendPendingPresenterTrackModes(string scenarioKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey)
+                || config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                var codecKey = codecConfig?.CodecKey;
+                if (string.IsNullOrWhiteSpace(codecKey))
+                {
+                    continue;
+                }
+
+                PendingPresenterTrackMode pending;
+                lock (activeMigrationsLock)
+                {
+                    if (!pendingPresenterTrackModes.TryGetValue(codecKey, out pending))
+                    {
+                        continue;
+                    }
+                }
+
+                var presenterTrackCameraKey = codecConfig.GetPresenterTrackCameraKey();
+                if (string.IsNullOrWhiteSpace(presenterTrackCameraKey)
+                    || !managedCodecs.TryGetValue(codecKey, out var codecDevice)
+                    || !(codecDevice is CiscoCodec codec))
+                {
+                    RemovePendingPresenterTrackMode(codecKey, pending);
+                    continue;
+                }
+
+                var synced = codec.SyncState != null && codec.SyncState.InitialSyncComplete;
+                if (pending.ForCall
+                    && (!synced || codec.SyncState.SessionGeneration != pending.Session || !codec.IsAnyCallActive))
+                {
+                    // The call it was for is over (or can't be told from a new one after a re-sync).
+                    RemovePendingPresenterTrackMode(codecKey, pending);
+                    continue;
+                }
+
+                if (!synced
+                    || !codec.PresenterTrackAvailability
+                    || !IsCameraReadyOnCodec(codecKey, presenterTrackCameraKey, out _))
+                {
+                    if (!pending.WaitLogged)
+                    {
+                        pending.WaitLogged = true;
+                        this.LogInformation($"CAMERA_PRESENTERTRACK_MODE_WAITING codec='{codecKey}' scenario='{scenarioKey}' mode='{pending.Mode}' reason='{pending.Reason}' synced='{synced}' presenterTrackAvailable='{codec.PresenterTrackAvailability}' presenterTrackCamera='{presenterTrackCameraKey}' — setting the mode once the codec reports PresenterTrack available and the camera is online and not moving");
+                    }
+                    continue;
+                }
+
+                if (!RemovePendingPresenterTrackMode(codecKey, pending))
+                {
+                    continue; // replaced or cleared meanwhile; the next tick handles the newer one
+                }
+
+                this.LogInformation($"CAMERA_PRESENTERTRACK_MODE_SET codec='{codecKey}' scenario='{scenarioKey}' mode='{pending.Mode}' reason='{pending.Reason}' presenterTrackCamera='{presenterTrackCameraKey}' previousStatus='{codec.PresenterTrackStatusName}' cameraOff='{codec.CameraIsOffFeedback?.BoolValue}'");
+                codec.SetPresenterTrackMode(pending.Mode);
+            }
+        }
+
+        /// <summary>Removes the codec's waiting mode if it is still <paramref name="pending"/>; true when it was.</summary>
+        private bool RemovePendingPresenterTrackMode(string codecKey, PendingPresenterTrackMode pending)
+        {
+            lock (activeMigrationsLock)
+            {
+                if (pendingPresenterTrackModes.TryGetValue(codecKey, out var current) && ReferenceEquals(current, pending))
+                {
+                    pendingPresenterTrackModes.Remove(codecKey);
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// For each codec of the current scenario that has just gone from no active call to an active
+        /// call: queues its configured <c>presenterTrackMode</c> (sent by
+        /// <see cref="TrySendPendingPresenterTrackModes"/>), and with <c>selectPrimaryCameraOnCallStart</c>
+        /// selects its "primary" camera as the main video source again (the camera someone picked
+        /// outside the call doesn't carry into it). A camera the room turned off stays off. While the
+        /// primary camera isn't online on the codec or is moving, the selection waits and is retried on
+        /// each tick until it is made or the call ends. A codec that hasn't finished syncing is
+        /// forgotten, so a call already up when it comes back isn't treated as a new one.
+        /// </summary>
+        private void HandleCallStarts(string scenarioKey)
+        {
+            if (string.IsNullOrEmpty(scenarioKey)
+                || config?.RoomCombinerConfig?.CombineScenarios == null
+                || !config.RoomCombinerConfig.CombineScenarios.TryGetValue(scenarioKey, out var scenarioConfig)
+                || scenarioConfig?.CodecConfigs == null)
+            {
+                return;
+            }
+
+            foreach (var codecConfig in scenarioConfig.CodecConfigs)
+            {
+                var codecKey = codecConfig?.CodecKey;
+                if (string.IsNullOrWhiteSpace(codecKey)
+                    || !managedCodecs.TryGetValue(codecKey, out var codecDevice)
+                    || !(codecDevice is CiscoCodec codec))
+                {
+                    continue;
+                }
+
+                if (codec.SyncState == null)
+                {
+                    callStarts.Forget(codecKey);
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                // The codec's session, read around the call state: a disconnect and re-sync between two
+                // ticks (never seen incomplete here) still starts the readings over, so a call that was up
+                // through the reconnect doesn't count as a new one, and a waiting selection from the
+                // session before is dropped. Read first, then the sync checked: a call state read under
+                // this session number is then the session's own, not one left from the session before
+                // (the codec's status isn't cleared on a reset).
+                var session = codec.SyncState.SessionGeneration;
+                if (!codec.SyncState.InitialSyncComplete)
+                {
+                    callStarts.Forget(codecKey);
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                var inCall = codec.IsAnyCallActive;
+                if (session != codec.SyncState.SessionGeneration || !codec.SyncState.InitialSyncComplete)
+                {
+                    continue; // reset while reading: the next tick reads the new session
+                }
+
+                if (pendingCallStartSelect.TryGetValue(codecKey, out var pendingSession) && pendingSession != session)
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                }
+
+                var started = callStarts.Observe(codecKey, inCall, session);
+                if (!inCall)
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                if (started)
+                {
+                    QueuePresenterTrackMode(codecConfig, codecKey, scenarioKey, "callStart", forCall: true, session: session);
+                }
+
+                if (!config.SelectPrimaryCameraOnCallStart)
+                {
+                    continue;
+                }
+
+                if (!started && !pendingCallStartSelect.ContainsKey(codecKey))
+                {
+                    continue;
+                }
+
+                var primaryCameraKey = codecConfig.GetPrimaryCameraKey();
+                if (string.IsNullOrWhiteSpace(primaryCameraKey))
+                {
+                    pendingCallStartSelect.Remove(codecKey);
+                    continue;
+                }
+
+                if (!IsCameraReadyOnCodec(codecKey, primaryCameraKey, out var primaryCamera))
+                {
+                    if (started)
+                        this.LogInformation($"CAMERA_CALL_START_PRIMARY_WAITING codec='{codecKey}' scenario='{scenarioKey}' primaryCamera='{primaryCameraKey}' — a call started, but the primary camera isn't online on the codec or is moving; selecting it once it is, while the call lasts");
+                    pendingCallStartSelect[codecKey] = session;
+                    continue;
+                }
+
+                pendingCallStartSelect.Remove(codecKey);
+                this.LogInformation($"CAMERA_CALL_START_PRIMARY_SELECT codec='{codecKey}' scenario='{scenarioKey}' primaryCamera='{primaryCameraKey}' cameraOff='{codec.CameraIsOffFeedback?.BoolValue}' — {(started ? "a call started" : "the call's primary camera is ready")}: selecting it (a camera that is off stays off)");
+                codec.SelectCamera(primaryCamera.Key, unmuteIfOff: false);
+            }
+        }
+
+        /// <summary>The camera is managed, online on the codec, and has no active or queued move.</summary>
+        private bool IsCameraReadyOnCodec(string codecKey, string cameraKey, out CiscoCamera camera)
+        {
+            if (!managedCameras.TryGetValue(cameraKey, out camera)
+                || !IsCameraOnlineOnCodec(codecKey, camera))
+            {
+                return false;
+            }
+
+            lock (activeMigrationsLock)
+            {
+                return !activeMigrations.ContainsKey(cameraKey)
+                    && !pendingMigrationStarts.Any(p => string.Equals(p.Camera?.Key, cameraKey, StringComparison.Ordinal));
             }
         }
 
@@ -2314,6 +2651,21 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
             // connect-driven passes start skipping unchanged ports.
             ClearEnsuredPortStateCache();
 
+            // Map camera -> desired target codec under the NEW scenario, used below to invalidate any
+            // in-flight migration bookkeeping that the scenario change has made obsolete.
+            var newScenarioTargets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(currentScenario?.Key)
+                && config.RoomCombinerConfig.CombineScenarios.TryGetValue(currentScenario.Key, out var newScenarioConfig))
+            {
+                foreach (var codecConfig in newScenarioConfig.CodecConfigs)
+                {
+                    foreach (var cameraKey in codecConfig.CameraKeys)
+                    {
+                        newScenarioTargets[cameraKey] = codecConfig.CodecKey;
+                    }
+                }
+            }
+
             // Drop migration starts queued for the previous scenario; the reconciliation below
             // re-queues whatever the new scenario needs from current physical state. Any in-flight
             // burst is left to finish (or time out) on its own gate rather than being interrupted.
@@ -2325,8 +2677,32 @@ namespace PepperDash.Essentials.Plugin.CiscoRoomOsCodec.Cameras
                     pendingMigrationStarts.Clear();
                 }
 
+                // A migration registered for the PREVIOUS scenario whose target no longer matches (or
+                // is no longer needed at all) under the NEW scenario is obsolete bookkeeping, not a
+                // genuine in-flight move for the scenario we're switching to. Without this, a migration
+                // that stalled before ever reaching attach-wait (activeMigrations is otherwise only
+                // cleared on attach-confirmed or attach-timeout) permanently blocks TryStartMigration for
+                // that camera on every future scenario change — it logs "confirmed ... starting
+                // migration" immediately followed by "already in progress" and the camera never moves.
+                var staleCameraKeys = activeMigrations
+                    .Where(kvp => !newScenarioTargets.TryGetValue(kvp.Key, out var desiredTarget)
+                        || !string.Equals(desiredTarget, kvp.Value.TargetCodecKey, StringComparison.Ordinal))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
+                foreach (var staleCameraKey in staleCameraKeys)
+                {
+                    this.LogWarning($"Camera Manager {Key} discarding stale migration bookkeeping for camera '{staleCameraKey}' (target no longer matches scenario '{currentScenario?.Key}') so it can be re-evaluated from scratch");
+                    activeMigrations.Remove(staleCameraKey);
+                    if (string.Equals(activeBurstCameraKey, staleCameraKey, StringComparison.Ordinal))
+                    {
+                        activeBurstCameraKey = null;
+                    }
+                }
+
                 // New scenario -> re-apply primary/PresenterTrack roles once its cameras settle.
                 rolesAppliedScenarioByCodec.Clear();
+                pendingPresenterTrackModes.Clear();
                 slotMismatchWarned.Clear();
             }
 
@@ -3408,6 +3784,7 @@ foreach (var codecConfig in scenarioConfig.CodecConfigs)
             public DateTime PoeReenableDeadlineUtc { get; set; }
             public bool WaitingForSourceDisconnect { get; set; }
             public DateTime DisconnectWaitDeadlineUtc { get; set; }
+            public DateTime CreatedUtc { get; set; }
         }
     }
 }

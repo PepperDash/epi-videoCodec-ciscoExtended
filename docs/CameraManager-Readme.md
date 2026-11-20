@@ -62,10 +62,20 @@ Important properties:
 - `cameraBootWindowMs`: optional, default 180000. Boot window after the manager PoE-cycles or re-VLANs a camera's port; floating recovery does not count the camera as lost or probe it during this window. Set it longer than the slowest camera's boot.
 - `disablePoeCycling`: optional, default false
 - `useCameraFactoryResetDisconnectFeedback`: optional, default false
+- `selectPrimaryCameraOnCallStart`: optional, default false. When a codec goes from no active call to an active call, select its `primary: true` camera for the current scenario as the main video source again, so calls start on it even after someone picked another camera outside a call. It uses the codec's active-call count (`SystemUnit State NumberOfActiveCalls`), so Teams and other platform calls count. A camera the room turned off (main video muted) stays off. A call already up when the program starts, or when the codec finishes syncing again, isn't treated as a call start. If the primary camera isn't online on the codec or is moving when the call starts, it logs `CAMERA_CALL_START_PRIMARY_WAITING` and selects the camera once it's ready, while the call lasts. A selection logs `CAMERA_CALL_START_PRIMARY_SELECT`.
 
 Per-scenario camera assignment supports mixed syntax in `cameraKeys`:
 - String form: `"cameraA"`
 - Object form: `{ "cameraKey": "cameraA", "cameraId": 8 }`
+
+Object-form options for camera roles (at most one camera per codec config for each flag):
+- `primary`: selected as the codec's main video source once the codec's cameras are attached for the scenario.
+- `presenterTrack`: set as the codec's PresenterTrack camera (`xConfiguration Cameras PresenterTrack Enabled: True` and `Connector`) once the codec's cameras are attached for the scenario. This only makes PresenterTrack available; it doesn't start tracking.
+- `presenterTrackMode`: optional, on the `presenterTrack` camera: `follow`, `persistent`, `background` or `off` (any case). Sent as `xCommand Cameras PresenterTrack Set Mode` once the scenario's roles are applied, and again each time a call starts on the codec (same call-start rules as `selectPrimaryCameraOnCallStart`, which it doesn't need), so calls start tracking instead of in manual camera control. It is sent once the codec reports PresenterTrack available and the camera is online and not moving; until then it logs `CAMERA_PRESENTERTRACK_MODE_WAITING` once. A call-start mode still waiting when the call ends is dropped. A send logs `CAMERA_PRESENTERTRACK_MODE_SET`; a value that isn't a mode logs `CAMERA_PRESENTERTRACK_MODE_INVALID` and is ignored. Unlike the UI's tracking buttons, it doesn't turn on a camera the room turned off. When omitted, the mode is left to the room.
+
+```json
+{ "cameraKey": "ptzCameraA", "cameraId": 7, "primary": true, "presenterTrack": true, "presenterTrackMode": "follow" }
+```
 
 ### 2.2.1 Configuration snippet
 
